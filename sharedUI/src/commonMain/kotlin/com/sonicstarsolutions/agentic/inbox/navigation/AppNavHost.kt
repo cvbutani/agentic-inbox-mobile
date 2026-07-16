@@ -8,6 +8,8 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeMode
+import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeScreen
 import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxScreen
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerScreen
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingScreen
@@ -65,6 +67,9 @@ fun AppNavHost() {
                     onEmailSelected = { email ->
                         navigator.goTo(EmailThread(key.mailboxId, email.id, email.threadId))
                     },
+                    onComposeNew = {
+                        navigator.goTo(Compose(mailboxId = key.mailboxId, mode = ComposeMode.NEW.name))
+                    },
                 )
             }
 
@@ -74,6 +79,26 @@ fun AppNavHost() {
                     emailId = key.emailId,
                     threadId = key.threadId,
                     onBack = { navigator.goBack() },
+                    onReply = { originalEmailId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.REPLY.name, originalEmailId, key.threadId))
+                    },
+                    onReplyAll = { originalEmailId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.REPLY_ALL.name, originalEmailId, key.threadId))
+                    },
+                    onForward = { originalEmailId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.FORWARD.name, originalEmailId, key.threadId))
+                    },
+                )
+            }
+
+            entry<Compose> { key ->
+                ComposeScreen(
+                    mailboxId = key.mailboxId,
+                    mode = ComposeMode.valueOf(key.mode),
+                    emailId = key.emailId,
+                    threadId = key.threadId,
+                    onDone = { navigator.goBack() },
+                    onCancel = { navigator.goBack() },
                 )
             }
         },

@@ -1,5 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.domain.repository
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 
 interface EmailRepository {
@@ -14,4 +15,8 @@ interface EmailRepository {
     suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit>
     suspend fun setRead(mailboxId: String, emailId: String, read: Boolean): Result<Unit>
     suspend fun markThreadRead(mailboxId: String, threadId: String): Result<Unit>
+
+    suspend fun sendEmail(mailboxId: String, request: ComposeEmailRequest): Result<Unit>
+    suspend fun replyEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit>
+    suspend fun forwardEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit>
 }

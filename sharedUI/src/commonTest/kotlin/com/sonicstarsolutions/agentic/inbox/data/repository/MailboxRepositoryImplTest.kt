@@ -148,4 +148,31 @@ class MailboxRepositoryImplTest {
 
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `getMailbox fetches and maps the single mailbox`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"mb1","email":"a@example.dev","name":"Alice"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.getMailbox("mb1")
+
+        assertEquals(Mailbox(id = "mb1", email = "a@example.dev", name = "Alice"), result.getOrThrow())
+        assertEquals("/api/v1/mailboxes/mb1", engine.requestHistory.single().url.encodedPath)
+    }
+
+    @Test
+    fun `getMailbox surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.getMailbox("mb1")
+
+        assertTrue(result.isFailure)
+    }
 }

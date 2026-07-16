@@ -79,6 +79,9 @@ fun ThreadScreen(
     threadId: String?,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
+    onReply: (emailId: String) -> Unit = {},
+    onReplyAll: (emailId: String) -> Unit = {},
+    onForward: (emailId: String) -> Unit = {},
     viewModel: ThreadViewModel = koinViewModel { parametersOf(mailboxId, emailId, threadId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -134,6 +137,9 @@ fun ThreadScreen(
                     onDelete = viewModel::delete,
                     onMoveTo = viewModel::moveTo,
                     onToggleRead = viewModel::toggleReadState,
+                    onReply = { onReply(currentMessage.id) },
+                    onReplyAll = { onReplyAll(currentMessage.id) },
+                    onForward = { onForward(currentMessage.id) },
                 )
             }
         },
@@ -176,11 +182,6 @@ fun ThreadScreen(
     }
 }
 
-/**
- * Reply / Reply all / Forward stay visible but disabled — there's no composer screen yet, and a
- * button that silently does nothing on tap is worse than one that's honestly unavailable.
- * Archive / Delete / Move / Mark read-unread are real, backed by existing API endpoints.
- */
 @Composable
 private fun ThreadBottomBar(
     currentMessageRead: Boolean,
@@ -190,6 +191,9 @@ private fun ThreadBottomBar(
     onDelete: () -> Unit,
     onMoveTo: (String) -> Unit,
     onToggleRead: () -> Unit,
+    onReply: () -> Unit,
+    onReplyAll: () -> Unit,
+    onForward: () -> Unit,
 ) {
     var showMoveSheet by remember { mutableStateOf(false) }
 
@@ -228,14 +232,14 @@ private fun ThreadBottomBar(
                     contentDescription = if (currentMessageRead) "Mark as unread" else "Mark as read",
                 )
             }
-            IconButton(onClick = {}, enabled = false) {
-                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply (coming soon)")
+            IconButton(onClick = onReply, enabled = !actionInProgress) {
+                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply")
             }
-            IconButton(onClick = {}, enabled = false) {
-                Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = "Reply all (coming soon)")
+            IconButton(onClick = onReplyAll, enabled = !actionInProgress) {
+                Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = "Reply all")
             }
-            IconButton(onClick = {}, enabled = false) {
-                Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward (coming soon)")
+            IconButton(onClick = onForward, enabled = !actionInProgress) {
+                Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward")
             }
         }
     }

@@ -9,4 +9,6 @@ interface MailboxRepository {
 
     /** Domains new mailbox addresses may be created under, per the Worker's own config. */
     suspend fun getAllowedDomains(): Result<List<String>>
+
+    suspend fun getMailbox(mailboxId: String): Result<Mailbox>
 }

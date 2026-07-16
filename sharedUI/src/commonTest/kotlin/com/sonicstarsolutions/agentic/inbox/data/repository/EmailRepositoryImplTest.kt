@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
+import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import de.jensklingenberg.ktorfit.Ktorfit
 import io.ktor.client.HttpClient
@@ -260,6 +261,102 @@ class EmailRepositoryImplTest {
         val repository = EmailRepositoryImpl(apiFor(engine))
 
         val result = repository.markThreadRead(mailboxId = "mb1", threadId = "t1")
+
+        assertTrue(result.isFailure)
+    }
+
+    private fun composeRequest() = ComposeEmailRequest(
+        fromEmail = "me@example.dev",
+        fromName = "Me",
+        to = listOf("alice@example.dev"),
+        cc = listOf("bob@example.dev"),
+        subject = "Hello",
+        body = "Hi there",
+    )
+
+    @Test
+    fun `sendEmail posts to the emails endpoint`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"e1","status":"sent"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.sendEmail(mailboxId = "mb1", request = composeRequest())
+
+        assertTrue(result.isSuccess)
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/emails", request.url.encodedPath)
+    }
+
+    @Test
+    fun `sendEmail surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.sendEmail(mailboxId = "mb1", request = composeRequest())
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `replyEmail posts to the reply endpoint for the given email`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"e2","status":"sent"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.replyEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
+
+        assertTrue(result.isSuccess)
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/emails/e1/reply", request.url.encodedPath)
+    }
+
+    @Test
+    fun `replyEmail surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.replyEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `forwardEmail posts to the forward endpoint for the given email`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"e3","status":"sent"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.forwardEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
+
+        assertTrue(result.isSuccess)
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/emails/e1/forward", request.url.encodedPath)
+    }
+
+    @Test
+    fun `forwardEmail surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.forwardEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
 
         assertTrue(result.isFailure)
     }

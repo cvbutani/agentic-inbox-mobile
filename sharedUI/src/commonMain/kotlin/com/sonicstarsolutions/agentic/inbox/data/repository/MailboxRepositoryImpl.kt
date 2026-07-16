@@ -18,6 +18,9 @@ class MailboxRepositoryImpl(
 
     override suspend fun getAllowedDomains(): Result<List<String>> =
         safeApiCall { api.getConfig().domains }
+
+    override suspend fun getMailbox(mailboxId: String): Result<Mailbox> =
+        safeApiCall { api.getMailbox(mailboxId).toDomain() }
 }
 
 private fun MailboxDto.toDomain(): Mailbox = Mailbox(id = id, email = email, name = name)

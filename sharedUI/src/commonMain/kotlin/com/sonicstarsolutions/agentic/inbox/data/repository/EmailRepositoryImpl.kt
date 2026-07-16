@@ -2,9 +2,12 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailMetadataDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.FromDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
+import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
@@ -34,7 +37,25 @@ class EmailRepositoryImpl(
 
     override suspend fun markThreadRead(mailboxId: String, threadId: String): Result<Unit> =
         safeApiCall { api.markThreadRead(mailboxId, threadId) }.map {}
+
+    override suspend fun sendEmail(mailboxId: String, request: ComposeEmailRequest): Result<Unit> =
+        safeApiCall { api.sendEmail(mailboxId, request.toDto()) }.map {}
+
+    override suspend fun replyEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> =
+        safeApiCall { api.replyEmail(mailboxId, emailId, request.toDto()) }.map {}
+
+    override suspend fun forwardEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> =
+        safeApiCall { api.forwardEmail(mailboxId, emailId, request.toDto()) }.map {}
 }
+
+private fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequestDto(
+    to = to,
+    cc = cc.ifEmpty { null },
+    bcc = bcc.ifEmpty { null },
+    from = FromDto(email = fromEmail, name = fromName),
+    subject = subject,
+    text = body,
+)
 
 private fun EmailMetadataDto.toDomain(): EmailSummary = EmailSummary(
     id = id,

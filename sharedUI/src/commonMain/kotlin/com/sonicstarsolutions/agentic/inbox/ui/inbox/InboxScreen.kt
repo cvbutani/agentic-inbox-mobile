@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Drafts
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Menu
@@ -39,6 +40,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -94,6 +96,7 @@ fun InboxScreen(
     modifier: Modifier = Modifier,
     onSwitchMailbox: () -> Unit = {},
     onEmailSelected: (EmailSummary) -> Unit = {},
+    onComposeNew: () -> Unit = {},
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -188,7 +191,12 @@ fun InboxScreen(
                     ),
                     scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
                 )
-            }
+            },
+            floatingActionButton = {
+                FloatingActionButton(onClick = onComposeNew) {
+                    Icon(Icons.Default.Edit, contentDescription = "Compose")
+                }
+            },
         ) { paddingValues ->
             PullToRefreshBox(
                 isRefreshing = state.refreshing,

@@ -1,6 +1,8 @@
 package com.sonicstarsolutions.agentic.inbox.testutil
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
+import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
@@ -10,6 +12,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsReposit
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -86,6 +89,11 @@ class FakeMailboxRepository(
     }
 
     override suspend fun getAllowedDomains(): Result<List<String>> = allowedDomainsResult
+
+    var getMailboxResult: (String) -> Result<Mailbox> =
+        { id -> Result.success(Mailbox(id = id, email = "$id@example.dev", name = "Mailbox $id")) }
+
+    override suspend fun getMailbox(mailboxId: String): Result<Mailbox> = getMailboxResult(mailboxId)
 }
 
 class FakeEmailRepository(
@@ -95,18 +103,31 @@ class FakeEmailRepository(
     var deleteResult: Result<Unit> = Result.success(Unit),
     var setReadResult: Result<Unit> = Result.success(Unit),
     var markThreadReadResult: Result<Unit> = Result.success(Unit),
+    var sendResult: Result<Unit> = Result.success(Unit),
+    var replyResult: Result<Unit> = Result.success(Unit),
+    var forwardResult: Result<Unit> = Result.success(Unit),
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
     data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
     data class DeleteCall(val mailboxId: String, val emailId: String)
     data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
     data class MarkThreadReadCall(val mailboxId: String, val threadId: String)
+    data class SendCall(val mailboxId: String, val request: ComposeEmailRequest)
+    data class ReplyCall(val mailboxId: String, val emailId: String, val request: ComposeEmailRequest)
+    data class ForwardCall(val mailboxId: String, val emailId: String, val request: ComposeEmailRequest)
 
     val calls = mutableListOf<Call>()
     val moveCalls = mutableListOf<MoveCall>()
     val deleteCalls = mutableListOf<DeleteCall>()
     val setReadCalls = mutableListOf<SetReadCall>()
     val markThreadReadCalls = mutableListOf<MarkThreadReadCall>()
+    val sendCalls = mutableListOf<SendCall>()
+    val replyCalls = mutableListOf<ReplyCall>()
+    val forwardCalls = mutableListOf<ForwardCall>()
+
+    /** When set, [sendEmail]/[replyEmail]/[forwardEmail] suspend here until completed — lets
+     * tests hold a send "in flight" to exercise ComposeViewModel's concurrency guard. */
+    var sendGate: CompletableDeferred<Unit>? = null
 
     /** When set, [getEmails] suspends here until completed — lets tests hold a call "in flight"
      * to exercise concurrency guards (e.g. InboxViewModel.onRefresh ignoring a second call). */
@@ -141,4 +162,28 @@ class FakeEmailRepository(
         markThreadReadCalls += MarkThreadReadCall(mailboxId, threadId)
         return markThreadReadResult
     }
+
+    override suspend fun sendEmail(mailboxId: String, request: ComposeEmailRequest): Result<Unit> {
+        sendCalls += SendCall(mailboxId, request)
+        sendGate?.await()
+        return sendResult
+    }
+
+    override suspend fun replyEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> {
+        replyCalls += ReplyCall(mailboxId, emailId, request)
+        sendGate?.await()
+        return replyResult
+    }
+
+    override suspend fun forwardEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> {
+        forwardCalls += ForwardCall(mailboxId, emailId, request)
+        sendGate?.await()
+        return forwardResult
+    }
+}
+
+class FakeThreadRepository(
+    var result: Result<List<EmailDetail>> = Result.success(emptyList()),
+) : ThreadRepository {
+    override suspend fun getThread(mailboxId: String, emailId: String, threadId: String?): Result<List<EmailDetail>> = result
 }

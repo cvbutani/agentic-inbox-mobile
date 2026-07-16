@@ -2,7 +2,6 @@ package com.sonicstarsolutions.agentic.inbox.ui.thread
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
-import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
@@ -11,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeThreadRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,12 +26,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-
-private class FakeThreadRepository(
-    var result: Result<List<EmailDetail>> = Result.success(emptyList()),
-) : ThreadRepository {
-    override suspend fun getThread(mailboxId: String, emailId: String, threadId: String?): Result<List<EmailDetail>> = result
-}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ThreadViewModelTest {

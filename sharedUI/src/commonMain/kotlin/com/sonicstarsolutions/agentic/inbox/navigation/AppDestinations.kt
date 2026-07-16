@@ -37,6 +37,17 @@ data class EmailThread(
     val threadId: String?,
 ) : AppDestination
 
+@Serializable
+data class Compose(
+    val mailboxId: String,
+    /** Name of a [com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeMode] value — plain
+     * String rather than the enum itself, so this destination doesn't need its own polymorphic
+     * serializer registration for a nested type. */
+    val mode: String,
+    val emailId: String? = null,
+    val threadId: String? = null,
+) : AppDestination
+
 /**
  * Back stack save/restore configuration.
  *
@@ -53,6 +64,7 @@ internal val appNavConfiguration = SavedStateConfiguration {
             subclass(MailboxPicker::class, MailboxPicker.serializer())
             subclass(Inbox::class, Inbox.serializer())
             subclass(EmailThread::class, EmailThread.serializer())
+            subclass(Compose::class, Compose.serializer())
         }
     }
 }
