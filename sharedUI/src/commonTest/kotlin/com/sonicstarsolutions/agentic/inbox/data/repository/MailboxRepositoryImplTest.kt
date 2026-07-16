@@ -8,8 +8,12 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.test.runTest
@@ -26,9 +30,10 @@ class MailboxRepositoryImplTest {
             install(ContentNegotiation) {
                 json(Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = false })
             }
+            defaultRequest { contentType(ContentType.Application.Json) }
         }
         return Ktorfit.Builder()
-            .baseUrl("https://my-worker.example.dev/", checkUrl = false)
+            .baseUrl("https://my-worker.example.dev", checkUrl = false)
             .httpClient(client)
             .build()
             .createAgenticInboxApi()
@@ -85,6 +90,61 @@ class MailboxRepositoryImplTest {
         val repository = MailboxRepositoryImpl(apiFor(engine))
 
         val result = repository.getMailboxes()
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `createMailbox posts the email and name and maps the response`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"mb3","email":"sales@example.dev","name":"Sales"}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.createMailbox(email = "sales@example.dev", name = "Sales")
+
+        assertEquals(Mailbox(id = "mb3", email = "sales@example.dev", name = "Sales"), result.getOrThrow())
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/api/v1/mailboxes", request.url.encodedPath)
+    }
+
+    @Test
+    fun `createMailbox surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.createMailbox(email = "sales@example.dev", name = "Sales")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `getAllowedDomains returns the config's domains`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"domains":["example.dev","example.com"],"emailAddresses":[]}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.getAllowedDomains()
+
+        assertEquals(listOf("example.dev", "example.com"), result.getOrThrow())
+    }
+
+    @Test
+    fun `getAllowedDomains surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.getAllowedDomains()
 
         assertTrue(result.isFailure)
     }

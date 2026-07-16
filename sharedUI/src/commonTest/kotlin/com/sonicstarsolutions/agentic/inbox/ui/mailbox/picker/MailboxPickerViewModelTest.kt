@@ -2,13 +2,17 @@ package com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeCredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -45,6 +49,8 @@ class MailboxPickerViewModelTest {
     ): MailboxPickerViewModel = MailboxPickerViewModel(
         getMailboxes = GetMailboxesUseCase(mailboxRepository),
         clearCredentials = ClearCredentialsUseCase(credentialsRepository),
+        createMailboxUseCase = CreateMailboxUseCase(mailboxRepository),
+        getAllowedDomains = GetAllowedDomainsUseCase(mailboxRepository),
     )
 
     @Test
@@ -91,5 +97,92 @@ class MailboxPickerViewModelTest {
         viewModel.consumeSignedOut()
 
         assertFalse(viewModel.state.value.signedOut)
+    }
+
+    @Test
+    fun `allowed domains load into state on init`() = runTest {
+        val mailboxRepository = FakeMailboxRepository(allowedDomainsResult = Result.success(listOf("example.dev")))
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+
+        assertEquals(listOf("example.dev"), viewModel.state.value.allowedDomains)
+    }
+
+    @Test
+    fun `createMailbox trims fields appends the new mailbox and signals mailboxCreated`() = runTest {
+        val mailboxRepository = FakeMailboxRepository(
+            createResult = { email, name -> Result.success(Mailbox(id = "mb2", email = email, name = name)) },
+        )
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+
+        viewModel.createMailbox("  sales@example.dev  ", "  Sales  ")
+
+        assertEquals(
+            listOf(FakeMailboxRepository.CreateCall("sales@example.dev", "Sales")),
+            mailboxRepository.createCalls,
+        )
+        assertTrue(viewModel.state.value.mailboxes.contains(Mailbox(id = "mb2", email = "sales@example.dev", name = "Sales")))
+        assertTrue(viewModel.state.value.mailboxCreated)
+        assertFalse(viewModel.state.value.creatingMailbox)
+    }
+
+    @Test
+    fun `createMailbox rejects a blank email or name without calling the repository`() = runTest {
+        val mailboxRepository = FakeMailboxRepository()
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+
+        viewModel.createMailbox("   ", "Sales")
+
+        assertTrue(mailboxRepository.createCalls.isEmpty())
+        assertEquals("Name and email are required.", viewModel.state.value.createMailboxError)
+    }
+
+    @Test
+    fun `createMailbox surfaces the failure and does not mark mailboxCreated`() = runTest {
+        val mailboxRepository = FakeMailboxRepository(createResult = { _, _ -> Result.failure(RuntimeException("address taken")) })
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+
+        viewModel.createMailbox("sales@example.dev", "Sales")
+
+        assertEquals("address taken", viewModel.state.value.createMailboxError)
+        assertFalse(viewModel.state.value.mailboxCreated)
+        assertFalse(viewModel.state.value.creatingMailbox)
+    }
+
+    @Test
+    fun `createMailbox ignores a second call while one is already in flight`() = runTest {
+        val mailboxRepository = FakeMailboxRepository()
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+        val gate = CompletableDeferred<Unit>()
+        mailboxRepository.createGate = gate
+
+        viewModel.createMailbox("sales@example.dev", "Sales")
+        assertTrue(viewModel.state.value.creatingMailbox)
+
+        viewModel.createMailbox("support@example.dev", "Support") // should be ignored
+
+        assertEquals(1, mailboxRepository.createCalls.size, "second createMailbox should not have dispatched a request")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.creatingMailbox)
+    }
+
+    @Test
+    fun `consumeMailboxCreated clears the flag`() = runTest {
+        val mailboxRepository = FakeMailboxRepository()
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+        viewModel.createMailbox("sales@example.dev", "Sales")
+        assertTrue(viewModel.state.value.mailboxCreated)
+
+        viewModel.consumeMailboxCreated()
+
+        assertFalse(viewModel.state.value.mailboxCreated)
     }
 }

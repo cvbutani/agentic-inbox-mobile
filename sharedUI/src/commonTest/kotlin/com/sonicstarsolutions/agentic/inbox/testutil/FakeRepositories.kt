@@ -65,8 +65,27 @@ class FakeFolderRepository(
 
 class FakeMailboxRepository(
     var result: Result<List<Mailbox>> = Result.success(emptyList()),
+    var createResult: (String, String) -> Result<Mailbox> =
+        { email, name -> Result.success(Mailbox(id = email.substringBefore("@"), email = email, name = name)) },
+    var allowedDomainsResult: Result<List<String>> = Result.success(emptyList()),
 ) : MailboxRepository {
+    data class CreateCall(val email: String, val name: String)
+
+    val createCalls = mutableListOf<CreateCall>()
+
+    /** When set, [createMailbox] suspends here until completed — lets tests hold a call "in
+     * flight" to exercise concurrency guards (e.g. MailboxPickerViewModel.createMailbox). */
+    var createGate: CompletableDeferred<Unit>? = null
+
     override suspend fun getMailboxes(): Result<List<Mailbox>> = result
+
+    override suspend fun createMailbox(email: String, name: String): Result<Mailbox> {
+        createCalls += CreateCall(email, name)
+        createGate?.await()
+        return createResult(email, name)
+    }
+
+    override suspend fun getAllowedDomains(): Result<List<String>> = allowedDomainsResult
 }
 
 class FakeEmailRepository(

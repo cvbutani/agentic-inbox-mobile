@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -18,17 +20,33 @@ data class MailboxPickerUiState(
     val mailboxes: List<Mailbox> = emptyList(),
     val errorMessage: String? = null,
     val signedOut: Boolean = false,
+    val allowedDomains: List<String> = emptyList(),
+    val creatingMailbox: Boolean = false,
+    val createMailboxError: String? = null,
+    val mailboxCreated: Boolean = false,
 )
 
 class MailboxPickerViewModel(
     private val getMailboxes: GetMailboxesUseCase,
     private val clearCredentials: ClearCredentialsUseCase,
+    private val createMailboxUseCase: CreateMailboxUseCase,
+    private val getAllowedDomains: GetAllowedDomainsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MailboxPickerUiState())
     val state: StateFlow<MailboxPickerUiState> = _state.asStateFlow()
 
-    init { refresh() }
+    init {
+        refresh()
+        loadAllowedDomains()
+    }
+
+    private fun loadAllowedDomains() {
+        viewModelScope.launch {
+            // Failure is non-fatal — the create-mailbox dialog just won't have domains to offer.
+            getAllowedDomains().onSuccess { domains -> _state.update { it.copy(allowedDomains = domains) } }
+        }
+    }
 
     fun refresh() {
         try {
@@ -65,4 +83,30 @@ class MailboxPickerViewModel(
     }
 
     fun consumeSignedOut() = _state.update { it.copy(signedOut = false) }
+
+    fun createMailbox(email: String, name: String) {
+        val trimmedEmail = email.trim()
+        val trimmedName = name.trim()
+        if (trimmedEmail.isBlank() || trimmedName.isBlank()) {
+            _state.update { it.copy(createMailboxError = "Name and email are required.") }
+            return
+        }
+        if (_state.value.creatingMailbox) return
+        _state.update { it.copy(creatingMailbox = true, createMailboxError = null) }
+        viewModelScope.launch {
+            createMailboxUseCase(trimmedEmail, trimmedName)
+                .onSuccess { mailbox ->
+                    _state.update { it.copy(creatingMailbox = false, mailboxes = it.mailboxes + mailbox, mailboxCreated = true) }
+                }
+                .onFailure { t ->
+                    _state.update {
+                        it.copy(creatingMailbox = false, createMailboxError = t.message ?: t::class.simpleName ?: "Failed to create mailbox")
+                    }
+                }
+        }
+    }
+
+    fun consumeMailboxCreated() = _state.update { it.copy(mailboxCreated = false) }
+
+    fun consumeCreateMailboxError() = _state.update { it.copy(createMailboxError = null) }
 }

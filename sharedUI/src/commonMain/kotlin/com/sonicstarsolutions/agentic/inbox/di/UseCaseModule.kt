@@ -2,7 +2,9 @@ package com.sonicstarsolutions.agentic.inbox.di
 
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
@@ -24,6 +26,8 @@ val useCaseModule = module {
     singleOf(::LoadCredentialsUseCase)
     singleOf(::ValidateConnectionUseCase)
     singleOf(::GetMailboxesUseCase)
+    singleOf(::CreateMailboxUseCase)
+    singleOf(::GetAllowedDomainsUseCase)
     singleOf(::GetEmailsUseCase)
     singleOf(::GetFoldersUseCase)
     singleOf(::CreateFolderUseCase)
