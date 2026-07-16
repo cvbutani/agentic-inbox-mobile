@@ -12,6 +12,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxScreen
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerScreen
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingScreen
 import com.sonicstarsolutions.agentic.inbox.ui.splash.SplashScreen
+import com.sonicstarsolutions.agentic.inbox.ui.thread.ThreadScreen
 
 /**
  * Root Navigation 3 host.
@@ -61,6 +62,18 @@ fun AppNavHost() {
                     mailboxId = key.mailboxId,
                     mailboxName = key.mailboxName,
                     onSwitchMailbox = { navigator.goTo(MailboxPicker) },
+                    onEmailSelected = { email ->
+                        navigator.goTo(EmailThread(key.mailboxId, email.id, email.threadId))
+                    },
+                )
+            }
+
+            entry<EmailThread> { key ->
+                ThreadScreen(
+                    mailboxId = key.mailboxId,
+                    emailId = key.emailId,
+                    threadId = key.threadId,
+                    onBack = { navigator.goBack() },
                 )
             }
         },

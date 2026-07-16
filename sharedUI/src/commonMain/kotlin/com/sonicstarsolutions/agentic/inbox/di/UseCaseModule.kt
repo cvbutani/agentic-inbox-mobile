@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCa
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.LoadCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveCredentialsUseCase
@@ -20,4 +21,5 @@ val useCaseModule = module {
     singleOf(::GetMailboxesUseCase)
     singleOf(::GetEmailsUseCase)
     singleOf(::GetFoldersUseCase)
+    singleOf(::GetThreadUseCase)
 }

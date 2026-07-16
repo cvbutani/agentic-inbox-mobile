@@ -83,6 +83,7 @@ fun InboxScreen(
     mailboxName: String,
     modifier: Modifier = Modifier,
     onSwitchMailbox: () -> Unit = {},
+    onEmailSelected: (EmailSummary) -> Unit = {},
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -218,7 +219,7 @@ fun InboxScreen(
                         items(state.emails, key = { it.id }) { email ->
                             EmailListItem(
                                 email = email,
-                                onClick = { /* TODO: Navigate to thread */ },
+                                onClick = { onEmailSelected(email) },
                                 onLongClick = { /* TODO: Enter selection mode */ },
                             )
                             HorizontalDivider(

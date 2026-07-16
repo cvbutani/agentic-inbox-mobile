@@ -5,11 +5,13 @@ import com.sonicstarsolutions.agentic.inbox.data.repository.CredentialsRepositor
 import com.sonicstarsolutions.agentic.inbox.data.repository.EmailRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.FolderRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.MailboxRepositoryImpl
+import com.sonicstarsolutions.agentic.inbox.data.repository.ThreadRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import eu.anifantakis.lib.ksafe.KSafe
 import org.koin.dsl.module
 
@@ -18,5 +20,6 @@ val repositoryModule = module {
     single<MailboxRepository> { MailboxRepositoryImpl(get()) }
     single<EmailRepository> { EmailRepositoryImpl(get()) }
     single<FolderRepository> { FolderRepositoryImpl(get()) }
+    single<ThreadRepository> { ThreadRepositoryImpl(get()) }
     single<ConnectionRepository> { ConnectionRepositoryImpl(get()) }
 }

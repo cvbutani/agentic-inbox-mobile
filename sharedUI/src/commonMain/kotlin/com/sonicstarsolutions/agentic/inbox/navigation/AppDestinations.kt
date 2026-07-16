@@ -30,6 +30,13 @@ data class Inbox(
     val mailboxName: String,
 ) : AppDestination
 
+@Serializable
+data class EmailThread(
+    val mailboxId: String,
+    val emailId: String,
+    val threadId: String?,
+) : AppDestination
+
 /**
  * Back stack save/restore configuration.
  *
@@ -45,6 +52,7 @@ internal val appNavConfiguration = SavedStateConfiguration {
             subclass(Onboarding::class, Onboarding.serializer())
             subclass(MailboxPicker::class, MailboxPicker.serializer())
             subclass(Inbox::class, Inbox.serializer())
+            subclass(EmailThread::class, EmailThread.serializer())
         }
     }
 }
