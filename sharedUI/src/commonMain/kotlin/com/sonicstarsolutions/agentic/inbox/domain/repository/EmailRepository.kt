@@ -2,11 +2,19 @@ package com.sonicstarsolutions.agentic.inbox.domain.repository
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
+import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 
 interface EmailRepository {
     suspend fun getEmails(
         mailboxId: String,
         folder: String,
+        page: Int,
+        limit: Int,
+    ): Result<EmailPage>
+
+    suspend fun search(
+        mailboxId: String,
+        query: SearchQuery,
         page: Int,
         limit: Int,
     ): Result<EmailPage>

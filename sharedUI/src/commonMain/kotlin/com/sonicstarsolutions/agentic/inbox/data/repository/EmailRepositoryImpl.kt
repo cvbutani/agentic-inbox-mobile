@@ -10,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 
 class EmailRepositoryImpl(
@@ -23,6 +24,31 @@ class EmailRepositoryImpl(
     ): Result<EmailPage> =
         safeApiCall {
             val pageDto = api.getEmails(mailboxId, folder = folder, page = page, limit = limit)
+            EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
+        }
+
+    override suspend fun search(
+        mailboxId: String,
+        query: SearchQuery,
+        page: Int,
+        limit: Int,
+    ): Result<EmailPage> =
+        safeApiCall {
+            val pageDto = api.search(
+                mailboxId = mailboxId,
+                query = query.query,
+                folder = query.folder,
+                from = query.from,
+                to = query.to,
+                subject = query.subject,
+                dateStart = query.dateStart,
+                dateEnd = query.dateEnd,
+                isRead = query.isRead,
+                isStarred = query.isStarred,
+                hasAttachment = query.hasAttachment,
+                page = page,
+                limit = limit,
+            )
             EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
         }
 

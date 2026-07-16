@@ -48,6 +48,11 @@ data class Compose(
     val threadId: String? = null,
 ) : AppDestination
 
+@Serializable
+data class Search(
+    val mailboxId: String,
+) : AppDestination
+
 /**
  * Back stack save/restore configuration.
  *
@@ -65,6 +70,7 @@ internal val appNavConfiguration = SavedStateConfiguration {
             subclass(Inbox::class, Inbox.serializer())
             subclass(EmailThread::class, EmailThread.serializer())
             subclass(Compose::class, Compose.serializer())
+            subclass(Search::class, Search.serializer())
         }
     }
 }

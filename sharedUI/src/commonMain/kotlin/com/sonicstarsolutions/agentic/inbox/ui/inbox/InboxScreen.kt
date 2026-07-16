@@ -1,9 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,28 +15,27 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Drafts
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -67,24 +64,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
-import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
-import kotlin.math.absoluteValue
-import kotlin.time.Clock
-import kotlin.time.Instant
+import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import kotlinx.coroutines.launch
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -97,6 +85,7 @@ fun InboxScreen(
     onSwitchMailbox: () -> Unit = {},
     onEmailSelected: (EmailSummary) -> Unit = {},
     onComposeNew: () -> Unit = {},
+    onSearch: () -> Unit = {},
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -139,6 +128,48 @@ fun InboxScreen(
         )
     }
 
+    var folderToRename by remember { mutableStateOf<Folder?>(null) }
+    LaunchedEffect(state.folderRenamed) {
+        if (state.folderRenamed) {
+            folderToRename = null
+            viewModel.consumeFolderRenamed()
+        }
+    }
+
+    folderToRename?.let { folder ->
+        RenameFolderDialog(
+            currentName = folder.name,
+            renaming = state.renamingFolder,
+            errorMessage = state.folderActionError,
+            onDismiss = {
+                folderToRename = null
+                viewModel.consumeFolderActionError()
+            },
+            onRename = { name -> viewModel.renameFolder(folder, name) },
+        )
+    }
+
+    var folderToDelete by remember { mutableStateOf<Folder?>(null) }
+    LaunchedEffect(state.folderDeleted) {
+        if (state.folderDeleted) {
+            folderToDelete = null
+            viewModel.consumeFolderActionError()
+        }
+    }
+
+    folderToDelete?.let { folder ->
+        DeleteFolderDialog(
+            folderName = folder.name,
+            deleting = state.deletingFolder,
+            errorMessage = state.folderActionError,
+            onDismiss = {
+                folderToDelete = null
+                viewModel.consumeFolderActionError()
+            },
+            onConfirm = { viewModel.deleteFolder(folder) },
+        )
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -157,6 +188,14 @@ fun InboxScreen(
                 onCreateFolder = {
                     scope.launch { drawerState.close() }
                     showCreateFolderDialog = true
+                },
+                onRenameFolder = { folder ->
+                    scope.launch { drawerState.close() }
+                    folderToRename = folder
+                },
+                onDeleteFolder = { folder ->
+                    scope.launch { drawerState.close() }
+                    folderToDelete = folder
                 },
             )
         },
@@ -178,7 +217,7 @@ fun InboxScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { /* TODO: Search */ }) {
+                        IconButton(onClick = onSearch) {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Search",
@@ -327,6 +366,8 @@ private fun FolderDrawerContent(
     onFolderSelected: (Folder) -> Unit,
     onSwitchMailbox: () -> Unit,
     onCreateFolder: () -> Unit,
+    onRenameFolder: (Folder) -> Unit,
+    onDeleteFolder: (Folder) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ModalDrawerSheet(modifier = modifier) {
@@ -379,6 +420,8 @@ private fun FolderDrawerContent(
                         folder = folder,
                         selected = folder.id == selectedFolderId,
                         onClick = { onFolderSelected(folder) },
+                        onRename = { onRenameFolder(folder) },
+                        onDelete = { onDeleteFolder(folder) },
                     )
                 }
             }
@@ -401,11 +444,42 @@ private fun FolderDrawerItem(
     folder: Folder,
     selected: Boolean,
     onClick: () -> Unit,
+    onRename: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     NavigationDrawerItem(
         icon = { Icon(imageVector = folderIcon(folder), contentDescription = null) },
         label = { Text(text = folder.name) },
-        badge = { if (folder.unreadCount > 0) Badge { Text(folder.unreadCount.toString()) } },
+        badge = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (folder.unreadCount > 0) {
+                    Badge { Text(folder.unreadCount.toString()) }
+                }
+                if (onRename != null || onDelete != null) {
+                    Box {
+                        IconButton(onClick = { showMenu = true }, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Folder options",
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                onClick = { showMenu = false; onRename?.invoke() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                onClick = { showMenu = false; onDelete?.invoke() },
+                            )
+                        }
+                    }
+                }
+            }
+        },
         selected = selected,
         onClick = onClick,
         modifier = Modifier.padding(horizontal = 12.dp),
@@ -472,201 +546,91 @@ private fun CreateFolderDialog(
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun EmailListItem(
-    email: EmailSummary,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
+private fun RenameFolderDialog(
+    currentName: String,
+    renaming: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
 ) {
-    // A thread's latest message can be read while earlier messages in it aren't — thread_unread_count
-    // catches that; a plain !email.read alone would show the row as read even with unread messages
-    // still in the conversation.
-    val isUnread = email.isUnread()
-    val surfaceColor = if (isUnread) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surface
+    var name by rememberSaveable(currentName) { mutableStateOf(currentName) }
 
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(surfaceColor)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        color = surfaceColor,
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Header row: sender avatar, sender, time
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Avatar
-                SenderAvatar(
-                    sender = email.sender,
-                    modifier = Modifier.size(40.dp),
+    AlertDialog(
+        onDismissRequest = { if (!renaming) onDismiss() },
+        title = { Text("Rename folder") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Folder name") },
+                    singleLine = true,
+                    enabled = !renaming,
+                    isError = errorMessage != null,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-
-                // Sender + subject area
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = parseDisplayName(email.sender),
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Normal
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatRelativeTime(email.date),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-
+                if (errorMessage != null) {
                     Text(
-                        text = email.subject,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Normal
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
                     )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (email.starred) {
-                            Icon(
-                                imageVector = Icons.Default.StarBorder,
-                                contentDescription = "Starred",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        if (email.snippet?.contains("attachment") == true || email.snippet?.contains("📎") == true) {
-                            Icon(
-                                imageVector = Icons.Default.Attachment,
-                                contentDescription = "Has attachment",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Star + attachment indicators
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (email.starred) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Starred",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    if (email.snippet?.contains("attachment") == true || email.snippet?.contains("📎") == true) {
-                        Icon(
-                            imageVector = Icons.Default.Attachment,
-                            contentDescription = "Attachment",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
                 }
             }
-
-            // Snippet row — the server doesn't guarantee this is pre-stripped of HTML, and this
-            // Text() can't render markup, so always reduce it to plain text first.
-            email.snippet?.let { snippet ->
-                Text(
-                    text = HtmlTextExtractor.toPlainText(snippet),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onRename(name) },
+                enabled = !renaming && name.isNotBlank(),
+            ) {
+                if (renaming) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Rename")
+                }
             }
-        }
-    }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !renaming) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
-private fun SenderAvatar(
-    sender: String,
-    modifier: Modifier = Modifier,
+private fun DeleteFolderDialog(
+    folderName: String,
+    deleting: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
 ) {
-    val initials = parseDisplayName(sender)
-        .split(" ")
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercase() }
-        .take(2)
-
-    val colors = listOf(
-        0xFFEF5350.toInt(), 0xFFEC407A.toInt(), 0xFFAB47BC.toInt(),
-        0xFF7E57C2.toInt(), 0xFF5C6BC0.toInt(), 0xFF42A5F5.toInt(),
-        0xFF29B6F6.toInt(), 0xFF26C6DA.toInt(), 0xFF26A69A.toInt(),
-        0xFF66BB6A.toInt(), 0xFF9CCC65.toInt(), 0xFFD4E157.toInt(),
-    )
-    val colorIndex = sender.hashCode().absoluteValue % colors.size
-    val backgroundColor = Color(colors[colorIndex])
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(backgroundColor),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = initials,
-            color = Color.White,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-        )
-    }
-}
-
-private fun parseDisplayName(sender: String): String {
-    // Parse "Name <email@domain.com>" format
-    val angleBracketIndex = sender.indexOf('<')
-    if (angleBracketIndex > 0) {
-        return sender.substring(0, angleBracketIndex).trim()
-    }
-    return sender
-}
-
-private val MONTH_ABBREVIATIONS = arrayOf(
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-)
-
-private fun formatRelativeTime(dateString: String): String {
-    return try {
-        val date = Instant.parse(dateString)
-        val diff = (Clock.System.now() - date).inWholeMilliseconds
-        when {
-            diff < 60_000 -> "Just now"
-            diff < 3_600_000 -> "${diff / 60_000}m"
-            diff < 86_400_000 -> "${diff / 3_600_000}h"
-            diff < 604_800_000 -> "${diff / 86_400_000}d"
-            else -> {
-                val local = date.toLocalDateTime(TimeZone.currentSystemDefault())
-                "${MONTH_ABBREVIATIONS[local.month.ordinal]} ${local.day}"
+    AlertDialog(
+        onDismissRequest = { if (!deleting) onDismiss() },
+        title = { Text("Delete folder") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Delete \"$folderName\"? Emails in this folder won't be deleted.")
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
-        }
-    } catch (e: Exception) {
-        dateString.take(10)
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = !deleting) {
+                if (deleting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !deleting) { Text("Cancel") }
+        },
+    )
 }

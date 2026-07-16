@@ -6,6 +6,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
@@ -50,12 +51,18 @@ class FakeConnectionRepository(
 class FakeFolderRepository(
     var result: Result<List<Folder>> = Result.success(SystemFolders.defaults),
     var createResult: (String) -> Result<Folder> = { name -> Result.success(Folder(id = name.lowercase(), name = name, isSystem = false)) },
+    var renameResult: (String, String) -> Result<Folder> = { folderId, name -> Result.success(Folder(id = folderId, name = name, isSystem = false)) },
+    var deleteResult: Result<Unit> = Result.success(Unit),
 ) : FolderRepository {
     val createCalls = mutableListOf<Pair<String, String>>()
+    val renameCalls = mutableListOf<Triple<String, String, String>>()
+    val deleteCalls = mutableListOf<Pair<String, String>>()
 
-    /** When set, [createFolder] suspends here until completed — lets tests hold a call "in
-     * flight" to exercise concurrency guards (e.g. InboxViewModel.createFolder). */
+    /** When set, [createFolder]/[renameFolder]/[deleteFolder] suspend here until completed —
+     * lets tests hold a call "in flight" to exercise concurrency guards on InboxViewModel. */
     var createGate: CompletableDeferred<Unit>? = null
+    var renameGate: CompletableDeferred<Unit>? = null
+    var deleteGate: CompletableDeferred<Unit>? = null
 
     override suspend fun getFolders(mailboxId: String): Result<List<Folder>> = result
 
@@ -63,6 +70,18 @@ class FakeFolderRepository(
         createCalls += mailboxId to name
         createGate?.await()
         return createResult(name)
+    }
+
+    override suspend fun renameFolder(mailboxId: String, folderId: String, name: String): Result<Folder> {
+        renameCalls += Triple(mailboxId, folderId, name)
+        renameGate?.await()
+        return renameResult(folderId, name)
+    }
+
+    override suspend fun deleteFolder(mailboxId: String, folderId: String): Result<Unit> {
+        deleteCalls += mailboxId to folderId
+        deleteGate?.await()
+        return deleteResult
     }
 }
 
@@ -99,6 +118,8 @@ class FakeMailboxRepository(
 class FakeEmailRepository(
     var handler: (mailboxId: String, folder: String, page: Int, limit: Int) -> Result<EmailPage> =
         { _, _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
+    var searchHandler: (mailboxId: String, query: SearchQuery, page: Int, limit: Int) -> Result<EmailPage> =
+        { _, _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
     var moveResult: Result<Unit> = Result.success(Unit),
     var deleteResult: Result<Unit> = Result.success(Unit),
     var setReadResult: Result<Unit> = Result.success(Unit),
@@ -108,6 +129,7 @@ class FakeEmailRepository(
     var forwardResult: Result<Unit> = Result.success(Unit),
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
+    data class SearchCall(val mailboxId: String, val query: SearchQuery, val page: Int, val limit: Int)
     data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
     data class DeleteCall(val mailboxId: String, val emailId: String)
     data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
@@ -117,6 +139,7 @@ class FakeEmailRepository(
     data class ForwardCall(val mailboxId: String, val emailId: String, val request: ComposeEmailRequest)
 
     val calls = mutableListOf<Call>()
+    val searchCalls = mutableListOf<SearchCall>()
     val moveCalls = mutableListOf<MoveCall>()
     val deleteCalls = mutableListOf<DeleteCall>()
     val setReadCalls = mutableListOf<SetReadCall>()
@@ -136,10 +159,19 @@ class FakeEmailRepository(
     /** Same idea as [gate], for [moveEmail] — e.g. ThreadViewModel.archive() ignoring a second tap. */
     var moveGate: CompletableDeferred<Unit>? = null
 
+    /** Same idea as [gate], for [search] — e.g. SearchViewModel.search() ignoring a second tap. */
+    var searchGate: CompletableDeferred<Unit>? = null
+
     override suspend fun getEmails(mailboxId: String, folder: String, page: Int, limit: Int): Result<EmailPage> {
         calls += Call(mailboxId, folder, page, limit)
         gate?.await()
         return handler(mailboxId, folder, page, limit)
+    }
+
+    override suspend fun search(mailboxId: String, query: SearchQuery, page: Int, limit: Int): Result<EmailPage> {
+        searchCalls += SearchCall(mailboxId, query, page, limit)
+        searchGate?.await()
+        return searchHandler(mailboxId, query, page, limit)
     }
 
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> {

@@ -161,4 +161,56 @@ class FolderRepositoryImplTest {
 
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `renameFolder puts the new name and maps the response into a custom folder`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"work","name":"Projects","unreadCount":4}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = FolderRepositoryImpl(apiFor(engine))
+
+        val result = repository.renameFolder(mailboxId = "mb1", folderId = "work", name = "Projects")
+
+        assertEquals(Folder(id = "work", name = "Projects", unreadCount = 4, isSystem = false), result.getOrThrow())
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Put, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/folders/work", request.url.encodedPath)
+    }
+
+    @Test
+    fun `renameFolder surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = FolderRepositoryImpl(apiFor(engine))
+
+        val result = repository.renameFolder(mailboxId = "mb1", folderId = "work", name = "Projects")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `deleteFolder issues a delete request for the folder id`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.OK) }
+        val repository = FolderRepositoryImpl(apiFor(engine))
+
+        val result = repository.deleteFolder(mailboxId = "mb1", folderId = "work")
+
+        assertTrue(result.isSuccess)
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Delete, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/folders/work", request.url.encodedPath)
+    }
+
+    @Test
+    fun `deleteFolder surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = FolderRepositoryImpl(apiFor(engine))
+
+        val result = repository.deleteFolder(mailboxId = "mb1", folderId = "work")
+
+        assertTrue(result.isFailure)
+    }
 }

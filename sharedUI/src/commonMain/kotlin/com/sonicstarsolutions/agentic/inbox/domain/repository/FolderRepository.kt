@@ -8,4 +8,8 @@ interface FolderRepository {
     suspend fun getFolders(mailboxId: String): Result<List<Folder>>
 
     suspend fun createFolder(mailboxId: String, name: String): Result<Folder>
+
+    suspend fun renameFolder(mailboxId: String, folderId: String, name: String): Result<Folder>
+
+    suspend fun deleteFolder(mailboxId: String, folderId: String): Result<Unit>
 }

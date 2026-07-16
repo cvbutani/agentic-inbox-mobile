@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import de.jensklingenberg.ktorfit.Ktorfit
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -357,6 +358,111 @@ class EmailRepositoryImplTest {
         val repository = EmailRepositoryImpl(apiFor(engine))
 
         val result = repository.forwardEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `search sends the query text and every filter as request parameters`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"emails":[],"totalCount":0}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+        val query = SearchQuery(
+            query = "invoice",
+            folder = "inbox",
+            from = "alice@example.dev",
+            to = "me@example.dev",
+            subject = "receipt",
+            dateStart = "2026-01-01",
+            dateEnd = "2026-07-01",
+            isRead = false,
+            isStarred = true,
+            hasAttachment = true,
+        )
+
+        repository.search(mailboxId = "mb1", query = query, page = 2, limit = 25)
+
+        val request = engine.requestHistory.single()
+        assertEquals("/api/v1/mailboxes/mb1/search", request.url.encodedPath)
+        assertEquals("invoice", request.url.parameters["query"])
+        assertEquals("inbox", request.url.parameters["folder"])
+        assertEquals("alice@example.dev", request.url.parameters["from"])
+        assertEquals("me@example.dev", request.url.parameters["to"])
+        assertEquals("receipt", request.url.parameters["subject"])
+        assertEquals("2026-01-01", request.url.parameters["date_start"])
+        assertEquals("2026-07-01", request.url.parameters["date_end"])
+        assertEquals("false", request.url.parameters["is_read"])
+        assertEquals("true", request.url.parameters["is_starred"])
+        assertEquals("true", request.url.parameters["has_attachment"])
+        assertEquals("2", request.url.parameters["page"])
+        assertEquals("25", request.url.parameters["limit"])
+    }
+
+    @Test
+    fun `search omits unset filters from the request`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"emails":[],"totalCount":0}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        repository.search(mailboxId = "mb1", query = SearchQuery(query = "invoice"), page = 1, limit = 50)
+
+        val request = engine.requestHistory.single()
+        assertEquals(null, request.url.parameters["folder"])
+        assertEquals(null, request.url.parameters["from"])
+        assertEquals(null, request.url.parameters["is_read"])
+        assertEquals(null, request.url.parameters["has_attachment"])
+    }
+
+    @Test
+    fun `search maps the page dto into the domain EmailPage`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """
+                    {
+                        "emails": [
+                            {
+                                "id": "e1",
+                                "subject": "Invoice",
+                                "sender": "a@example.dev",
+                                "recipient": "b@example.dev",
+                                "date": "2026-07-16T00:00:00Z",
+                                "read": true,
+                                "starred": false,
+                                "thread_id": "t1",
+                                "folder_id": "inbox"
+                            }
+                        ],
+                        "totalCount": 1
+                    }
+                """.trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val page = repository.search(mailboxId = "mb1", query = SearchQuery(query = "invoice"), page = 1, limit = 50).getOrThrow()
+
+        assertEquals(1, page.totalCount)
+        assertEquals("e1", page.emails.single().id)
+    }
+
+    @Test
+    fun `search surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.search(mailboxId = "mb1", query = SearchQuery(query = "invoice"), page = 1, limit = 50)
 
         assertTrue(result.isFailure)
     }

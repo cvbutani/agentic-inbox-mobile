@@ -6,8 +6,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,12 +29,18 @@ data class InboxUiState(
     val creatingFolder: Boolean = false,
     val folderActionError: String? = null,
     val folderCreated: Boolean = false,
+    val renamingFolder: Boolean = false,
+    val folderRenamed: Boolean = false,
+    val deletingFolder: Boolean = false,
+    val folderDeleted: Boolean = false,
 )
 
 class InboxViewModel(
     private val getEmails: GetEmailsUseCase,
     private val getFolders: GetFoldersUseCase,
     private val createFolderUseCase: CreateFolderUseCase,
+    private val renameFolderUseCase: RenameFolderUseCase,
+    private val deleteFolderUseCase: DeleteFolderUseCase,
     private val mailboxId: String,
     private val mailboxName: String = "Inbox",
 ) : ViewModel() {
@@ -154,5 +162,74 @@ class InboxViewModel(
 
     fun consumeFolderActionError() {
         _state.update { it.copy(folderActionError = null) }
+    }
+
+    fun renameFolder(folder: Folder, name: String) {
+        if (folder.isSystem) {
+            _state.update { it.copy(folderActionError = "System folders can't be renamed.") }
+            return
+        }
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            _state.update { it.copy(folderActionError = "Folder name is required.") }
+            return
+        }
+        if (_state.value.renamingFolder) return
+        _state.update { it.copy(renamingFolder = true, folderActionError = null) }
+        viewModelScope.launch {
+            renameFolderUseCase(mailboxId, folder.id, trimmed)
+                .onSuccess { renamed ->
+                    // Only the name changed server-side — keep the locally known unreadCount
+                    // rather than trusting the rename response for fields it isn't authoritative on.
+                    val updated = folder.copy(name = renamed.name)
+                    _state.update { current ->
+                        current.copy(
+                            renamingFolder = false,
+                            folders = current.folders.map { f -> if (f.id == folder.id) updated else f },
+                            currentFolder = if (current.currentFolder.id == folder.id) updated else current.currentFolder,
+                            folderRenamed = true,
+                        )
+                    }
+                }
+                .onFailure { t ->
+                    _state.update {
+                        it.copy(renamingFolder = false, folderActionError = t.message ?: t::class.simpleName ?: "Failed to rename folder")
+                    }
+                }
+        }
+    }
+
+    fun consumeFolderRenamed() {
+        _state.update { it.copy(folderRenamed = false) }
+    }
+
+    fun deleteFolder(folder: Folder) {
+        if (folder.isSystem) {
+            _state.update { it.copy(folderActionError = "System folders can't be deleted.") }
+            return
+        }
+        if (_state.value.deletingFolder) return
+        _state.update { it.copy(deletingFolder = true, folderActionError = null) }
+        viewModelScope.launch {
+            deleteFolderUseCase(mailboxId, folder.id)
+                .onSuccess {
+                    _state.update {
+                        it.copy(deletingFolder = false, folders = it.folders.filterNot { f -> f.id == folder.id }, folderDeleted = true)
+                    }
+                    if (_state.value.currentFolder.id == folder.id) {
+                        val inbox = SystemFolders.defaults.first { it.id == SystemFolders.INBOX }
+                        selectFolder(inbox)
+                    }
+                }
+                .onFailure { t ->
+                    _state.update {
+                        it.copy(deletingFolder = false, folderActionError = t.message ?: t::class.simpleName ?: "Failed to delete folder")
+                    }
+                }
+        }
+    }
+
+    fun consumeFolderDeleted() {
+        _state.update { it.copy(folderDeleted = false) }
     }
 }

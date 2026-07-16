@@ -5,8 +5,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
 import kotlinx.coroutines.CompletableDeferred
@@ -57,6 +59,8 @@ class InboxViewModelTest {
         getEmails = GetEmailsUseCase(repository),
         getFolders = GetFoldersUseCase(folderRepository),
         createFolderUseCase = CreateFolderUseCase(folderRepository),
+        renameFolderUseCase = RenameFolderUseCase(folderRepository),
+        deleteFolderUseCase = DeleteFolderUseCase(folderRepository),
         mailboxId = "mb1",
         mailboxName = "Inbox",
     )
@@ -283,5 +287,203 @@ class InboxViewModelTest {
         viewModel.consumeFolderCreated()
 
         assertFalse(viewModel.state.value.folderCreated)
+    }
+
+    private val workFolder = Folder(id = "work", name = "Work", unreadCount = 2, isSystem = false)
+
+    @Test
+    fun `renameFolder trims the name updates the folder in state and signals folderRenamed`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.renameFolder(workFolder, "  Projects  ")
+
+        assertEquals(listOf(Triple("mb1", "work", "Projects")), folderRepository.renameCalls)
+        assertTrue(viewModel.state.value.folders.contains(Folder(id = "work", name = "Projects", unreadCount = 2, isSystem = false)))
+        assertTrue(viewModel.state.value.folderRenamed)
+        assertFalse(viewModel.state.value.renamingFolder)
+    }
+
+    @Test
+    fun `renameFolder updates currentFolder when the renamed folder is selected`() = runTest {
+        val emailRepository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(emptyList(), totalCount = 0)) },
+        )
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        viewModel.selectFolder(workFolder)
+
+        viewModel.renameFolder(workFolder, "Projects")
+
+        assertEquals("Projects", viewModel.state.value.currentFolder.name)
+    }
+
+    @Test
+    fun `renameFolder rejects a blank name without calling the repository`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository()
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.renameFolder(workFolder, "   ")
+
+        assertTrue(folderRepository.renameCalls.isEmpty())
+        assertEquals("Folder name is required.", viewModel.state.value.folderActionError)
+    }
+
+    @Test
+    fun `renameFolder rejects renaming a system folder without calling the repository`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository()
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        val inboxFolder = SystemFolders.defaults.first { it.id == SystemFolders.INBOX }
+
+        viewModel.renameFolder(inboxFolder, "My Inbox")
+
+        assertTrue(folderRepository.renameCalls.isEmpty())
+        assertEquals("System folders can't be renamed.", viewModel.state.value.folderActionError)
+    }
+
+    @Test
+    fun `renameFolder surfaces the failure and does not mark folderRenamed`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(
+            result = Result.success(SystemFolders.defaults + workFolder),
+            renameResult = { _, _ -> Result.failure(RuntimeException("name taken")) },
+        )
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.renameFolder(workFolder, "Projects")
+
+        assertEquals("name taken", viewModel.state.value.folderActionError)
+        assertFalse(viewModel.state.value.folderRenamed)
+        assertFalse(viewModel.state.value.renamingFolder)
+    }
+
+    @Test
+    fun `renameFolder ignores a second call while one is already in flight`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        val gate = CompletableDeferred<Unit>()
+        folderRepository.renameGate = gate
+
+        viewModel.renameFolder(workFolder, "Projects")
+        assertTrue(viewModel.state.value.renamingFolder)
+
+        viewModel.renameFolder(workFolder, "Personal") // should be ignored by the renamingFolder guard
+
+        assertEquals(1, folderRepository.renameCalls.size, "second renameFolder should not have dispatched a request")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.renamingFolder)
+    }
+
+    @Test
+    fun `consumeFolderRenamed clears the flag`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        viewModel.renameFolder(workFolder, "Projects")
+        assertTrue(viewModel.state.value.folderRenamed)
+
+        viewModel.consumeFolderRenamed()
+
+        assertFalse(viewModel.state.value.folderRenamed)
+    }
+
+    @Test
+    fun `deleteFolder removes the folder from state and signals folderDeleted`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.deleteFolder(workFolder)
+
+        assertEquals(listOf("mb1" to "work"), folderRepository.deleteCalls)
+        assertFalse(viewModel.state.value.folders.contains(workFolder))
+        assertTrue(viewModel.state.value.folderDeleted)
+        assertFalse(viewModel.state.value.deletingFolder)
+    }
+
+    @Test
+    fun `deleteFolder switches to Inbox and reloads when the deleted folder was selected`() = runTest {
+        val emailRepository = FakeEmailRepository(
+            handler = { _, folder, _, _ -> Result.success(EmailPage(listOf(summary(folder)), totalCount = 1)) },
+        )
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        viewModel.selectFolder(workFolder)
+
+        viewModel.deleteFolder(workFolder)
+
+        assertEquals(SystemFolders.INBOX, viewModel.state.value.currentFolder.id)
+        assertEquals(listOf(summary("inbox")), viewModel.state.value.emails)
+    }
+
+    @Test
+    fun `deleteFolder rejects deleting a system folder without calling the repository`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository()
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        val inboxFolder = SystemFolders.defaults.first { it.id == SystemFolders.INBOX }
+
+        viewModel.deleteFolder(inboxFolder)
+
+        assertTrue(folderRepository.deleteCalls.isEmpty())
+        assertEquals("System folders can't be deleted.", viewModel.state.value.folderActionError)
+    }
+
+    @Test
+    fun `deleteFolder surfaces the failure and keeps the folder in state`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(
+            result = Result.success(SystemFolders.defaults + workFolder),
+            deleteResult = Result.failure(RuntimeException("in use")),
+        )
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.deleteFolder(workFolder)
+
+        assertEquals("in use", viewModel.state.value.folderActionError)
+        assertTrue(viewModel.state.value.folders.contains(workFolder))
+        assertFalse(viewModel.state.value.folderDeleted)
+        assertFalse(viewModel.state.value.deletingFolder)
+    }
+
+    @Test
+    fun `deleteFolder ignores a second call while one is already in flight`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        val gate = CompletableDeferred<Unit>()
+        folderRepository.deleteGate = gate
+
+        viewModel.deleteFolder(workFolder)
+        assertTrue(viewModel.state.value.deletingFolder)
+
+        viewModel.deleteFolder(workFolder) // should be ignored by the deletingFolder guard
+
+        assertEquals(1, folderRepository.deleteCalls.size, "second deleteFolder should not have dispatched a request")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.deletingFolder)
+    }
+
+    @Test
+    fun `consumeFolderDeleted clears the flag`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + workFolder))
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        viewModel.deleteFolder(workFolder)
+        assertTrue(viewModel.state.value.folderDeleted)
+
+        viewModel.consumeFolderDeleted()
+
+        assertFalse(viewModel.state.value.folderDeleted)
     }
 }

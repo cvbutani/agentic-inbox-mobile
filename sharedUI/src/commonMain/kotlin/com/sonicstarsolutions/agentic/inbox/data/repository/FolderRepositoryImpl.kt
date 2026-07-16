@@ -32,4 +32,13 @@ class FolderRepositoryImpl(
             val dto = api.createFolder(mailboxId, FolderNameDto(name))
             Folder(id = dto.id, name = dto.name, unreadCount = dto.unreadCount, isSystem = false)
         }
+
+    override suspend fun renameFolder(mailboxId: String, folderId: String, name: String): Result<Folder> =
+        safeApiCall {
+            val dto = api.updateFolder(mailboxId, folderId, FolderNameDto(name))
+            Folder(id = dto.id, name = dto.name, unreadCount = dto.unreadCount, isSystem = false)
+        }
+
+    override suspend fun deleteFolder(mailboxId: String, folderId: String): Result<Unit> =
+        safeApiCall { api.deleteFolder(mailboxId, folderId) }
 }
