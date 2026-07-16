@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
@@ -38,6 +40,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -131,12 +134,14 @@ fun ThreadScreen(
             if (!state.loading && state.errorMessage == null && currentMessage != null) {
                 ThreadBottomBar(
                     currentMessageRead = currentMessage.read,
+                    currentMessageStarred = currentMessage.starred,
                     folders = state.folders,
                     actionInProgress = state.actionInProgress,
                     onArchive = viewModel::archive,
                     onDelete = viewModel::delete,
                     onMoveTo = viewModel::moveTo,
                     onToggleRead = viewModel::toggleReadState,
+                    onToggleStarred = viewModel::toggleStarred,
                     onReply = { onReply(currentMessage.id) },
                     onReplyAll = { onReplyAll(currentMessage.id) },
                     onForward = { onForward(currentMessage.id) },
@@ -185,12 +190,14 @@ fun ThreadScreen(
 @Composable
 private fun ThreadBottomBar(
     currentMessageRead: Boolean,
+    currentMessageStarred: Boolean,
     folders: List<Folder>,
     actionInProgress: Boolean,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
     onMoveTo: (String) -> Unit,
     onToggleRead: () -> Unit,
+    onToggleStarred: () -> Unit,
     onReply: () -> Unit,
     onReplyAll: () -> Unit,
     onForward: () -> Unit,
@@ -230,6 +237,13 @@ private fun ThreadBottomBar(
                 Icon(
                     imageVector = if (currentMessageRead) Icons.Default.MarkEmailUnread else Icons.Default.MarkEmailRead,
                     contentDescription = if (currentMessageRead) "Mark as unread" else "Mark as read",
+                )
+            }
+            IconButton(onClick = onToggleStarred, enabled = !actionInProgress) {
+                Icon(
+                    imageVector = if (currentMessageStarred) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = if (currentMessageStarred) "Unstar" else "Star",
+                    tint = if (currentMessageStarred) MaterialTheme.colorScheme.secondary else LocalContentColor.current,
                 )
             }
             IconButton(onClick = onReply, enabled = !actionInProgress) {

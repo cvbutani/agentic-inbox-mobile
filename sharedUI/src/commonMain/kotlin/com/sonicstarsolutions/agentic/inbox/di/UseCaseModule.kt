@@ -15,6 +15,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.LoadCredentialsUseCas
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
@@ -22,6 +23,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveCredentialsUseCas
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ValidateConnectionUseCase
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -34,6 +36,7 @@ val useCaseModule = module {
     singleOf(::ValidateConnectionUseCase)
     singleOf(::GetMailboxesUseCase)
     singleOf(::CreateMailboxUseCase)
+    singleOf(::DeleteMailboxUseCase)
     singleOf(::GetAllowedDomainsUseCase)
     singleOf(::GetMailboxUseCase)
     singleOf(::GetEmailsUseCase)
@@ -46,6 +49,7 @@ val useCaseModule = module {
     singleOf(::MoveEmailUseCase)
     singleOf(::DeleteEmailUseCase)
     singleOf(::SetEmailReadUseCase)
+    singleOf(::SetEmailStarredUseCase)
     singleOf(::MarkThreadReadUseCase)
     singleOf(::SendEmailUseCase)
     singleOf(::ReplyEmailUseCase)

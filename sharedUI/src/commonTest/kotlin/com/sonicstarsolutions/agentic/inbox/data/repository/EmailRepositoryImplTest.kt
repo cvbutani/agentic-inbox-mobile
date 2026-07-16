@@ -238,6 +238,35 @@ class EmailRepositoryImplTest {
     }
 
     @Test
+    fun `setStarred sends a PUT with the requested starred state`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"e1","subject":"s","sender":"a","recipient":"b","date":"2026-07-16T00:00:00Z","read":true,"starred":true}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.setStarred(mailboxId = "mb1", emailId = "e1", starred = true)
+
+        assertTrue(result.isSuccess)
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Put, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/emails/e1", request.url.encodedPath)
+    }
+
+    @Test
+    fun `setStarred surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine))
+
+        val result = repository.setStarred(mailboxId = "mb1", emailId = "e1", starred = false)
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
     fun `markThreadRead posts to the thread read endpoint`() = runTest {
         val engine = MockEngine { _ ->
             respond(

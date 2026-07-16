@@ -175,4 +175,27 @@ class MailboxRepositoryImplTest {
 
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `deleteMailbox issues a delete request for the mailbox id`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.OK) }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.deleteMailbox("mb1")
+
+        assertTrue(result.isSuccess)
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Delete, request.method)
+        assertEquals("/api/v1/mailboxes/mb1", request.url.encodedPath)
+    }
+
+    @Test
+    fun `deleteMailbox surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = MailboxRepositoryImpl(apiFor(engine))
+
+        val result = repository.deleteMailbox("mb1")
+
+        assertTrue(result.isFailure)
+    }
 }

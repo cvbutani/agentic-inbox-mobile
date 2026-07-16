@@ -8,6 +8,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeThreadRepository
@@ -40,7 +41,7 @@ class ThreadViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun detail(id: String, read: Boolean = true) = EmailDetail(
+    private fun detail(id: String, read: Boolean = true, starred: Boolean = false) = EmailDetail(
         id = id,
         subject = "Subject",
         sender = "a@example.dev",
@@ -49,7 +50,7 @@ class ThreadViewModelTest {
         bcc = null,
         date = "2026-07-16T00:00:00Z",
         read = read,
-        starred = false,
+        starred = starred,
         threadId = "t1",
         folderId = "inbox",
         body = "<p>Body $id</p>",
@@ -67,6 +68,7 @@ class ThreadViewModelTest {
         moveEmail = MoveEmailUseCase(emailRepository),
         deleteEmail = DeleteEmailUseCase(emailRepository),
         setEmailRead = SetEmailReadUseCase(emailRepository),
+        setEmailStarred = SetEmailStarredUseCase(emailRepository),
         markThreadRead = MarkThreadReadUseCase(emailRepository),
         mailboxId = "mb1",
         emailId = "e1",
@@ -212,6 +214,34 @@ class ThreadViewModelTest {
         val result = viewModel.state.value.actionResult
         assertTrue(result is ThreadActionResult.Success)
         assertFalse(result.shouldNavigateBack)
+    }
+
+    @Test
+    fun `toggleStarred flips the expanded message and does not navigate back`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1", starred = false))))
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.toggleStarred()
+
+        assertEquals(listOf(FakeEmailRepository.SetStarredCall("mb1", "e1", true)), emailRepository.setStarredCalls)
+        assertTrue(viewModel.state.value.messages.single().starred)
+        val result = viewModel.state.value.actionResult
+        assertTrue(result is ThreadActionResult.Success)
+        assertFalse(result.shouldNavigateBack)
+    }
+
+    @Test
+    fun `toggleStarred failure reports a failure result and leaves the message unchanged`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1", starred = false))))
+        val emailRepository = FakeEmailRepository(setStarredResult = Result.failure(RuntimeException("offline")))
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.toggleStarred()
+
+        val result = viewModel.state.value.actionResult
+        assertTrue(result is ThreadActionResult.Failure)
+        assertFalse(viewModel.state.value.messages.single().starred)
     }
 
     @Test

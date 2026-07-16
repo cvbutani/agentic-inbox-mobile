@@ -11,4 +11,6 @@ interface MailboxRepository {
     suspend fun getAllowedDomains(): Result<List<String>>
 
     suspend fun getMailbox(mailboxId: String): Result<Mailbox>
+
+    suspend fun deleteMailbox(mailboxId: String): Result<Unit>
 }

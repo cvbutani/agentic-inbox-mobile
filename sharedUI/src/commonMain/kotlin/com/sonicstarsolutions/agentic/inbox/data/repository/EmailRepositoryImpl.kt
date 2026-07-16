@@ -61,6 +61,9 @@ class EmailRepositoryImpl(
     override suspend fun setRead(mailboxId: String, emailId: String, read: Boolean): Result<Unit> =
         safeApiCall { api.updateEmail(mailboxId, emailId, UpdateEmailDto(read = read)) }.map {}
 
+    override suspend fun setStarred(mailboxId: String, emailId: String, starred: Boolean): Result<Unit> =
+        safeApiCall { api.updateEmail(mailboxId, emailId, UpdateEmailDto(starred = starred)) }.map {}
+
     override suspend fun markThreadRead(mailboxId: String, threadId: String): Result<Unit> =
         safeApiCall { api.markThreadRead(mailboxId, threadId) }.map {}
 

@@ -11,6 +11,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +40,7 @@ class ThreadViewModel(
     private val moveEmail: MoveEmailUseCase,
     private val deleteEmail: DeleteEmailUseCase,
     private val setEmailRead: SetEmailReadUseCase,
+    private val setEmailStarred: SetEmailStarredUseCase,
     private val markThreadRead: MarkThreadReadUseCase,
     private val mailboxId: String,
     private val emailId: String,
@@ -127,6 +129,20 @@ class ThreadViewModel(
                     }
                 }
                 .map { if (newReadState) "Marked as read" else "Marked as unread" }
+        }
+    }
+
+    fun toggleStarred() {
+        val target = _state.value.messages.firstOrNull { it.id == targetMessageId() } ?: return
+        val newStarredState = !target.starred
+        runAction(navigateBackOnSuccess = false) {
+            setEmailStarred(mailboxId, target.id, newStarredState)
+                .onSuccess {
+                    _state.update { current ->
+                        current.copy(messages = current.messages.map { if (it.id == target.id) it.copy(starred = newStarredState) else it })
+                    }
+                }
+                .map { if (newStarredState) "Starred" else "Unstarred" }
         }
     }
 

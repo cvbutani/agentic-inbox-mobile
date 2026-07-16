@@ -113,6 +113,19 @@ class FakeMailboxRepository(
         { id -> Result.success(Mailbox(id = id, email = "$id@example.dev", name = "Mailbox $id")) }
 
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> = getMailboxResult(mailboxId)
+
+    var deleteResult: Result<Unit> = Result.success(Unit)
+    val deleteCalls = mutableListOf<String>()
+
+    /** Same idea as [createGate], for [deleteMailbox] — e.g. MailboxPickerViewModel.deleteMailbox
+     * ignoring a second tap while one is already in flight. */
+    var deleteGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun deleteMailbox(mailboxId: String): Result<Unit> {
+        deleteCalls += mailboxId
+        deleteGate?.await()
+        return deleteResult
+    }
 }
 
 class FakeEmailRepository(
@@ -123,6 +136,7 @@ class FakeEmailRepository(
     var moveResult: Result<Unit> = Result.success(Unit),
     var deleteResult: Result<Unit> = Result.success(Unit),
     var setReadResult: Result<Unit> = Result.success(Unit),
+    var setStarredResult: Result<Unit> = Result.success(Unit),
     var markThreadReadResult: Result<Unit> = Result.success(Unit),
     var sendResult: Result<Unit> = Result.success(Unit),
     var replyResult: Result<Unit> = Result.success(Unit),
@@ -133,6 +147,7 @@ class FakeEmailRepository(
     data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
     data class DeleteCall(val mailboxId: String, val emailId: String)
     data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
+    data class SetStarredCall(val mailboxId: String, val emailId: String, val starred: Boolean)
     data class MarkThreadReadCall(val mailboxId: String, val threadId: String)
     data class SendCall(val mailboxId: String, val request: ComposeEmailRequest)
     data class ReplyCall(val mailboxId: String, val emailId: String, val request: ComposeEmailRequest)
@@ -143,6 +158,7 @@ class FakeEmailRepository(
     val moveCalls = mutableListOf<MoveCall>()
     val deleteCalls = mutableListOf<DeleteCall>()
     val setReadCalls = mutableListOf<SetReadCall>()
+    val setStarredCalls = mutableListOf<SetStarredCall>()
     val markThreadReadCalls = mutableListOf<MarkThreadReadCall>()
     val sendCalls = mutableListOf<SendCall>()
     val replyCalls = mutableListOf<ReplyCall>()
@@ -188,6 +204,11 @@ class FakeEmailRepository(
     override suspend fun setRead(mailboxId: String, emailId: String, read: Boolean): Result<Unit> {
         setReadCalls += SetReadCall(mailboxId, emailId, read)
         return setReadResult
+    }
+
+    override suspend fun setStarred(mailboxId: String, emailId: String, starred: Boolean): Result<Unit> {
+        setStarredCalls += SetStarredCall(mailboxId, emailId, starred)
+        return setStarredResult
     }
 
     override suspend fun markThreadRead(mailboxId: String, threadId: String): Result<Unit> {

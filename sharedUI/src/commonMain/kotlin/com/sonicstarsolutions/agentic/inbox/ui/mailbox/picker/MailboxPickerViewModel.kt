@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,9 @@ data class MailboxPickerUiState(
     val creatingMailbox: Boolean = false,
     val createMailboxError: String? = null,
     val mailboxCreated: Boolean = false,
+    val deletingMailbox: Boolean = false,
+    val deleteMailboxError: String? = null,
+    val mailboxDeleted: Boolean = false,
 )
 
 class MailboxPickerViewModel(
@@ -31,6 +35,7 @@ class MailboxPickerViewModel(
     private val clearCredentials: ClearCredentialsUseCase,
     private val createMailboxUseCase: CreateMailboxUseCase,
     private val getAllowedDomains: GetAllowedDomainsUseCase,
+    private val deleteMailboxUseCase: DeleteMailboxUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MailboxPickerUiState())
@@ -109,4 +114,26 @@ class MailboxPickerViewModel(
     fun consumeMailboxCreated() = _state.update { it.copy(mailboxCreated = false) }
 
     fun consumeCreateMailboxError() = _state.update { it.copy(createMailboxError = null) }
+
+    fun deleteMailbox(mailboxId: String) {
+        if (_state.value.deletingMailbox) return
+        _state.update { it.copy(deletingMailbox = true, deleteMailboxError = null) }
+        viewModelScope.launch {
+            deleteMailboxUseCase(mailboxId)
+                .onSuccess {
+                    _state.update {
+                        it.copy(deletingMailbox = false, mailboxes = it.mailboxes.filterNot { m -> m.id == mailboxId }, mailboxDeleted = true)
+                    }
+                }
+                .onFailure { t ->
+                    _state.update {
+                        it.copy(deletingMailbox = false, deleteMailboxError = t.message ?: t::class.simpleName ?: "Failed to delete mailbox")
+                    }
+                }
+        }
+    }
+
+    fun consumeMailboxDeleted() = _state.update { it.copy(mailboxDeleted = false) }
+
+    fun consumeDeleteMailboxError() = _state.update { it.copy(deleteMailboxError = null) }
 }

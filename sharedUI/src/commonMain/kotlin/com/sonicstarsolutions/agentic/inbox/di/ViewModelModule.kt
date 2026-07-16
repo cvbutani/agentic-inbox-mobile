@@ -19,10 +19,10 @@ val viewModelModule = module {
     // Runtime args (mailboxId/mailboxName) come from the Inbox nav key via parametersOf(...);
     // the use case is injected. Destructure the ParametersHolder positionally.
     viewModel { (mailboxId: String, mailboxName: String) ->
-        InboxViewModel(get(), get(), get(), get(), get(), mailboxId, mailboxName)
+        InboxViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), mailboxId, mailboxName)
     }
     viewModel { (mailboxId: String, emailId: String, threadId: String?) ->
-        ThreadViewModel(get(), get(), get(), get(), get(), get(), mailboxId, emailId, threadId)
+        ThreadViewModel(get(), get(), get(), get(), get(), get(), get(), mailboxId, emailId, threadId)
     }
     viewModel { (mailboxId: String, mode: ComposeMode, emailId: String?, threadId: String?) ->
         ComposeViewModel(get(), get(), get(), get(), get(), mailboxId, mode, emailId, threadId)

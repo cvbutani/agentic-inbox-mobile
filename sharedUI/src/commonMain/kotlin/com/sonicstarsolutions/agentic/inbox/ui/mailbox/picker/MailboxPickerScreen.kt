@@ -1,5 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.ui.components.SectionTitle
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -77,6 +80,27 @@ fun MailboxPickerScreen(
                 viewModel.consumeCreateMailboxError()
             },
             onCreate = { email, name -> viewModel.createMailbox(email, name) },
+        )
+    }
+
+    var mailboxToDelete by remember { mutableStateOf<Mailbox?>(null) }
+    LaunchedEffect(state.mailboxDeleted) {
+        if (state.mailboxDeleted) {
+            mailboxToDelete = null
+            viewModel.consumeMailboxDeleted()
+        }
+    }
+
+    mailboxToDelete?.let { mailbox ->
+        DeleteMailboxDialog(
+            mailboxName = mailbox.name,
+            deleting = state.deletingMailbox,
+            errorMessage = state.deleteMailboxError,
+            onDismiss = {
+                mailboxToDelete = null
+                viewModel.consumeDeleteMailboxError()
+            },
+            onConfirm = { viewModel.deleteMailbox(mailbox.id) },
         )
     }
 
@@ -119,28 +143,94 @@ fun MailboxPickerScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     items(state.mailboxes, key = { it.id }) { mailbox ->
-                        ElevatedCard(
-                            modifier = Modifier.fillMaxWidth(),
+                        MailboxCard(
+                            mailbox = mailbox,
                             onClick = { onMailboxSelected(mailbox.id, mailbox.name) },
-                        ) {
-                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    mailbox.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                                Text(
-                                    mailbox.email,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                            onDelete = { mailboxToDelete = mailbox },
+                        )
                     }
                 }
             }
         }
     }
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MailboxCard(
+    mailbox: Mailbox,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var showMenu by remember { mutableStateOf(false) }
+
+    Box {
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = { showMenu = true }),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    mailbox.name,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    mailbox.email,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenuItem(
+                text = { Text("Delete") },
+                onClick = {
+                    showMenu = false
+                    onDelete()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeleteMailboxDialog(
+    mailboxName: String,
+    deleting: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!deleting) onDismiss() },
+        title = { Text("Delete mailbox") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Delete \"$mailboxName\"? This cannot be undone.")
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = !deleting) {
+                if (deleting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !deleting) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable

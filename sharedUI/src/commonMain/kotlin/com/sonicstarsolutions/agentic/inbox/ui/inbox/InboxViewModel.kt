@@ -6,10 +6,14 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +37,8 @@ data class InboxUiState(
     val folderRenamed: Boolean = false,
     val deletingFolder: Boolean = false,
     val folderDeleted: Boolean = false,
+    val selectionMode: Boolean = false,
+    val selectedEmailIds: Set<String> = emptySet(),
 )
 
 class InboxViewModel(
@@ -41,6 +47,10 @@ class InboxViewModel(
     private val createFolderUseCase: CreateFolderUseCase,
     private val renameFolderUseCase: RenameFolderUseCase,
     private val deleteFolderUseCase: DeleteFolderUseCase,
+    private val setEmailStarredUseCase: SetEmailStarredUseCase,
+    private val moveEmailUseCase: MoveEmailUseCase,
+    private val deleteEmailUseCase: DeleteEmailUseCase,
+    private val setEmailReadUseCase: SetEmailReadUseCase,
     private val mailboxId: String,
     private val mailboxName: String = "Inbox",
 ) : ViewModel() {
@@ -231,5 +241,120 @@ class InboxViewModel(
 
     fun consumeFolderDeleted() {
         _state.update { it.copy(folderDeleted = false) }
+    }
+
+    fun toggleStarred(email: EmailSummary) {
+        val newStarred = !email.starred
+        _state.update { current ->
+            current.copy(emails = current.emails.map { if (it.id == email.id) it.copy(starred = newStarred) else it })
+        }
+        viewModelScope.launch {
+            setEmailStarredUseCase(mailboxId, email.id, newStarred)
+                .onFailure { t ->
+                    _state.update { current ->
+                        current.copy(
+                            emails = current.emails.map { if (it.id == email.id) it.copy(starred = email.starred) else it },
+                            errorMessage = t.message ?: t::class.simpleName ?: "Failed to update star",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun archiveEmail(email: EmailSummary) = removeOptimistically(email) {
+        moveEmailUseCase(mailboxId, email.id, SystemFolders.ARCHIVE)
+    }
+
+    fun deleteEmail(email: EmailSummary) = removeOptimistically(email) {
+        deleteEmailUseCase(mailboxId, email.id)
+    }
+
+    /** Optimistically drops [email] from the list (swipe actions read as instant), restoring it
+     * at its original position if the server call fails. */
+    private fun removeOptimistically(email: EmailSummary, action: suspend () -> Result<Unit>) {
+        val originalIndex = _state.value.emails.indexOf(email)
+        if (originalIndex < 0) return
+        _state.update { current ->
+            current.copy(emails = current.emails.filterNot { it.id == email.id }, totalCount = (current.totalCount - 1).coerceAtLeast(0))
+        }
+        viewModelScope.launch {
+            action().onFailure { t ->
+                _state.update { current ->
+                    val restored = current.emails.toMutableList().apply { add(originalIndex.coerceAtMost(size), email) }
+                    current.copy(
+                        emails = restored,
+                        totalCount = current.totalCount + 1,
+                        errorMessage = t.message ?: t::class.simpleName ?: "Failed to update",
+                    )
+                }
+            }
+        }
+    }
+
+    fun enterSelectionMode(emailId: String) {
+        _state.update { it.copy(selectionMode = true, selectedEmailIds = setOf(emailId)) }
+    }
+
+    fun toggleSelection(emailId: String) {
+        _state.update { current ->
+            val updated = if (emailId in current.selectedEmailIds) current.selectedEmailIds - emailId else current.selectedEmailIds + emailId
+            current.copy(selectionMode = updated.isNotEmpty(), selectedEmailIds = updated)
+        }
+    }
+
+    fun selectAll() {
+        _state.update { it.copy(selectedEmailIds = it.emails.map { email -> email.id }.toSet()) }
+    }
+
+    fun clearSelection() {
+        _state.update { it.copy(selectionMode = false, selectedEmailIds = emptySet()) }
+    }
+
+    fun batchArchive() = batchRemove { emailId -> moveEmailUseCase(mailboxId, emailId, SystemFolders.ARCHIVE) }
+
+    fun batchDelete() = batchRemove { emailId -> deleteEmailUseCase(mailboxId, emailId) }
+
+    fun batchMarkAsRead() = batchMarkRead(true)
+
+    fun batchMarkAsUnread() = batchMarkRead(false)
+
+    /** Runs [action] for every selected email, drops the ones that succeeded from the list, and
+     * always exits selection mode — used for archive/delete where the row leaves the list either
+     * way once the operation has been attempted. */
+    private fun batchRemove(action: suspend (String) -> Result<Unit>) {
+        val ids = _state.value.selectedEmailIds
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val results = ids.associateWith { action(it) }
+            val succeededIds = results.filterValues { it.isSuccess }.keys
+            val failedCount = results.size - succeededIds.size
+            _state.update { current ->
+                current.copy(
+                    emails = current.emails.filterNot { it.id in succeededIds },
+                    totalCount = (current.totalCount - succeededIds.size).coerceAtLeast(0),
+                    selectionMode = false,
+                    selectedEmailIds = emptySet(),
+                    errorMessage = if (failedCount > 0) "Failed to update $failedCount email(s)" else null,
+                )
+            }
+        }
+    }
+
+    private fun batchMarkRead(read: Boolean) {
+        val ids = _state.value.selectedEmailIds
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val results = ids.associateWith { setEmailReadUseCase(mailboxId, it, read) }
+            val succeededIds = results.filterValues { it.isSuccess }.keys
+            val failedCount = results.size - succeededIds.size
+            _state.update { current ->
+                current.copy(
+                    emails = current.emails.map { if (it.id in succeededIds) it.copy(read = read) else it },
+                    selectionMode = false,
+                    selectedEmailIds = emptySet(),
+                    errorMessage = if (failedCount > 0) "Failed to update $failedCount email(s)" else null,
+                )
+            }
+        }
     }
 }

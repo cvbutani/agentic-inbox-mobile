@@ -21,6 +21,9 @@ class MailboxRepositoryImpl(
 
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> =
         safeApiCall { api.getMailbox(mailboxId).toDomain() }
+
+    override suspend fun deleteMailbox(mailboxId: String): Result<Unit> =
+        safeApiCall { api.deleteMailbox(mailboxId) }
 }
 
 private fun MailboxDto.toDomain(): Mailbox = Mailbox(id = id, email = email, name = name)

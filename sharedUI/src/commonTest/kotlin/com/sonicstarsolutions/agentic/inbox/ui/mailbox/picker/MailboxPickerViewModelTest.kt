@@ -3,6 +3,7 @@ package com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeCredentialsRepository
@@ -51,6 +52,7 @@ class MailboxPickerViewModelTest {
         clearCredentials = ClearCredentialsUseCase(credentialsRepository),
         createMailboxUseCase = CreateMailboxUseCase(mailboxRepository),
         getAllowedDomains = GetAllowedDomainsUseCase(mailboxRepository),
+        deleteMailboxUseCase = DeleteMailboxUseCase(mailboxRepository),
     )
 
     @Test
@@ -184,5 +186,72 @@ class MailboxPickerViewModelTest {
         viewModel.consumeMailboxCreated()
 
         assertFalse(viewModel.state.value.mailboxCreated)
+    }
+
+    @Test
+    fun `deleteMailbox removes the mailbox from state and signals mailboxDeleted`() = runTest {
+        val mailboxes = listOf(Mailbox(id = "mb1", email = "a@example.dev", name = "Alice"))
+        val mailboxRepository = FakeMailboxRepository(result = Result.success(mailboxes))
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+
+        viewModel.deleteMailbox("mb1")
+
+        assertEquals(listOf("mb1"), mailboxRepository.deleteCalls)
+        assertTrue(viewModel.state.value.mailboxes.isEmpty())
+        assertTrue(viewModel.state.value.mailboxDeleted)
+        assertFalse(viewModel.state.value.deletingMailbox)
+    }
+
+    @Test
+    fun `deleteMailbox surfaces the failure and keeps the mailbox in state`() = runTest {
+        val mailboxes = listOf(Mailbox(id = "mb1", email = "a@example.dev", name = "Alice"))
+        val mailboxRepository = FakeMailboxRepository(result = Result.success(mailboxes))
+            .apply { deleteResult = Result.failure(RuntimeException("in use")) }
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+
+        viewModel.deleteMailbox("mb1")
+
+        assertEquals("in use", viewModel.state.value.deleteMailboxError)
+        assertEquals(mailboxes, viewModel.state.value.mailboxes)
+        assertFalse(viewModel.state.value.mailboxDeleted)
+        assertFalse(viewModel.state.value.deletingMailbox)
+    }
+
+    @Test
+    fun `deleteMailbox ignores a second call while one is already in flight`() = runTest {
+        val mailboxes = listOf(Mailbox(id = "mb1", email = "a@example.dev", name = "Alice"))
+        val mailboxRepository = FakeMailboxRepository(result = Result.success(mailboxes))
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+        val gate = CompletableDeferred<Unit>()
+        mailboxRepository.deleteGate = gate
+
+        viewModel.deleteMailbox("mb1")
+        assertTrue(viewModel.state.value.deletingMailbox)
+
+        viewModel.deleteMailbox("mb1") // should be ignored by the deletingMailbox guard
+
+        assertEquals(1, mailboxRepository.deleteCalls.size, "second deleteMailbox should not have dispatched a request")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.deletingMailbox)
+    }
+
+    @Test
+    fun `consumeMailboxDeleted clears the flag`() = runTest {
+        val mailboxes = listOf(Mailbox(id = "mb1", email = "a@example.dev", name = "Alice"))
+        val mailboxRepository = FakeMailboxRepository(result = Result.success(mailboxes))
+        val viewModel = buildViewModel(mailboxRepository)
+        viewModel.awaitLoaded()
+        viewModel.deleteMailbox("mb1")
+        assertTrue(viewModel.state.value.mailboxDeleted)
+
+        viewModel.consumeMailboxDeleted()
+
+        assertFalse(viewModel.state.value.mailboxDeleted)
     }
 }

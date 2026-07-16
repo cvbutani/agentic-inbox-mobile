@@ -21,15 +21,19 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Drafts
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,12 +52,15 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -203,37 +210,51 @@ fun InboxScreen(
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = state.currentFolder.name,
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = onSearch) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = MaterialTheme.colorScheme.onSurface,
+                if (state.selectionMode) {
+                    SelectionTopAppBar(
+                        selectedCount = state.selectedEmailIds.size,
+                        onClose = viewModel::clearSelection,
+                        onSelectAll = viewModel::selectAll,
+                        onMarkRead = viewModel::batchMarkAsRead,
+                        onMarkUnread = viewModel::batchMarkAsUnread,
+                        onArchive = viewModel::batchArchive,
+                        onDelete = viewModel::batchDelete,
+                    )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = state.currentFolder.name,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
-                    scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-                )
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = onSearch) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        ),
+                        scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+                    )
+                }
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = onComposeNew) {
-                    Icon(Icons.Default.Edit, contentDescription = "Compose")
+                if (!state.selectionMode) {
+                    FloatingActionButton(onClick = onComposeNew) {
+                        Icon(Icons.Default.Edit, contentDescription = "Compose")
+                    }
                 }
             },
         ) { paddingValues ->
@@ -314,11 +335,44 @@ fun InboxScreen(
                         contentPadding = PaddingValues(0.dp),
                     ) {
                         items(state.emails, key = { it.id }) { email ->
-                            EmailListItem(
-                                email = email,
-                                onClick = { onEmailSelected(email) },
-                                onLongClick = { /* TODO: Enter selection mode */ },
-                            )
+                            val emailItem: @Composable () -> Unit = {
+                                EmailListItem(
+                                    email = email,
+                                    onClick = {
+                                        if (state.selectionMode) viewModel.toggleSelection(email.id) else onEmailSelected(email)
+                                    },
+                                    onLongClick = {
+                                        if (!state.selectionMode) viewModel.enterSelectionMode(email.id)
+                                    },
+                                    onToggleStarred = { viewModel.toggleStarred(email) },
+                                    selectionMode = state.selectionMode,
+                                    selected = email.id in state.selectedEmailIds,
+                                )
+                            }
+                            if (state.selectionMode) {
+                                emailItem()
+                            } else {
+                                val dismissState = rememberSwipeToDismissBoxState(
+                                    confirmValueChange = { value ->
+                                        when (value) {
+                                            SwipeToDismissBoxValue.StartToEnd -> {
+                                                viewModel.archiveEmail(email)
+                                                true
+                                            }
+                                            SwipeToDismissBoxValue.EndToStart -> {
+                                                viewModel.deleteEmail(email)
+                                                true
+                                            }
+                                            SwipeToDismissBoxValue.Settled -> false
+                                        }
+                                    },
+                                )
+                                SwipeToDismissBox(
+                                    state = dismissState,
+                                    backgroundContent = { SwipeActionBackground(dismissState.targetValue) },
+                                    content = { emailItem() },
+                                )
+                            }
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 72.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant
@@ -356,6 +410,47 @@ fun InboxScreen(
         }
     }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectionTopAppBar(
+    selectedCount: Int,
+    onClose: () -> Unit,
+    onSelectAll: () -> Unit,
+    onMarkRead: () -> Unit,
+    onMarkUnread: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    TopAppBar(
+        title = { Text("$selectedCount selected") },
+        navigationIcon = {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Clear selection")
+            }
+        },
+        actions = {
+            IconButton(onClick = onSelectAll) {
+                Icon(Icons.Default.SelectAll, contentDescription = "Select all")
+            }
+            IconButton(onClick = onMarkRead) {
+                Icon(Icons.Default.MarkEmailRead, contentDescription = "Mark as read")
+            }
+            IconButton(onClick = onMarkUnread) {
+                Icon(Icons.Default.MarkEmailUnread, contentDescription = "Mark as unread")
+            }
+            IconButton(onClick = onArchive) {
+                Icon(Icons.Default.Archive, contentDescription = "Archive")
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete")
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    )
 }
 
 @Composable
@@ -484,6 +579,29 @@ private fun FolderDrawerItem(
         onClick = onClick,
         modifier = Modifier.padding(horizontal = 12.dp),
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeActionBackground(targetValue: SwipeToDismissBoxValue) {
+    val (color, icon, alignment) = when (targetValue) {
+        SwipeToDismissBoxValue.StartToEnd ->
+            Triple(MaterialTheme.colorScheme.primaryContainer, Icons.Default.Archive, Alignment.CenterStart)
+        SwipeToDismissBoxValue.EndToStart ->
+            Triple(MaterialTheme.colorScheme.errorContainer, Icons.Default.Delete, Alignment.CenterEnd)
+        SwipeToDismissBoxValue.Settled -> Triple(MaterialTheme.colorScheme.surface, null, Alignment.Center)
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(color)
+            .padding(horizontal = 24.dp),
+        contentAlignment = alignment,
+    ) {
+        icon?.let {
+            Icon(imageVector = it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+        }
+    }
 }
 
 private fun folderIcon(folder: Folder): ImageVector = when (folder.id) {

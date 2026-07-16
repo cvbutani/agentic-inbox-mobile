@@ -15,7 +15,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -42,12 +44,19 @@ fun EmailListItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onToggleStarred: () -> Unit = {},
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
 ) {
     // A thread's latest message can be read while earlier messages in it aren't — thread_unread_count
     // catches that; a plain !email.read alone would show the row as read even with unread messages
     // still in the conversation.
     val isUnread = email.isUnread()
-    val surfaceColor = if (isUnread) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surface
+    val surfaceColor = when {
+        selected -> MaterialTheme.colorScheme.primaryContainer
+        isUnread -> MaterialTheme.colorScheme.surfaceContainerHighest
+        else -> MaterialTheme.colorScheme.surface
+    }
 
     Surface(
         modifier = modifier
@@ -66,11 +75,19 @@ fun EmailListItem(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Avatar
-                SenderAvatar(
-                    sender = email.sender,
-                    modifier = Modifier.size(40.dp),
-                )
+                // Avatar, or a checkbox in place of it while selecting
+                if (selectionMode) {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = { onClick() },
+                        modifier = Modifier.size(40.dp),
+                    )
+                } else {
+                    SenderAvatar(
+                        sender = email.sender,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
 
                 // Sender + subject area
                 Column(
@@ -109,14 +126,6 @@ fun EmailListItem(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (email.starred) {
-                            Icon(
-                                imageVector = Icons.Default.StarBorder,
-                                contentDescription = "Starred",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
                         if (email.snippet?.contains("attachment") == true || email.snippet?.contains("📎") == true) {
                             Icon(
                                 imageVector = Icons.Default.Attachment,
@@ -128,23 +137,13 @@ fun EmailListItem(
                     }
                 }
 
-                // Star + attachment indicators
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (email.starred) {
+                // Star toggle — hidden while selecting so it doesn't compete with the checkbox tap target
+                if (!selectionMode) {
+                    IconButton(onClick = onToggleStarred, modifier = Modifier.size(36.dp)) {
                         Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = "Starred",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    if (email.snippet?.contains("attachment") == true || email.snippet?.contains("📎") == true) {
-                        Icon(
-                            imageVector = Icons.Default.Attachment,
-                            contentDescription = "Attachment",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            imageVector = if (email.starred) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = if (email.starred) "Unstar" else "Star",
+                            tint = if (email.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )
                     }
