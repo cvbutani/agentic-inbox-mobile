@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,39 +20,57 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Attachment
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Drafts
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import kotlin.math.absoluteValue
 import kotlin.time.Clock
 import kotlin.time.Instant
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
@@ -63,23 +82,44 @@ fun InboxScreen(
     mailboxId: String,
     mailboxName: String,
     modifier: Modifier = Modifier,
+    onSwitchMailbox: () -> Unit = {},
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            FolderDrawerContent(
+                mailboxName = mailboxName,
+                folders = state.folders,
+                selectedFolderId = state.currentFolder.id,
+                onFolderSelected = { folder ->
+                    viewModel.selectFolder(folder)
+                    scope.launch { drawerState.close() }
+                },
+                onSwitchMailbox = {
+                    scope.launch { drawerState.close() }
+                    onSwitchMailbox()
+                },
+            )
+        },
+    ) {
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = {
                         Text(
-                            text = mailboxName,
+                            text = state.currentFolder.name,
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = { /* TODO: Open drawer */ }) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
                     },
@@ -90,9 +130,6 @@ fun InboxScreen(
                                 contentDescription = "Search",
                                 tint = MaterialTheme.colorScheme.onSurface,
                             )
-                        }
-                        IconButton(onClick = { /* TODO: Open folder picker */ }) {
-                            Icon(Icons.Default.Inbox, contentDescription = "Folders")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -160,7 +197,7 @@ fun InboxScreen(
                                 modifier = Modifier.size(64.dp),
                             )
                             Text(
-                                text = "No emails in Inbox",
+                                text = "No emails in ${state.currentFolder.name}",
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -220,6 +257,99 @@ fun InboxScreen(
             }
         }
     }
+    }
+}
+
+@Composable
+private fun FolderDrawerContent(
+    mailboxName: String,
+    folders: List<Folder>,
+    selectedFolderId: String,
+    onFolderSelected: (Folder) -> Unit,
+    onSwitchMailbox: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ModalDrawerSheet(modifier = modifier) {
+        Column(modifier = Modifier.padding(vertical = 12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onSwitchMailbox)
+                    .padding(horizontal = 28.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AlternateEmail,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Column {
+                    Text(text = mailboxName, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Switch mailbox",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            val (systemFolders, customFolders) = folders.partition { it.isSystem }
+
+            systemFolders.forEach { folder ->
+                FolderDrawerItem(
+                    folder = folder,
+                    selected = folder.id == selectedFolderId,
+                    onClick = { onFolderSelected(folder) },
+                )
+            }
+
+            if (customFolders.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text(
+                    text = "Folders",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                )
+                customFolders.forEach { folder ->
+                    FolderDrawerItem(
+                        folder = folder,
+                        selected = folder.id == selectedFolderId,
+                        onClick = { onFolderSelected(folder) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderDrawerItem(
+    folder: Folder,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    NavigationDrawerItem(
+        icon = { Icon(imageVector = folderIcon(folder), contentDescription = null) },
+        label = { Text(text = folder.name) },
+        badge = { if (folder.unreadCount > 0) Badge { Text(folder.unreadCount.toString()) } },
+        selected = selected,
+        onClick = onClick,
+        modifier = Modifier.padding(horizontal = 12.dp),
+    )
+}
+
+private fun folderIcon(folder: Folder): ImageVector = when (folder.id) {
+    SystemFolders.INBOX -> Icons.Default.Inbox
+    SystemFolders.DRAFT -> Icons.Default.Drafts
+    SystemFolders.SENT -> Icons.AutoMirrored.Filled.Send
+    SystemFolders.ARCHIVE -> Icons.Default.Archive
+    SystemFolders.SPAM -> Icons.Default.Report
+    SystemFolders.TRASH -> Icons.Default.Delete
+    else -> Icons.Default.Folder
 }
 
 @OptIn(ExperimentalFoundationApi::class)

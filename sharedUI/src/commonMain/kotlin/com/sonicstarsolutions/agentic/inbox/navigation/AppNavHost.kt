@@ -24,10 +24,11 @@ import com.sonicstarsolutions.agentic.inbox.ui.splash.SplashScreen
 @Composable
 fun AppNavHost() {
     val backStack = rememberNavBackStack(appNavConfiguration, Splash)
+    val navigator = remember(backStack) { Navigator(backStack) }
 
     NavDisplay(
-        backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
+        backStack = navigator.backStack,
+        onBack = { navigator.goBack() },
         entryDecorators = listOf(
             // Retains composable-saveable state (scroll positions, rememberSaveable) per entry.
             rememberSaveableStateHolderNavEntryDecorator(),
@@ -37,21 +38,21 @@ fun AppNavHost() {
         entryProvider = entryProvider {
             entry<Splash> {
                 SplashScreen(
-                    onSignedIn = { backStack.add(MailboxPicker) },
-                    onSignedOut = { backStack.add(Onboarding) },
+                    onSignedIn = { navigator.replaceRoot(MailboxPicker) },
+                    onSignedOut = { navigator.replaceRoot(Onboarding) },
                 )
             }
 
             entry<Onboarding> {
-                OnboardingScreen(onSaved = { backStack.add(MailboxPicker) })
+                OnboardingScreen(onSaved = { navigator.replaceRoot(MailboxPicker) })
             }
 
             entry<MailboxPicker> {
                 MailboxPickerScreen(
                     onMailboxSelected = { mailboxId, mailboxName ->
-                        backStack.add(Inbox(mailboxId, mailboxName))
+                        navigator.goTo(Inbox(mailboxId, mailboxName))
                     },
-                    onSignedOut = { backStack.add(Onboarding) },
+                    onSignedOut = { navigator.replaceRoot(Onboarding) },
                 )
             }
 
@@ -59,6 +60,7 @@ fun AppNavHost() {
                 InboxScreen(
                     mailboxId = key.mailboxId,
                     mailboxName = key.mailboxName,
+                    onSwitchMailbox = { navigator.goTo(MailboxPicker) },
                 )
             }
         },

@@ -2,8 +2,12 @@ package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,8 +49,12 @@ class InboxViewModelTest {
         snippet = null,
     )
 
-    private fun buildViewModel(repository: FakeEmailRepository): InboxViewModel = InboxViewModel(
+    private fun buildViewModel(
+        repository: FakeEmailRepository,
+        folderRepository: FakeFolderRepository = FakeFolderRepository(),
+    ): InboxViewModel = InboxViewModel(
         getEmails = GetEmailsUseCase(repository),
+        getFolders = GetFoldersUseCase(folderRepository),
         mailboxId = "mb1",
         mailboxName = "Inbox",
     )
@@ -144,5 +152,59 @@ class InboxViewModelTest {
         advanceUntilIdle()
 
         assertFalse(viewModel.state.value.refreshing)
+    }
+
+    @Test
+    fun `the view model starts on the Inbox folder before folders finish loading`() = runTest {
+        val emailRepository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(emptyList(), totalCount = 0)) },
+        )
+
+        val viewModel = buildViewModel(emailRepository)
+
+        assertEquals(SystemFolders.INBOX, viewModel.state.value.currentFolder.id)
+    }
+
+    @Test
+    fun `folders load into state on init`() = runTest {
+        val customFolder = Folder(id = "work", name = "Work", unreadCount = 4, isSystem = false)
+        val folderRepository = FakeFolderRepository(result = Result.success(SystemFolders.defaults + customFolder))
+        val emailRepository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(emptyList(), totalCount = 0)) },
+        )
+
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        assertEquals(SystemFolders.defaults + customFolder, viewModel.state.value.folders)
+    }
+
+    @Test
+    fun `selectFolder switches folders and reloads page one for the new folder`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, folder, _, _ -> Result.success(EmailPage(listOf(summary(folder)), totalCount = 1)) },
+        )
+        val viewModel = buildViewModel(repository)
+        val draftsFolder = SystemFolders.defaults.first { it.id == SystemFolders.DRAFT }
+
+        viewModel.selectFolder(draftsFolder)
+
+        assertEquals(draftsFolder, viewModel.state.value.currentFolder)
+        assertEquals(listOf(summary("draft")), viewModel.state.value.emails)
+        assertEquals(1, viewModel.state.value.page)
+        assertFalse(viewModel.state.value.loading)
+        assertEquals(listOf("inbox", "draft"), repository.calls.map { it.folder })
+    }
+
+    @Test
+    fun `selectFolder is a no-op when selecting the folder already active`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1")), totalCount = 1)) },
+        )
+        val viewModel = buildViewModel(repository)
+        val inboxFolder = SystemFolders.defaults.first { it.id == SystemFolders.INBOX }
+
+        viewModel.selectFolder(inboxFolder)
+
+        assertEquals(1, repository.calls.size, "reselecting the active folder should not issue a new request")
     }
 }

@@ -2,10 +2,13 @@ package com.sonicstarsolutions.agentic.inbox.testutil
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
+import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +42,12 @@ class FakeConnectionRepository(
     var result: Result<Unit> = Result.success(Unit),
 ) : ConnectionRepository {
     override suspend fun validate(): Result<Unit> = result
+}
+
+class FakeFolderRepository(
+    var result: Result<List<Folder>> = Result.success(SystemFolders.defaults),
+) : FolderRepository {
+    override suspend fun getFolders(mailboxId: String): Result<List<Folder>> = result
 }
 
 class FakeMailboxRepository(
