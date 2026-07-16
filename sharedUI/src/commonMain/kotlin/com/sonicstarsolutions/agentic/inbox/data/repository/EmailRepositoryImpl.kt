@@ -1,5 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.data.repository
 
+import com.sonicstarsolutions.agentic.inbox.data.local.EmailDao
+import com.sonicstarsolutions.agentic.inbox.data.local.EmailEntity
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailMetadataDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FromDto
@@ -15,17 +17,31 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 
 class EmailRepositoryImpl(
     private val api: AgenticInboxApi,
+    private val emailDao: EmailDao,
 ) : EmailRepository {
     override suspend fun getEmails(
         mailboxId: String,
         folder: String,
         page: Int,
         limit: Int,
-    ): Result<EmailPage> =
-        safeApiCall {
+    ): Result<EmailPage> {
+        val networkResult = safeApiCall {
             val pageDto = api.getEmails(mailboxId, folder = folder, page = page, limit = limit)
             EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
         }
+        // Only the first page is cached — it's what a folder screen shows on open/refresh, and is
+        // the offline-reading case that matters; deeper pages aren't worth the staleness/complexity.
+        if (page != 1) return networkResult
+
+        networkResult.onSuccess { result ->
+            emailDao.deleteForFolder(mailboxId, folder)
+            emailDao.upsertAll(result.emails.map { it.toEntity(mailboxId, folder) })
+        }
+        if (networkResult.isSuccess) return networkResult
+
+        val cached = emailDao.getForFolder(mailboxId, folder).map { it.toDomain() }
+        return if (cached.isNotEmpty()) Result.success(EmailPage(cached, cached.size)) else networkResult
+    }
 
     override suspend fun search(
         mailboxId: String,
@@ -87,6 +103,35 @@ private fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequestD
 )
 
 private fun EmailMetadataDto.toDomain(): EmailSummary = EmailSummary(
+    id = id,
+    subject = subject,
+    sender = sender,
+    recipient = recipient,
+    date = date,
+    read = read,
+    starred = starred,
+    threadId = threadId,
+    folderId = folderId,
+    snippet = snippet,
+    threadUnreadCount = threadUnreadCount,
+)
+
+private fun EmailSummary.toEntity(mailboxId: String, folder: String): EmailEntity = EmailEntity(
+    mailboxId = mailboxId,
+    id = id,
+    folderId = folder,
+    subject = subject,
+    sender = sender,
+    recipient = recipient,
+    date = date,
+    read = read,
+    starred = starred,
+    threadId = threadId,
+    snippet = snippet,
+    threadUnreadCount = threadUnreadCount,
+)
+
+private fun EmailEntity.toDomain(): EmailSummary = EmailSummary(
     id = id,
     subject = subject,
     sender = sender,

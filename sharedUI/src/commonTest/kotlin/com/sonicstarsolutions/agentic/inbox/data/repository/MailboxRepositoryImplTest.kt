@@ -2,7 +2,9 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
+import com.sonicstarsolutions.agentic.inbox.data.local.MailboxEntity
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxDao
 import de.jensklingenberg.ktorfit.Ktorfit
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -53,7 +55,7 @@ class MailboxRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.getMailboxes()
 
@@ -75,7 +77,7 @@ class MailboxRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.getMailboxes()
 
@@ -87,7 +89,7 @@ class MailboxRepositoryImplTest {
         val engine = MockEngine { _ ->
             respond(content = "", status = HttpStatusCode.InternalServerError)
         }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.getMailboxes()
 
@@ -103,7 +105,7 @@ class MailboxRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.createMailbox(email = "sales@example.dev", name = "Sales")
 
@@ -116,7 +118,7 @@ class MailboxRepositoryImplTest {
     @Test
     fun `createMailbox surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.createMailbox(email = "sales@example.dev", name = "Sales")
 
@@ -132,7 +134,7 @@ class MailboxRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.getAllowedDomains()
 
@@ -142,7 +144,7 @@ class MailboxRepositoryImplTest {
     @Test
     fun `getAllowedDomains surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.getAllowedDomains()
 
@@ -158,7 +160,7 @@ class MailboxRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.getMailbox("mb1")
 
@@ -169,7 +171,7 @@ class MailboxRepositoryImplTest {
     @Test
     fun `getMailbox surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.getMailbox("mb1")
 
@@ -177,9 +179,68 @@ class MailboxRepositoryImplTest {
     }
 
     @Test
+    fun `getMailboxes caches the network result on success`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """[{"id":"mb1","email":"a@example.dev","name":"Alice"}]""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val dao = FakeMailboxDao()
+        val repository = MailboxRepositoryImpl(apiFor(engine), dao)
+
+        repository.getMailboxes()
+
+        assertEquals(listOf(Mailbox(id = "mb1", email = "a@example.dev", name = "Alice")), dao.getAll().map {
+            Mailbox(id = it.id, email = it.email, name = it.name)
+        })
+    }
+
+    @Test
+    fun `getMailboxes replaces stale cached rows with the fresh set on success`() = runTest {
+        val dao = FakeMailboxDao()
+        dao.upsertAll(listOf(MailboxEntity(id = "stale", email = "old@example.dev", name = "Old")))
+        val engine = MockEngine { _ ->
+            respond(
+                content = """[{"id":"mb1","email":"a@example.dev","name":"Alice"}]""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine), dao)
+
+        repository.getMailboxes()
+
+        assertEquals(listOf("mb1"), dao.getAll().map { it.id })
+    }
+
+    @Test
+    fun `getMailboxes falls back to the cache when the network call fails`() = runTest {
+        val dao = FakeMailboxDao()
+        dao.upsertAll(listOf(MailboxEntity(id = "mb1", email = "a@example.dev", name = "Alice")))
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = MailboxRepositoryImpl(apiFor(engine), dao)
+
+        val result = repository.getMailboxes()
+
+        assertEquals(listOf(Mailbox(id = "mb1", email = "a@example.dev", name = "Alice")), result.getOrThrow())
+    }
+
+    @Test
+    fun `getMailboxes surfaces the original failure when the network fails and the cache is empty`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
+
+        val result = repository.getMailboxes()
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
     fun `deleteMailbox issues a delete request for the mailbox id`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.OK) }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.deleteMailbox("mb1")
 
@@ -192,7 +253,7 @@ class MailboxRepositoryImplTest {
     @Test
     fun `deleteMailbox surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = MailboxRepositoryImpl(apiFor(engine))
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
 
         val result = repository.deleteMailbox("mb1")
 

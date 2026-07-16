@@ -1,5 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.data.repository
 
+import com.sonicstarsolutions.agentic.inbox.data.local.FolderDao
+import com.sonicstarsolutions.agentic.inbox.data.local.FolderEntity
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderNameDto
@@ -10,9 +12,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 
 class FolderRepositoryImpl(
     private val api: AgenticInboxApi,
+    private val folderDao: FolderDao,
 ) : FolderRepository {
-    override suspend fun getFolders(mailboxId: String): Result<List<Folder>> =
-        safeApiCall {
+    override suspend fun getFolders(mailboxId: String): Result<List<Folder>> {
+        val networkResult = safeApiCall {
             val byId: Map<String, FolderDto> = api.getFolders(mailboxId).associateBy { it.id }
 
             // The Worker isn't guaranteed to include system folders in this response (they may be
@@ -26,6 +29,15 @@ class FolderRepositoryImpl(
 
             systemFolders + customFolders
         }
+        networkResult.onSuccess { folders ->
+            folderDao.deleteForMailbox(mailboxId)
+            folderDao.upsertAll(folders.map { it.toEntity(mailboxId) })
+        }
+        if (networkResult.isSuccess) return networkResult
+
+        val cached = folderDao.getForMailbox(mailboxId).map { it.toDomain() }
+        return if (cached.isNotEmpty()) Result.success(cached) else networkResult
+    }
 
     override suspend fun createFolder(mailboxId: String, name: String): Result<Folder> =
         safeApiCall {
@@ -42,3 +54,8 @@ class FolderRepositoryImpl(
     override suspend fun deleteFolder(mailboxId: String, folderId: String): Result<Unit> =
         safeApiCall { api.deleteFolder(mailboxId, folderId) }
 }
+
+private fun Folder.toEntity(mailboxId: String): FolderEntity =
+    FolderEntity(mailboxId = mailboxId, id = id, name = name, unreadCount = unreadCount, isSystem = isSystem)
+
+private fun FolderEntity.toDomain(): Folder = Folder(id = id, name = name, unreadCount = unreadCount, isSystem = isSystem)

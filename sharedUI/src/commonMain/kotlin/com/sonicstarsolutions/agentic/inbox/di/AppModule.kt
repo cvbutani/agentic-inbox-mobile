@@ -12,6 +12,7 @@ private val coreModule = module {
 val commonModules = listOf(
     coreModule,
     networkModule,
+    databaseModule,
     repositoryModule,
     useCaseModule,
     viewModelModule,

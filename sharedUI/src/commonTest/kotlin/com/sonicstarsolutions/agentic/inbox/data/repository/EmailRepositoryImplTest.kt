@@ -4,7 +4,9 @@ import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.data.local.EmailEntity
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailDao
 import de.jensklingenberg.ktorfit.Ktorfit
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -50,7 +52,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 2, limit = 25)
 
@@ -88,7 +90,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val page = repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 50).getOrThrow()
 
@@ -137,7 +139,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val page = repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 50).getOrThrow()
 
@@ -149,7 +151,7 @@ class EmailRepositoryImplTest {
         val engine = MockEngine { _ ->
             respond(content = "", status = HttpStatusCode.InternalServerError)
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 50)
 
@@ -165,7 +167,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.moveEmail(mailboxId = "mb1", emailId = "e1", folderId = "archive")
 
@@ -178,7 +180,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `moveEmail surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.moveEmail(mailboxId = "mb1", emailId = "e1", folderId = "archive")
 
@@ -188,7 +190,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `deleteEmail sends a DELETE for the given email`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.OK) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.deleteEmail(mailboxId = "mb1", emailId = "e1")
 
@@ -201,7 +203,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `deleteEmail surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.deleteEmail(mailboxId = "mb1", emailId = "e1")
 
@@ -217,7 +219,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.setRead(mailboxId = "mb1", emailId = "e1", read = true)
 
@@ -230,7 +232,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `setRead surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.setRead(mailboxId = "mb1", emailId = "e1", read = false)
 
@@ -246,7 +248,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.setStarred(mailboxId = "mb1", emailId = "e1", starred = true)
 
@@ -259,7 +261,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `setStarred surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.setStarred(mailboxId = "mb1", emailId = "e1", starred = false)
 
@@ -275,7 +277,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.markThreadRead(mailboxId = "mb1", threadId = "t1")
 
@@ -288,7 +290,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `markThreadRead surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.markThreadRead(mailboxId = "mb1", threadId = "t1")
 
@@ -313,7 +315,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.sendEmail(mailboxId = "mb1", request = composeRequest())
 
@@ -326,7 +328,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `sendEmail surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.sendEmail(mailboxId = "mb1", request = composeRequest())
 
@@ -342,7 +344,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.replyEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
 
@@ -355,7 +357,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `replyEmail surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.replyEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
 
@@ -371,7 +373,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.forwardEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
 
@@ -384,7 +386,7 @@ class EmailRepositoryImplTest {
     @Test
     fun `forwardEmail surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.forwardEmail(mailboxId = "mb1", emailId = "e1", request = composeRequest())
 
@@ -400,7 +402,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
         val query = SearchQuery(
             query = "invoice",
             folder = "inbox",
@@ -441,7 +443,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         repository.search(mailboxId = "mb1", query = SearchQuery(query = "invoice"), page = 1, limit = 50)
 
@@ -478,7 +480,7 @@ class EmailRepositoryImplTest {
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val page = repository.search(mailboxId = "mb1", query = SearchQuery(query = "invoice"), page = 1, limit = 50).getOrThrow()
 
@@ -489,9 +491,102 @@ class EmailRepositoryImplTest {
     @Test
     fun `search surfaces the failure instead of throwing`() = runTest {
         val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
-        val repository = EmailRepositoryImpl(apiFor(engine))
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
 
         val result = repository.search(mailboxId = "mb1", query = SearchQuery(query = "invoice"), page = 1, limit = 50)
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `getEmails caches the first page on success`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """
+                    {
+                        "emails": [
+                            {"id":"e1","subject":"Hello","sender":"a@example.dev","recipient":"b@example.dev","date":"2026-07-16T00:00:00Z","read":false,"starred":false,"thread_id":"t1","folder_id":"inbox"}
+                        ],
+                        "totalCount": 1
+                    }
+                """.trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val dao = FakeEmailDao()
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 50)
+
+        assertEquals(listOf("e1"), dao.getForFolder("mb1", "inbox").map { it.id })
+    }
+
+    @Test
+    fun `getEmails does not cache pages beyond the first`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"emails":[{"id":"e2","subject":"s","sender":"a","recipient":"b","date":"2026-07-16T00:00:00Z","read":false,"starred":false}],"totalCount":2}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val dao = FakeEmailDao()
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 2, limit = 50)
+
+        assertTrue(dao.getForFolder("mb1", "inbox").isEmpty())
+    }
+
+    @Test
+    fun `getEmails replaces stale cached rows for the folder on success`() = runTest {
+        val dao = FakeEmailDao()
+        dao.upsertAll(listOf(EmailEntity(mailboxId = "mb1", id = "stale", folderId = "inbox", subject = "s", sender = "a", recipient = "b", date = "2026-01-01T00:00:00Z", read = false, starred = false, threadId = null, snippet = null, threadUnreadCount = 0)))
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"emails":[{"id":"e1","subject":"s","sender":"a","recipient":"b","date":"2026-07-16T00:00:00Z","read":false,"starred":false}],"totalCount":1}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 50)
+
+        assertEquals(listOf("e1"), dao.getForFolder("mb1", "inbox").map { it.id })
+    }
+
+    @Test
+    fun `getEmails falls back to the cache when the network call fails on the first page`() = runTest {
+        val dao = FakeEmailDao()
+        dao.upsertAll(listOf(EmailEntity(mailboxId = "mb1", id = "e1", folderId = "inbox", subject = "Cached", sender = "a", recipient = "b", date = "2026-07-16T00:00:00Z", read = true, starred = false, threadId = null, snippet = null, threadUnreadCount = 0)))
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        val result = repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 50)
+
+        assertEquals("Cached", result.getOrThrow().emails.single().subject)
+    }
+
+    @Test
+    fun `getEmails surfaces the original failure when the network fails and the cache is empty`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        val result = repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 50)
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `getEmails does not fall back to the cache for pages beyond the first`() = runTest {
+        val dao = FakeEmailDao()
+        dao.upsertAll(listOf(EmailEntity(mailboxId = "mb1", id = "e1", folderId = "inbox", subject = "Cached", sender = "a", recipient = "b", date = "2026-07-16T00:00:00Z", read = true, starred = false, threadId = null, snippet = null, threadUnreadCount = 0)))
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        val result = repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 2, limit = 50)
 
         assertTrue(result.isFailure)
     }

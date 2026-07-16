@@ -17,9 +17,9 @@ import org.koin.dsl.module
 
 val repositoryModule = module {
     single<CredentialsRepository> { CredentialsRepositoryImpl(get<KSafe>()) }
-    single<MailboxRepository> { MailboxRepositoryImpl(get()) }
-    single<EmailRepository> { EmailRepositoryImpl(get()) }
-    single<FolderRepository> { FolderRepositoryImpl(get()) }
+    single<MailboxRepository> { MailboxRepositoryImpl(get(), get()) }
+    single<EmailRepository> { EmailRepositoryImpl(get(), get()) }
+    single<FolderRepository> { FolderRepositoryImpl(get(), get()) }
     single<ThreadRepository> { ThreadRepositoryImpl(get()) }
     single<ConnectionRepository> { ConnectionRepositoryImpl(get()) }
 }
