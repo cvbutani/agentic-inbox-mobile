@@ -9,8 +9,12 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.test.runTest
@@ -27,9 +31,10 @@ class FolderRepositoryImplTest {
             install(ContentNegotiation) {
                 json(Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = false })
             }
+            defaultRequest { contentType(ContentType.Application.Json) }
         }
         return Ktorfit.Builder()
-            .baseUrl("https://my-worker.example.dev/", checkUrl = false)
+            .baseUrl("https://my-worker.example.dev", checkUrl = false)
             .httpClient(client)
             .build()
             .createAgenticInboxApi()
@@ -124,6 +129,35 @@ class FolderRepositoryImplTest {
         val repository = FolderRepositoryImpl(apiFor(engine))
 
         val result = repository.getFolders("mb1")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `createFolder posts the name and maps the response into a custom folder`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"work","name":"Work","unreadCount":0}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = FolderRepositoryImpl(apiFor(engine))
+
+        val result = repository.createFolder(mailboxId = "mb1", name = "Work")
+
+        assertEquals(Folder(id = "work", name = "Work", unreadCount = 0, isSystem = false), result.getOrThrow())
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/folders", request.url.encodedPath)
+    }
+
+    @Test
+    fun `createFolder surfaces the failure instead of throwing`() = runTest {
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = FolderRepositoryImpl(apiFor(engine))
+
+        val result = repository.createFolder(mailboxId = "mb1", name = "Work")
 
         assertTrue(result.isFailure)
     }

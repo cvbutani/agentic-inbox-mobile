@@ -46,8 +46,21 @@ class FakeConnectionRepository(
 
 class FakeFolderRepository(
     var result: Result<List<Folder>> = Result.success(SystemFolders.defaults),
+    var createResult: (String) -> Result<Folder> = { name -> Result.success(Folder(id = name.lowercase(), name = name, isSystem = false)) },
 ) : FolderRepository {
+    val createCalls = mutableListOf<Pair<String, String>>()
+
+    /** When set, [createFolder] suspends here until completed — lets tests hold a call "in
+     * flight" to exercise concurrency guards (e.g. InboxViewModel.createFolder). */
+    var createGate: CompletableDeferred<Unit>? = null
+
     override suspend fun getFolders(mailboxId: String): Result<List<Folder>> = result
+
+    override suspend fun createFolder(mailboxId: String, name: String): Result<Folder> {
+        createCalls += mailboxId to name
+        createGate?.await()
+        return createResult(name)
+    }
 }
 
 class FakeMailboxRepository(

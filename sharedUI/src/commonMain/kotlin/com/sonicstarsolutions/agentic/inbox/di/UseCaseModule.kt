@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.di
 
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
@@ -25,6 +26,7 @@ val useCaseModule = module {
     singleOf(::GetMailboxesUseCase)
     singleOf(::GetEmailsUseCase)
     singleOf(::GetFoldersUseCase)
+    singleOf(::CreateFolderUseCase)
     singleOf(::GetThreadUseCase)
     singleOf(::MoveEmailUseCase)
     singleOf(::DeleteEmailUseCase)

@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
@@ -55,6 +56,7 @@ class InboxViewModelTest {
     ): InboxViewModel = InboxViewModel(
         getEmails = GetEmailsUseCase(repository),
         getFolders = GetFoldersUseCase(folderRepository),
+        createFolderUseCase = CreateFolderUseCase(folderRepository),
         mailboxId = "mb1",
         mailboxName = "Inbox",
     )
@@ -206,5 +208,80 @@ class InboxViewModelTest {
         viewModel.selectFolder(inboxFolder)
 
         assertEquals(1, repository.calls.size, "reselecting the active folder should not issue a new request")
+    }
+
+    @Test
+    fun `createFolder trims the name appends the new folder and signals folderCreated`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(
+            createResult = { name -> Result.success(Folder(id = "work", name = name, isSystem = false)) },
+        )
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.createFolder("  Work  ")
+
+        assertEquals(listOf("mb1" to "Work"), folderRepository.createCalls)
+        assertTrue(viewModel.state.value.folders.contains(Folder(id = "work", name = "Work", isSystem = false)))
+        assertTrue(viewModel.state.value.folderCreated)
+        assertFalse(viewModel.state.value.creatingFolder)
+    }
+
+    @Test
+    fun `createFolder rejects a blank name without calling the repository`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository()
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.createFolder("   ")
+
+        assertTrue(folderRepository.createCalls.isEmpty())
+        assertEquals("Folder name is required.", viewModel.state.value.folderActionError)
+    }
+
+    @Test
+    fun `createFolder surfaces the failure and does not mark folderCreated`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository(createResult = { Result.failure(RuntimeException("name taken")) })
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+
+        viewModel.createFolder("Work")
+
+        assertEquals("name taken", viewModel.state.value.folderActionError)
+        assertFalse(viewModel.state.value.folderCreated)
+        assertFalse(viewModel.state.value.creatingFolder)
+    }
+
+    @Test
+    fun `createFolder ignores a second call while one is already in flight`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository()
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        val gate = CompletableDeferred<Unit>()
+        folderRepository.createGate = gate
+
+        viewModel.createFolder("Work")
+        assertTrue(viewModel.state.value.creatingFolder)
+
+        viewModel.createFolder("Personal") // should be ignored by the creatingFolder guard
+
+        assertEquals(1, folderRepository.createCalls.size, "second createFolder should not have dispatched a request")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.creatingFolder)
+    }
+
+    @Test
+    fun `consumeFolderCreated clears the flag`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val folderRepository = FakeFolderRepository()
+        val viewModel = buildViewModel(emailRepository, folderRepository)
+        viewModel.createFolder("Work")
+        assertTrue(viewModel.state.value.folderCreated)
+
+        viewModel.consumeFolderCreated()
+
+        assertFalse(viewModel.state.value.folderCreated)
     }
 }

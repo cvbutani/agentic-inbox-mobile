@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderNameDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
@@ -24,5 +25,11 @@ class FolderRepositoryImpl(
                 .map { dto -> Folder(id = dto.id, name = dto.name, unreadCount = dto.unreadCount, isSystem = false) }
 
             systemFolders + customFolders
+        }
+
+    override suspend fun createFolder(mailboxId: String, name: String): Result<Folder> =
+        safeApiCall {
+            val dto = api.createFolder(mailboxId, FolderNameDto(name))
+            Folder(id = dto.id, name = dto.name, unreadCount = dto.unreadCount, isSystem = false)
         }
 }

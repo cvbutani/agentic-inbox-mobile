@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,11 +24,15 @@ data class InboxUiState(
     val currentMailboxName: String = "Inbox",
     val folders: List<Folder> = SystemFolders.defaults,
     val currentFolder: Folder = SystemFolders.defaults.first { it.id == SystemFolders.INBOX },
+    val creatingFolder: Boolean = false,
+    val folderActionError: String? = null,
+    val folderCreated: Boolean = false,
 )
 
 class InboxViewModel(
     private val getEmails: GetEmailsUseCase,
     private val getFolders: GetFoldersUseCase,
+    private val createFolderUseCase: CreateFolderUseCase,
     private val mailboxId: String,
     private val mailboxName: String = "Inbox",
 ) : ViewModel() {
@@ -120,5 +125,34 @@ class InboxViewModel(
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
                 }
         }
+    }
+
+    fun createFolder(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            _state.update { it.copy(folderActionError = "Folder name is required.") }
+            return
+        }
+        if (_state.value.creatingFolder) return
+        _state.update { it.copy(creatingFolder = true, folderActionError = null) }
+        viewModelScope.launch {
+            createFolderUseCase(mailboxId, trimmed)
+                .onSuccess { folder ->
+                    _state.update { it.copy(creatingFolder = false, folders = it.folders + folder, folderCreated = true) }
+                }
+                .onFailure { t ->
+                    _state.update {
+                        it.copy(creatingFolder = false, folderActionError = t.message ?: t::class.simpleName ?: "Failed to create folder")
+                    }
+                }
+        }
+    }
+
+    fun consumeFolderCreated() {
+        _state.update { it.copy(folderCreated = false) }
+    }
+
+    fun consumeFolderActionError() {
+        _state.update { it.copy(folderActionError = null) }
     }
 }

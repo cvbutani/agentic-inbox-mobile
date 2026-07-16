@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Attachment
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -44,9 +46,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -55,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -111,6 +116,26 @@ fun InboxScreen(
         }
     }
 
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(state.folderCreated) {
+        if (state.folderCreated) {
+            showCreateFolderDialog = false
+            viewModel.consumeFolderCreated()
+        }
+    }
+
+    if (showCreateFolderDialog) {
+        CreateFolderDialog(
+            creating = state.creatingFolder,
+            errorMessage = state.folderActionError,
+            onDismiss = {
+                showCreateFolderDialog = false
+                viewModel.consumeFolderActionError()
+            },
+            onCreate = { name -> viewModel.createFolder(name) },
+        )
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -125,6 +150,10 @@ fun InboxScreen(
                 onSwitchMailbox = {
                     scope.launch { drawerState.close() }
                     onSwitchMailbox()
+                },
+                onCreateFolder = {
+                    scope.launch { drawerState.close() }
+                    showCreateFolderDialog = true
                 },
             )
         },
@@ -289,6 +318,7 @@ private fun FolderDrawerContent(
     selectedFolderId: String,
     onFolderSelected: (Folder) -> Unit,
     onSwitchMailbox: () -> Unit,
+    onCreateFolder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ModalDrawerSheet(modifier = modifier) {
@@ -344,6 +374,16 @@ private fun FolderDrawerContent(
                     )
                 }
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                label = { Text("New folder") },
+                selected = false,
+                onClick = onCreateFolder,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
         }
     }
 }
@@ -372,6 +412,56 @@ private fun folderIcon(folder: Folder): ImageVector = when (folder.id) {
     SystemFolders.SPAM -> Icons.Default.Report
     SystemFolders.TRASH -> Icons.Default.Delete
     else -> Icons.Default.Folder
+}
+
+@Composable
+private fun CreateFolderDialog(
+    creating: Boolean,
+    errorMessage: String?,
+    onDismiss: () -> Unit,
+    onCreate: (String) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = { if (!creating) onDismiss() },
+        title = { Text("New folder") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Folder name") },
+                    singleLine = true,
+                    enabled = !creating,
+                    isError = errorMessage != null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onCreate(name) },
+                enabled = !creating && name.isNotBlank(),
+            ) {
+                if (creating) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Create")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !creating) { Text("Cancel") }
+        },
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

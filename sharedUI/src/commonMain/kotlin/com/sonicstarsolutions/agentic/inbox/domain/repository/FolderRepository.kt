@@ -6,4 +6,6 @@ interface FolderRepository {
     /** System folders first (in SystemFolders.defaults order, with server-reported unread counts
      * merged in where present), followed by any custom folders the mailbox has created. */
     suspend fun getFolders(mailboxId: String): Result<List<Folder>>
+
+    suspend fun createFolder(mailboxId: String, name: String): Result<Folder>
 }
