@@ -16,25 +16,44 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Forward
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.ReplyAll
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
+import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlSanitizer
 import org.koin.compose.viewmodel.koinViewModel
@@ -62,9 +82,28 @@ fun ThreadScreen(
     viewModel: ThreadViewModel = koinViewModel { parametersOf(mailboxId, emailId, threadId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // One-shot feedback for archive/delete/move/mark-read-unread: show a Snackbar, then (only for
+    // actions that remove the email from view) navigate back once it's been seen.
+    LaunchedEffect(state.actionResult) {
+        val result = state.actionResult ?: return@LaunchedEffect
+        val message = when (result) {
+            is ThreadActionResult.Success -> result.message
+            is ThreadActionResult.Failure -> result.message
+        }
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeActionResult()
+        if (result is ThreadActionResult.Success && result.shouldNavigateBack) {
+            onBack()
+        }
+    }
+
+    val currentMessage = state.messages.firstOrNull { it.id == state.expandedMessageId } ?: state.messages.firstOrNull()
 
     Scaffold(
         modifier = modifier,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -84,6 +123,19 @@ fun ThreadScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
             )
+        },
+        bottomBar = {
+            if (!state.loading && state.errorMessage == null && currentMessage != null) {
+                ThreadBottomBar(
+                    currentMessageRead = currentMessage.read,
+                    folders = state.folders,
+                    actionInProgress = state.actionInProgress,
+                    onArchive = viewModel::archive,
+                    onDelete = viewModel::delete,
+                    onMoveTo = viewModel::moveTo,
+                    onToggleRead = viewModel::toggleReadState,
+                )
+            }
         },
     ) { paddingValues ->
         when {
@@ -119,6 +171,105 @@ fun ThreadScreen(
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Reply / Reply all / Forward stay visible but disabled — there's no composer screen yet, and a
+ * button that silently does nothing on tap is worse than one that's honestly unavailable.
+ * Archive / Delete / Move / Mark read-unread are real, backed by existing API endpoints.
+ */
+@Composable
+private fun ThreadBottomBar(
+    currentMessageRead: Boolean,
+    folders: List<Folder>,
+    actionInProgress: Boolean,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    onMoveTo: (String) -> Unit,
+    onToggleRead: () -> Unit,
+) {
+    var showMoveSheet by remember { mutableStateOf(false) }
+
+    if (showMoveSheet) {
+        MoveToFolderSheet(
+            folders = folders,
+            onFolderSelected = { folderId ->
+                showMoveSheet = false
+                onMoveTo(folderId)
+            },
+            onDismissRequest = { showMoveSheet = false },
+        )
+    }
+
+    BottomAppBar {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onArchive, enabled = !actionInProgress) {
+                Icon(Icons.Default.Archive, contentDescription = "Archive")
+            }
+            IconButton(onClick = onDelete, enabled = !actionInProgress) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete")
+            }
+            IconButton(
+                onClick = { showMoveSheet = true },
+                enabled = !actionInProgress && folders.isNotEmpty(),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Move to folder")
+            }
+            IconButton(onClick = onToggleRead, enabled = !actionInProgress) {
+                Icon(
+                    imageVector = if (currentMessageRead) Icons.Default.MarkEmailUnread else Icons.Default.MarkEmailRead,
+                    contentDescription = if (currentMessageRead) "Mark as unread" else "Mark as read",
+                )
+            }
+            IconButton(onClick = {}, enabled = false) {
+                Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply (coming soon)")
+            }
+            IconButton(onClick = {}, enabled = false) {
+                Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = "Reply all (coming soon)")
+            }
+            IconButton(onClick = {}, enabled = false) {
+                Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward (coming soon)")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MoveToFolderSheet(
+    folders: List<Folder>,
+    onFolderSelected: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+    ) {
+        Text(
+            text = "Move to folder",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        )
+        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+            items(folders, key = { it.id }) { folder ->
+                ListItem(
+                    headlineContent = { Text(folder.name) },
+                    leadingContent = {
+                        Icon(Icons.Default.Folder, contentDescription = null)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onFolderSelected(folder.id) },
+                )
             }
         }
     }

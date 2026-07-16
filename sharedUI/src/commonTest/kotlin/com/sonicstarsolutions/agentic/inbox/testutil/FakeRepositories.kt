@@ -59,18 +59,54 @@ class FakeMailboxRepository(
 class FakeEmailRepository(
     var handler: (mailboxId: String, folder: String, page: Int, limit: Int) -> Result<EmailPage> =
         { _, _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
+    var moveResult: Result<Unit> = Result.success(Unit),
+    var deleteResult: Result<Unit> = Result.success(Unit),
+    var setReadResult: Result<Unit> = Result.success(Unit),
+    var markThreadReadResult: Result<Unit> = Result.success(Unit),
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
+    data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
+    data class DeleteCall(val mailboxId: String, val emailId: String)
+    data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
+    data class MarkThreadReadCall(val mailboxId: String, val threadId: String)
 
     val calls = mutableListOf<Call>()
+    val moveCalls = mutableListOf<MoveCall>()
+    val deleteCalls = mutableListOf<DeleteCall>()
+    val setReadCalls = mutableListOf<SetReadCall>()
+    val markThreadReadCalls = mutableListOf<MarkThreadReadCall>()
 
     /** When set, [getEmails] suspends here until completed — lets tests hold a call "in flight"
      * to exercise concurrency guards (e.g. InboxViewModel.onRefresh ignoring a second call). */
     var gate: CompletableDeferred<Unit>? = null
 
+    /** Same idea as [gate], for [moveEmail] — e.g. ThreadViewModel.archive() ignoring a second tap. */
+    var moveGate: CompletableDeferred<Unit>? = null
+
     override suspend fun getEmails(mailboxId: String, folder: String, page: Int, limit: Int): Result<EmailPage> {
         calls += Call(mailboxId, folder, page, limit)
         gate?.await()
         return handler(mailboxId, folder, page, limit)
+    }
+
+    override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> {
+        moveCalls += MoveCall(mailboxId, emailId, folderId)
+        moveGate?.await()
+        return moveResult
+    }
+
+    override suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit> {
+        deleteCalls += DeleteCall(mailboxId, emailId)
+        return deleteResult
+    }
+
+    override suspend fun setRead(mailboxId: String, emailId: String, read: Boolean): Result<Unit> {
+        setReadCalls += SetReadCall(mailboxId, emailId, read)
+        return setReadResult
+    }
+
+    override suspend fun markThreadRead(mailboxId: String, threadId: String): Result<Unit> {
+        markThreadReadCalls += MarkThreadReadCall(mailboxId, threadId)
+        return markThreadReadResult
     }
 }

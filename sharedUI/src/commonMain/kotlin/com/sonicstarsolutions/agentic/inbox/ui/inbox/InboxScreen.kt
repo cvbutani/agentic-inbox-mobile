@@ -52,8 +52,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,6 +94,22 @@ fun InboxScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // Nav3 disposes this screen's composition (not just hides it) whenever a child screen like
+    // ThreadScreen is pushed on top, and recomposes it fresh on return — so a plain
+    // LaunchedEffect(Unit) here re-fires every time the user comes back to the inbox. That's
+    // exactly what we want (pick up read/unread, archive, delete, move changes made in the
+    // thread view) except on the very first mount, where InboxViewModel's own init already
+    // loads page one — hasAppeared survives across that dispose/recompose cycle via
+    // rememberSaveable, so only returns trigger the extra refresh, not the first arrival.
+    var hasAppeared by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (hasAppeared) {
+            viewModel.onRefresh()
+        } else {
+            hasAppeared = true
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -362,7 +382,10 @@ private fun EmailListItem(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isUnread = !email.read
+    // A thread's latest message can be read while earlier messages in it aren't — thread_unread_count
+    // catches that; a plain !email.read alone would show the row as read even with unread messages
+    // still in the conversation.
+    val isUnread = email.isUnread()
     val surfaceColor = if (isUnread) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surface
 
     Surface(

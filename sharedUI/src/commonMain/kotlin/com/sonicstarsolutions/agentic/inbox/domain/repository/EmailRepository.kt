@@ -9,4 +9,9 @@ interface EmailRepository {
         page: Int,
         limit: Int,
     ): Result<EmailPage>
+
+    suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit>
+    suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit>
+    suspend fun setRead(mailboxId: String, emailId: String, read: Boolean): Result<Unit>
+    suspend fun markThreadRead(mailboxId: String, threadId: String): Result<Unit>
 }

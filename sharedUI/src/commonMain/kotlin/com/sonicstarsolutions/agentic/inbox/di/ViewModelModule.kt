@@ -19,6 +19,6 @@ val viewModelModule = module {
         InboxViewModel(get(), get(), mailboxId, mailboxName)
     }
     viewModel { (mailboxId: String, emailId: String, threadId: String?) ->
-        ThreadViewModel(get(), mailboxId, emailId, threadId)
+        ThreadViewModel(get(), get(), get(), get(), get(), get(), mailboxId, emailId, threadId)
     }
 }

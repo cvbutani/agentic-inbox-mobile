@@ -12,6 +12,8 @@ import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.client.request.header
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.http.takeFrom
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.InternalAPI
@@ -40,6 +42,11 @@ val networkModule = module {
             followRedirects = false
             install(ContentNegotiation) { json(json) }
             defaultRequest {
+                // Ktorfit's generated code calls setBody(dto) without ever setting Content-Type
+                // itself — Ktor 3.5.0's ContentNegotiation then throws "Fail to prepare request
+                // body for sending... Content-Type: null" on any POST/PUT with a @Body. Harmless
+                // on bodyless GET/DELETE calls, so it's safe as a blanket default here.
+                contentType(ContentType.Application.Json)
                 val snapshot = credentials.state.value
                 // normalizedBaseUrl() guarantees a scheme — takeFrom() of a scheme-less string
                 // leaves host empty and Ktor would silently connect to localhost:80 instead.

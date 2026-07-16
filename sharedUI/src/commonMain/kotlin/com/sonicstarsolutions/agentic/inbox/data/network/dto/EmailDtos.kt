@@ -19,6 +19,7 @@ data class EmailMetadataDto(
     @SerialName("thread_id") val threadId: String? = null,
     @SerialName("folder_id") val folderId: String? = null,
     val snippet: String? = null,
+    @SerialName("thread_unread_count") val threadUnreadCount: Int = 0,
 )
 
 @Serializable
