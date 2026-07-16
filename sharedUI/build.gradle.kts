@@ -11,13 +11,14 @@ plugins {
     alias(libs.plugins.room)
     alias(libs.plugins.ksp)
     alias(libs.plugins.buildConfig)
+    alias(libs.plugins.ktorfit)
 }
 
 kotlin {
     android {
         namespace = "com.sonicstarsolutions.agentic.inbox"
         compileSdk = 36
-        minSdk = 23
+        minSdk = 24
         androidResources.enable = true
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
     }
@@ -33,11 +34,13 @@ kotlin {
             api(libs.compose.resources)
             api(libs.compose.ui.tooling.preview)
             api(libs.compose.material3)
+            implementation(compose.materialIconsExtended)
             implementation(libs.kermit)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.ktorfit)
+            implementation(libs.ktorfit.flow)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.client.serialization)
             implementation(libs.ktor.serialization.json)
             implementation(libs.ktor.client.logging)
             implementation(libs.androidx.lifecycle.viewmodel)
@@ -53,13 +56,13 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
-            implementation(libs.multiplatform.settings)
-            implementation(libs.multiplatform.settings.coroutines)
-            implementation(libs.multiplatform.settings.no.arg)
+            implementation(libs.ksafe)
+            implementation(libs.ksafe.compose)
         }
 
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.ktor.client.mock)
             implementation(libs.compose.ui.test)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.koin.test)
@@ -68,6 +71,8 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.koin.core)
+            implementation(libs.koin.android)
         }
 
         iosMain.dependencies {

@@ -19,6 +19,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,12 +30,19 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun MailboxPickerScreen(
-    onMailboxSelected: (mailboxId: String) -> Unit,
-    onSignOut: () -> Unit,
+    onMailboxSelected: (mailboxId: String, mailboxName: String) -> Unit,
+    onSignedOut: () -> Unit,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     viewModel: MailboxPickerViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(state.signedOut) {
+//        if (state.signedOut) {
+//            viewModel.consumeSignedOut()
+//            onSignedOut()
+//        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -46,7 +54,7 @@ fun MailboxPickerScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SectionTitle("Your mailboxes")
-            TextButton(onClick = onSignOut) { Text("Sign out") }
+            TextButton(onClick = viewModel::signOut) { Text("Sign out") }
 
             when {
                 state.loading -> Box(
@@ -68,15 +76,15 @@ fun MailboxPickerScreen(
                     items(state.mailboxes, key = { it.id }) { mailbox ->
                         ElevatedCard(
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = { onMailboxSelected(mailbox.id) },
+                            onClick = { onMailboxSelected(mailbox.id, mailbox.name) },
                         ) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    mailbox.displayName ?: mailbox.name ?: mailbox.address,
+                                    mailbox.name,
                                     style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
-                                    mailbox.address,
+                                    mailbox.email,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

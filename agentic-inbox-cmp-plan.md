@@ -94,7 +94,7 @@ iosApp/                              # Xcode project (UIKit App)
 | Avatars | Coil 3 + coil-network-ktor3 | 3.4.0 | In catalog |
 | Date/time | kotlinx-datetime | 0.8.0 | In catalog |
 | Logging | Kermit | 2.1.0 | In catalog |
-| Settings/tokens | multiplatform-settings + encrypted storage | TBD | **Not yet in catalog — add**; EncryptedSharedPreferences (Android) / Keychain (iOS) |
+| Settings/tokens | **androidx DataStore 1.2.1 (Preferences)** — `datastore-core-okio` + `datastore-preferences` | Done at M0 via `DataStore<Preferences>` (`sharedUI`) with `PreferenceDataStoreFactory.create(produceFile = ...)`; `AndroidDataStoreProvider` uses `Context.filesDir` (resolved in `androidMain`), `IosDataStoreProvider` uses `NSCachesDirectory`. Encryption (`EncryptedSharedPreferences`/Keychain) is a later hardening step — see plan §3 |
 | Paging | Manual page/limit with `LoadState` wrapper | — | Server already paginates with `page`/`limit`; Paging 3 KMP iOS edges not worth the cost |
 | Build config | gmazzo/gradle-buildconfig-plugin | 5.6.5 | In catalog (unused so far) |
 | Kotlin / AGP / KSP | Kotlin 2.4.0, AGP 9.0.0, KSP 2.3.9 | — | KMP+AGP9 migration patterns understood |
@@ -242,14 +242,13 @@ Two-module layout inherited from the Terrakok scaffold:
 
 Do **not** split into `:core:network`, `:core:database`, `:feature:*` for v1; the single `:sharedUI` module keeps refactor cost near-zero while the surface is small. Split only if compile times or team size force it.
 
-Version catalog (`gradle/libs.versions.toml`) — already present for most of the stack (Kotlin 2.4.0, CMP 1.11.1, Ktor 3.5.0, Room 2.8.4, Coil 3.4.0, kx-datetime 0.8.0, Kermit 2.1.0, Nav3 1.1.1). **Add to catalog before M0:**
+Version catalog (`gradle/libs.versions.toml`) — already present for most of the stack (Kotlin 2.4.0, CMP 1.11.1, Ktor 3.5.0, Room 2.8.4, Coil 3.4.0, kx-datetime 0.8.0, Kermit 2.1.0, Nav3 1.1.1). **Catalog additions landed at M0:**
 
-| Group | Library | Why |
-|---|---|---|
-| Koin 4.x | `koin-core`, `koin-compose`, `koin-compose-viewmodel` | DI |
-| multiplatform-settings | `multiplatform-settings`, `multiplatform-settings-coroutines`, `multiplatform-settings-no-arg` | Credentials storage abstraction |
-| Android security | `androidx.security:security-crypto` | `EncryptedSharedPreferences` |
-| Ktor test | `ktor-client-mock` | MockEngine suite for Section 8 |
+| Group | Library | Why | Status |
+|---|---|---|---|
+| Koin 4.1.0 | `koin-core`, `koin-compose`, `koin-compose-viewmodel`, `koin-test` | DI + VM injection | ✓ |
+| DataStore 1.2.1 | `androidx.datastore:datastore-core-okio`, `androidx.datastore:datastore-preferences` | Credentials storage, async IO, structured migration | ✓ |
+| Ktor test | `ktor-client-mock` | MockEngine suite for Section 8 | Pending — add before M1 |
 
 CI: GitHub Actions — `:androidApp:assembleDebug` + `:sharedUI:allTests` on PR; iOS framework compile check (no UI tests in v1 — explicit tradeoff) on a macOS runner; `detekt` + `ktlint`. Make the iOS-test omission a deliberate, documented decision in the workflow file.
 

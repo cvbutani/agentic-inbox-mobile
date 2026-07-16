@@ -10,7 +10,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        minSdk = 23
+        minSdk = 24
         targetSdk = 36
 
         applicationId = "com.sonicstarsolutions.agentic.inbox.androidApp"
@@ -31,4 +31,13 @@ kotlin {
 dependencies {
     implementation(project(":sharedUI"))
     implementation(libs.androidx.activityCompose)
+    implementation(libs.koin.core)
+
+    testImplementation(kotlin("test-junit"))
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.ktor.client.core)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.serialization.json)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktorfit)
 }

@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowInsetsControllerCompat
 import com.sonicstarsolutions.agentic.inbox.App
+import com.sonicstarsolutions.agentic.inbox.di.platformModule
 
 class AppActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -17,7 +18,8 @@ class AppActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             App(
-                onThemeChanged = { ThemeChanged(it) }
+                onThemeChanged = { ThemeChanged(it) },
+                appModule = listOf(platformModule(applicationContext)),
             )
         }
     }

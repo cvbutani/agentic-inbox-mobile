@@ -2,16 +2,16 @@ package com.sonicstarsolutions.agentic.inbox.ui.onboarding
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
-import com.sonicstarsolutions.agentic.inbox.data.settings.Credentials
-import com.sonicstarsolutions.agentic.inbox.data.settings.CredentialsRepository
+import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.LoadCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ValidateConnectionUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import io.ktor.client.plugins.ResponseException
-import io.ktor.client.statement.bodyAsText
 
 data class OnboardingUiState(
     val baseUrl: String = "",
@@ -23,14 +23,29 @@ data class OnboardingUiState(
 )
 
 class OnboardingViewModel(
-    private val credentialsRepository: CredentialsRepository,
-    private val api: AgenticInboxApi,
+    private val saveCredentials: SaveCredentialsUseCase,
+    private val validateConnection: ValidateConnectionUseCase,
+    private val observeCredentials: ObserveCredentialsUseCase,
+    private val loadCredentials: LoadCredentialsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
-        OnboardingUiState().with(credentialsRepository.current())
+        OnboardingUiState().with(observeCredentials().value)
     )
     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
+
+    init {
+        initCredentials()
+    }
+
+    fun initCredentials() {
+        viewModelScope.launch { loadCredentials() }
+        viewModelScope.launch {
+            observeCredentials().collect { snapshot ->
+                _state.update { current -> current.with(snapshot) }
+            }
+        }
+    }
 
     fun onBaseUrlChanged(value: String) = _state.update { it.copy(baseUrl = value, errorMessage = null) }
     fun onClientIdChanged(value: String) = _state.update { it.copy(clientId = value, errorMessage = null) }
@@ -51,17 +66,16 @@ class OnboardingViewModel(
                 clientId = current.clientId.trim(),
                 clientSecret = current.clientSecret.trim(),
             )
-            credentialsRepository.save(credentials)
-            runCatching { api.getConfig() }
+            saveCredentials(credentials)
+            validateConnection()
                 .onSuccess {
                     _state.update { it.copy(validating = false, saved = true) }
                 }
                 .onFailure { t ->
-                    val message = describeError(t)
                     _state.update {
                         it.copy(
                             validating = false,
-                            errorMessage = message,
+                            errorMessage = t.message ?: "Unknown error",
                         )
                     }
                 }
@@ -69,17 +83,6 @@ class OnboardingViewModel(
     }
 
     fun consumeSaved() = _state.update { it.copy(saved = false) }
-
-    private suspend fun describeError(t: Throwable): String = when (t) {
-        is ResponseException -> {
-            val code = t.response.status.value
-            val bodyText = runCatching { t.response.bodyAsText() }.getOrDefault("")
-            val body = bodyText.take(512).trim()
-            if (body.isNotEmpty()) "Server returned HTTP $code\n\n$body"
-            else "Server returned HTTP $code"
-        }
-        else -> t.message ?: t::class.simpleName ?: "Unknown error"
-    }
 
     private fun OnboardingUiState.with(credentials: Credentials): OnboardingUiState =
         copy(
