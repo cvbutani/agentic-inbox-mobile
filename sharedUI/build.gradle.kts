@@ -21,6 +21,10 @@ kotlin {
         minSdk = 24
         androidResources.enable = true
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
+        // Runs commonTest on the local JVM (no emulator/device needed) — without this the
+        // android target has no unit-test compilation at all, and commonTest only executes via
+        // iosArm64Test/iosSimulatorArm64Test, which require macOS to run.
+        withHostTestBuilder {}.configure {}
     }
 
     iosArm64()

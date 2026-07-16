@@ -2,6 +2,8 @@ package com.sonicstarsolutions.agentic.inbox.domain.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CredentialsTest {
 
@@ -32,5 +34,34 @@ class CredentialsTest {
     @Test
     fun `blank base url normalizes to empty`() {
         assertEquals("", Credentials(baseUrl = "   ").normalizedBaseUrl())
+    }
+
+    @Test
+    fun `isComplete is true when all fields are non-blank`() {
+        val credentials = Credentials(baseUrl = "my-worker.example.dev", clientId = "id", clientSecret = "secret")
+        assertTrue(credentials.isComplete())
+    }
+
+    @Test
+    fun `isComplete is false when base url is blank`() {
+        val credentials = Credentials(baseUrl = "  ", clientId = "id", clientSecret = "secret")
+        assertFalse(credentials.isComplete())
+    }
+
+    @Test
+    fun `isComplete is false when client id is blank`() {
+        val credentials = Credentials(baseUrl = "my-worker.example.dev", clientId = "", clientSecret = "secret")
+        assertFalse(credentials.isComplete())
+    }
+
+    @Test
+    fun `isComplete is false when client secret is blank`() {
+        val credentials = Credentials(baseUrl = "my-worker.example.dev", clientId = "id", clientSecret = "  ")
+        assertFalse(credentials.isComplete())
+    }
+
+    @Test
+    fun `isComplete is false for the default empty instance`() {
+        assertFalse(Credentials().isComplete())
     }
 }

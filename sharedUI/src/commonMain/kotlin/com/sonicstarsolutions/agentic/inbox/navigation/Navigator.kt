@@ -30,6 +30,9 @@ class Navigator(val backStack: NavBackStack<NavKey>) {
      * overwrites it in place, rather than clear() + add(), so the list is never briefly empty.
      */
     fun replaceRoot(destination: AppDestination) {
-        backStack.add(destination)
+        while (backStack.size > 1) {
+            backStack.removeAt(backStack.lastIndex)
+        }
+        backStack[0] = destination
     }
 }
