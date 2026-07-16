@@ -67,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
 import kotlin.math.absoluteValue
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -466,10 +467,11 @@ private fun EmailListItem(
                 }
             }
 
-            // Snippet row
+            // Snippet row — the server doesn't guarantee this is pre-stripped of HTML, and this
+            // Text() can't render markup, so always reduce it to plain text first.
             email.snippet?.let { snippet ->
                 Text(
-                    text = snippet,
+                    text = HtmlTextExtractor.toPlainText(snippet),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
