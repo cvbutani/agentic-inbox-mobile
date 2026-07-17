@@ -9,4 +9,5 @@ val databaseModule = module {
     single { get<AppDatabase>().mailboxDao() }
     single { get<AppDatabase>().folderDao() }
     single { get<AppDatabase>().emailDao() }
+    single { get<AppDatabase>().draftDao() }
 }

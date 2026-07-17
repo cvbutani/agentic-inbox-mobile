@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +30,7 @@ import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
@@ -48,6 +48,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -203,6 +204,30 @@ private fun ThreadBottomBar(
     onForward: () -> Unit,
 ) {
     var showMoveSheet by remember { mutableStateOf(false) }
+    // Deleting from here closes the thread and returns to the list, so there's no row left to
+    // offer an Undo on the way the inbox's swipe-delete does — ask before, instead.
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete email") },
+            text = { Text("This email will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    },
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     if (showMoveSheet) {
         MoveToFolderSheet(
@@ -224,7 +249,7 @@ private fun ThreadBottomBar(
             IconButton(onClick = onArchive, enabled = !actionInProgress) {
                 Icon(Icons.Default.Archive, contentDescription = "Archive")
             }
-            IconButton(onClick = onDelete, enabled = !actionInProgress) {
+            IconButton(onClick = { showDeleteDialog = true }, enabled = !actionInProgress) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete")
             }
             IconButton(
@@ -379,12 +404,12 @@ private fun MessageCard(
                         backgroundColorHex = backgroundColor.toCssHex(),
                         linkColorHex = MaterialTheme.colorScheme.primary.toCssHex(),
                     )
+                    // No height constraint: HtmlBody measures its own content and sizes to it, so
+                    // the message reads as part of the thread rather than as a scroller inside it.
                     HtmlBody(
                         html = themedHtml,
                         backgroundColor = backgroundColor,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 120.dp, max = 600.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
                     Text(

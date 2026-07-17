@@ -1,24 +1,33 @@
 package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -28,6 +37,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -56,9 +66,10 @@ class InboxViewModelTest {
         snippet = null,
     )
 
-    private fun buildViewModel(
+    private fun TestScope.buildViewModel(
         repository: FakeEmailRepository,
         folderRepository: FakeFolderRepository = FakeFolderRepository(),
+        draftRepository: FakeDraftRepository = FakeDraftRepository(),
     ): InboxViewModel = InboxViewModel(
         getEmails = GetEmailsUseCase(repository),
         getFolders = GetFoldersUseCase(folderRepository),
@@ -69,9 +80,69 @@ class InboxViewModelTest {
         moveEmailUseCase = MoveEmailUseCase(repository),
         deleteEmailUseCase = DeleteEmailUseCase(repository),
         setEmailReadUseCase = SetEmailReadUseCase(repository),
+        observeDraftsUseCase = ObserveDraftsUseCase(draftRepository),
+        deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
+        // Stands in for the app-lifetime scope; shares the test's virtual clock so the undo
+        // window can be advanced past.
+        externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
         mailboxId = "mb1",
         mailboxName = "Inbox",
     )
+
+    private fun draft(id: String, mailboxId: String = "mb1") = Draft(
+        id = id,
+        mailboxId = mailboxId,
+        to = "bob@example.dev",
+        subject = "Draft $id",
+        body = "text",
+        mode = "NEW",
+        updatedAt = 1L,
+    )
+
+    @Test
+    fun `drafts for this mailbox are observed into state`() = runTest {
+        val drafts = FakeDraftRepository(initial = listOf(draft("d1"), draft("d2", mailboxId = "other")))
+        val viewModel = buildViewModel(FakeEmailRepository(), draftRepository = drafts)
+        advanceUntilIdle()
+
+        assertEquals(listOf("d1"), viewModel.state.value.drafts.map { it.id })
+    }
+
+    @Test
+    fun `a newly saved draft appears without a refresh`() = runTest {
+        val drafts = FakeDraftRepository()
+        val viewModel = buildViewModel(FakeEmailRepository(), draftRepository = drafts)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.drafts.isEmpty())
+
+        drafts.save(draft("d1"))
+        advanceUntilIdle()
+
+        assertEquals(listOf("d1"), viewModel.state.value.drafts.map { it.id })
+    }
+
+    @Test
+    fun `showingDrafts is only true in the Drafts folder`() = runTest {
+        val viewModel = buildViewModel(FakeEmailRepository())
+        assertFalse(viewModel.state.value.showingDrafts)
+
+        viewModel.selectFolder(SystemFolders.defaults.first { it.id == SystemFolders.DRAFT })
+
+        assertTrue(viewModel.state.value.showingDrafts)
+    }
+
+    @Test
+    fun `deleteDraft removes it from state`() = runTest {
+        val drafts = FakeDraftRepository(initial = listOf(draft("d1")))
+        val viewModel = buildViewModel(FakeEmailRepository(), draftRepository = drafts)
+        advanceUntilIdle()
+
+        viewModel.deleteDraft("d1")
+        advanceUntilIdle()
+
+        assertEquals(listOf("d1"), drafts.deleteCalls)
+        assertTrue(viewModel.state.value.drafts.isEmpty())
+    }
 
     @Test
     fun `loadFirstPage populates emails and totalCount on success`() = runTest {
@@ -555,7 +626,7 @@ class InboxViewModelTest {
     }
 
     @Test
-    fun `deleteEmail removes the email from the list and calls deleteEmail`() = runTest {
+    fun `deleteEmail removes the email from the list but holds the server call for the undo window`() = runTest {
         val repository = FakeEmailRepository(
             handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
         )
@@ -565,11 +636,79 @@ class InboxViewModelTest {
 
         assertEquals(listOf(summary("e2")), viewModel.state.value.emails)
         assertEquals(1, viewModel.state.value.totalCount)
+        assertEquals(summary("e1"), viewModel.state.value.pendingDelete?.email)
+        assertTrue(repository.deleteCalls.isEmpty(), "delete should not reach the server inside the undo window")
+
+        advanceTimeBy(InboxViewModel.UNDO_WINDOW_MILLIS + 1)
+
+        assertEquals(listOf(FakeEmailRepository.DeleteCall("mb1", "e1")), repository.deleteCalls)
+        assertNull(viewModel.state.value.pendingDelete)
+    }
+
+    @Test
+    fun `undoPendingDelete restores the email at its original position and never calls the server`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2"), summary("e3")), totalCount = 3)) },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.deleteEmail(summary("e2"))
+        viewModel.undoPendingDelete()
+        advanceTimeBy(InboxViewModel.UNDO_WINDOW_MILLIS + 1)
+
+        assertEquals(listOf(summary("e1"), summary("e2"), summary("e3")), viewModel.state.value.emails)
+        assertEquals(3, viewModel.state.value.totalCount)
+        assertNull(viewModel.state.value.pendingDelete)
+        assertTrue(repository.deleteCalls.isEmpty(), "an undone delete must never reach the server")
+    }
+
+    @Test
+    fun `a second delete commits the first pending delete immediately`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.deleteEmail(summary("e1"))
+        viewModel.deleteEmail(summary("e2"))
+
+        assertEquals(listOf(FakeEmailRepository.DeleteCall("mb1", "e1")), repository.deleteCalls)
+        assertEquals(summary("e2"), viewModel.state.value.pendingDelete?.email)
+    }
+
+    @Test
+    fun `onRefresh commits a pending delete rather than letting the row come back`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.deleteEmail(summary("e1"))
+        viewModel.onRefresh()
+
+        assertEquals(listOf(FakeEmailRepository.DeleteCall("mb1", "e1")), repository.deleteCalls)
+        assertNull(viewModel.state.value.pendingDelete)
+    }
+
+    @Test
+    fun `a staged delete still reaches the server if the screen goes away first`() = runTest {
+        // The user has already been told the email was deleted, so leaving the inbox inside the
+        // undo window must not quietly cancel it — on viewModelScope this delete would be lost
+        // and the row would reappear on the next load.
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1")), totalCount = 1)) },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.deleteEmail(summary("e1"))
+        viewModel.viewModelScope.cancel()
+        advanceTimeBy(InboxViewModel.UNDO_WINDOW_MILLIS + 1)
+
         assertEquals(listOf(FakeEmailRepository.DeleteCall("mb1", "e1")), repository.deleteCalls)
     }
 
     @Test
-    fun `deleteEmail reinserts the email and surfaces an error on failure`() = runTest {
+    fun `a committed delete that the server rejects reinserts the email and surfaces an error`() = runTest {
         val repository = FakeEmailRepository(
             handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
             deleteResult = Result.failure(RuntimeException("offline")),
@@ -577,6 +716,7 @@ class InboxViewModelTest {
         val viewModel = buildViewModel(repository)
 
         viewModel.deleteEmail(summary("e1"))
+        advanceTimeBy(InboxViewModel.UNDO_WINDOW_MILLIS + 1)
 
         assertEquals(listOf(summary("e1"), summary("e2")), viewModel.state.value.emails)
         assertEquals(2, viewModel.state.value.totalCount)

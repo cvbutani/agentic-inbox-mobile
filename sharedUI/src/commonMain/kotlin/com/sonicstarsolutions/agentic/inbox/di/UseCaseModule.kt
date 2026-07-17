@@ -3,9 +3,11 @@ package com.sonicstarsolutions.agentic.inbox.di
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
@@ -17,9 +19,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
@@ -54,4 +58,8 @@ val useCaseModule = module {
     singleOf(::SendEmailUseCase)
     singleOf(::ReplyEmailUseCase)
     singleOf(::ForwardEmailUseCase)
+    singleOf(::SaveDraftUseCase)
+    singleOf(::GetDraftUseCase)
+    singleOf(::ObserveDraftsUseCase)
+    singleOf(::DeleteDraftUseCase)
 }

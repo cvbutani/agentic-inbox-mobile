@@ -2,17 +2,23 @@ package com.sonicstarsolutions.agentic.inbox.ui.compose
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeThreadRepository
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -60,7 +66,7 @@ class ComposeViewModelTest {
         attachments = emptyList(),
     )
 
-    private fun buildViewModel(
+    private fun TestScope.buildViewModel(
         mode: ComposeMode,
         emailId: String? = null,
         threadId: String? = null,
@@ -69,12 +75,17 @@ class ComposeViewModelTest {
         },
         threadRepository: FakeThreadRepository = FakeThreadRepository(result = Result.success(listOf(original()))),
         emailRepository: FakeEmailRepository = FakeEmailRepository(),
+        draftRepository: FakeDraftRepository = FakeDraftRepository(),
     ): ComposeViewModel = ComposeViewModel(
         getMailbox = GetMailboxUseCase(mailboxRepository),
         getThread = GetThreadUseCase(threadRepository),
         sendEmailUseCase = SendEmailUseCase(emailRepository),
         replyEmailUseCase = ReplyEmailUseCase(emailRepository),
         forwardEmailUseCase = ForwardEmailUseCase(emailRepository),
+        saveDraftUseCase = SaveDraftUseCase(draftRepository),
+        getDraftUseCase = GetDraftUseCase(draftRepository),
+        deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
+        externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
         mailboxId = "mb1",
         mode = mode,
         emailId = emailId,

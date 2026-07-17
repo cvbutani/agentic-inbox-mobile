@@ -10,7 +10,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeMode
 import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeScreen
-import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxScreen
+import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxListDetailScreen
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerScreen
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingScreen
 import com.sonicstarsolutions.agentic.inbox.ui.search.SearchScreen
@@ -61,12 +61,36 @@ fun AppNavHost() {
             }
 
             entry<Inbox> { key ->
-                InboxScreen(
+                InboxListDetailScreen(
                     mailboxId = key.mailboxId,
                     mailboxName = key.mailboxName,
                     onSwitchMailbox = { navigator.goTo(MailboxPicker) },
+                    // Only fires in the single-pane layout; on a wide window the thread opens in
+                    // the detail pane and never reaches the back stack.
                     onEmailSelected = { email ->
                         navigator.goTo(EmailThread(key.mailboxId, email.id, email.threadId))
+                    },
+                    onReply = { emailId, threadId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.REPLY.name, emailId, threadId))
+                    },
+                    onReplyAll = { emailId, threadId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.REPLY_ALL.name, emailId, threadId))
+                    },
+                    onForward = { emailId, threadId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.FORWARD.name, emailId, threadId))
+                    },
+                    onDraftSelected = { draft ->
+                        // A resumed draft reopens in the mode it was written in, so a half-written
+                        // reply still replies to its original message rather than becoming a new one.
+                        navigator.goTo(
+                            Compose(
+                                mailboxId = key.mailboxId,
+                                mode = draft.mode,
+                                emailId = draft.originalEmailId,
+                                threadId = draft.threadId,
+                                draftId = draft.id,
+                            ),
+                        )
                     },
                     onComposeNew = {
                         navigator.goTo(Compose(mailboxId = key.mailboxId, mode = ComposeMode.NEW.name))
@@ -111,6 +135,7 @@ fun AppNavHost() {
                     mode = ComposeMode.valueOf(key.mode),
                     emailId = key.emailId,
                     threadId = key.threadId,
+                    draftId = key.draftId,
                     onDone = { navigator.goBack() },
                     onCancel = { navigator.goBack() },
                 )

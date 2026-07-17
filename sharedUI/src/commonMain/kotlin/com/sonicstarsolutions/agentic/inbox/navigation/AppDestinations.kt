@@ -46,6 +46,8 @@ data class Compose(
     val mode: String,
     val emailId: String? = null,
     val threadId: String? = null,
+    /** Set when resuming a saved draft from the Drafts folder; null for a fresh compose. */
+    val draftId: String? = null,
 ) : AppDestination
 
 @Serializable

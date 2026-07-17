@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Drafts
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
@@ -45,12 +46,17 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -73,8 +79,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
@@ -91,13 +99,35 @@ fun InboxScreen(
     modifier: Modifier = Modifier,
     onSwitchMailbox: () -> Unit = {},
     onEmailSelected: (EmailSummary) -> Unit = {},
+    onDraftSelected: (Draft) -> Unit = {},
     onComposeNew: () -> Unit = {},
     onSearch: () -> Unit = {},
+    /** The email currently open in the detail pane, when this list is one half of the two-pane
+     * layout — highlights that row. Null in single-pane, where opening an email leaves the list. */
+    openEmailId: String? = null,
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val visibleDrafts = if (state.showingDrafts) state.drafts else emptyList()
+
+    // A swipe-delete is staged, not sent — this Snackbar is the undo window made visible. The
+    // window outlasts the Snackbar (see InboxViewModel.UNDO_WINDOW_MILLIS), so a tap on Undo as
+    // it fades can't arrive after the delete has already gone.
+    LaunchedEffect(state.pendingDelete) {
+        val pending = state.pendingDelete ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = "Deleted \"${pending.email.subject}\"",
+            actionLabel = "Undo",
+            withDismissAction = false,
+            duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            viewModel.undoPendingDelete()
+        }
+    }
 
     // Nav3 disposes this screen's composition (not just hides it) whenever a child screen like
     // ThreadScreen is pushed on top, and recomposes it fresh on return — so a plain
@@ -164,6 +194,42 @@ fun InboxScreen(
         }
     }
 
+    // A discarded draft is gone for good — it exists nowhere but this device — so it asks first.
+    var draftToDelete by remember { mutableStateOf<Draft?>(null) }
+    draftToDelete?.let { draft ->
+        AlertDialog(
+            onDismissRequest = { draftToDelete = null },
+            title = { Text("Discard draft") },
+            text = { Text("This draft will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteDraft(draft.id)
+                        draftToDelete = null
+                    },
+                ) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { draftToDelete = null }) { Text("Keep") }
+            },
+        )
+    }
+
+    // Batch delete has no per-row undo to fall back on (many rows, one action), so it asks first.
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
+    if (showBatchDeleteDialog) {
+        ConfirmDeleteEmailsDialog(
+            count = state.selectedEmailIds.size,
+            onDismiss = { showBatchDeleteDialog = false },
+            onConfirm = {
+                showBatchDeleteDialog = false
+                viewModel.batchDelete()
+            },
+        )
+    }
+
     folderToDelete?.let { folder ->
         DeleteFolderDialog(
             folderName = folder.name,
@@ -209,6 +275,7 @@ fun InboxScreen(
     ) {
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 if (state.selectionMode) {
                     SelectionTopAppBar(
@@ -218,7 +285,7 @@ fun InboxScreen(
                         onMarkRead = viewModel::batchMarkAsRead,
                         onMarkUnread = viewModel::batchMarkAsUnread,
                         onArchive = viewModel::batchArchive,
-                        onDelete = viewModel::batchDelete,
+                        onDelete = { showBatchDeleteDialog = true },
                     )
                 } else {
                     TopAppBar(
@@ -297,7 +364,7 @@ fun InboxScreen(
                         }
                     }
 
-                    state.emails.isEmpty() -> Box(
+                    state.emails.isEmpty() && visibleDrafts.isEmpty() -> Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(24.dp)
@@ -334,6 +401,18 @@ fun InboxScreen(
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                         contentPadding = PaddingValues(0.dp),
                     ) {
+                        items(visibleDrafts, key = { "draft-${it.id}" }) { draft ->
+                            DraftListItem(
+                                draft = draft,
+                                onClick = { onDraftSelected(draft) },
+                                onDelete = { draftToDelete = draft },
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 72.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+
                         items(state.emails, key = { it.id }) { email ->
                             val emailItem: @Composable () -> Unit = {
                                 EmailListItem(
@@ -346,7 +425,11 @@ fun InboxScreen(
                                     },
                                     onToggleStarred = { viewModel.toggleStarred(email) },
                                     selectionMode = state.selectionMode,
-                                    selected = email.id in state.selectedEmailIds,
+                                    selected = if (state.selectionMode) {
+                                        email.id in state.selectedEmailIds
+                                    } else {
+                                        email.id == openEmailId
+                                    },
                                 )
                             }
                             if (state.selectionMode) {
@@ -711,6 +794,80 @@ private fun RenameFolderDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss, enabled = !renaming) { Text("Cancel") }
+        },
+    )
+}
+
+/** A draft's row in the Drafts folder. Deliberately not an [EmailListItem]: a draft has no sender,
+ * no read state and nothing to star, and tapping it opens the composer rather than a thread. */
+@Composable
+private fun DraftListItem(
+    draft: Draft,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    ListItem(
+        headlineContent = {
+            Text(
+                text = draft.subject.ifBlank { "(No subject)" },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        supportingContent = {
+            Text(
+                text = draft.to.ifBlank { "(No recipient)" },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        leadingContent = {
+            Icon(
+                imageVector = Icons.Default.Drafts,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        trailingContent = {
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "Discard draft",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+@Composable
+private fun ConfirmDeleteEmailsDialog(
+    count: Int,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (count == 1) "Delete email" else "Delete $count emails") },
+        text = {
+            Text(
+                if (count == 1) {
+                    "This email will be deleted. This can't be undone."
+                } else {
+                    "These $count emails will be deleted. This can't be undone."
+                },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Delete", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
 }

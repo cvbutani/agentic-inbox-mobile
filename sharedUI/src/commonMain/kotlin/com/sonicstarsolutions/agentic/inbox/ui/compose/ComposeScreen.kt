@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -22,9 +24,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,14 +48,16 @@ fun ComposeScreen(
     mode: ComposeMode,
     emailId: String?,
     threadId: String?,
+    draftId: String? = null,
     modifier: Modifier = Modifier,
     onDone: () -> Unit = {},
     onCancel: () -> Unit = {},
-    viewModel: ComposeViewModel = koinViewModel { parametersOf(mailboxId, mode, emailId, threadId) },
+    viewModel: ComposeViewModel = koinViewModel { parametersOf(mailboxId, mode, emailId, threadId, draftId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showCcBcc by remember { mutableStateOf(false) }
+    var showDiscardDialog by remember { mutableStateOf(false) }
 
     // Reveal Cc/Bcc automatically if Reply All prefilled either of them — hiding fields that
     // already have recipients in them would be confusing, not tidy.
@@ -63,6 +69,37 @@ fun ComposeScreen(
 
     LaunchedEffect(state.sent) {
         if (state.sent) onDone()
+    }
+
+    LaunchedEffect(state.discarded) {
+        if (state.discarded) onCancel()
+    }
+
+    // Closing the composer keeps what was written. DisposableEffect rather than a callback on the
+    // Close button, so backing out — gesture, hardware key, or button — all save alike.
+    DisposableEffect(Unit) {
+        onDispose { viewModel.saveDraftNow() }
+    }
+
+    if (showDiscardDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Discard draft") },
+            text = { Text("This draft will be deleted. This can't be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardDialog = false
+                        viewModel.discardDraft()
+                    },
+                ) {
+                    Text("Discard", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardDialog = false }) { Text("Keep") }
+            },
+        )
     }
 
     LaunchedEffect(state.errorMessage) {
@@ -83,6 +120,12 @@ fun ComposeScreen(
                     }
                 },
                 actions = {
+                    // Only offered once there's actually a draft to throw away.
+                    if (state.draftId != null) {
+                        IconButton(onClick = { showDiscardDialog = true }, enabled = !state.sending) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Discard draft")
+                        }
+                    }
                     IconButton(onClick = viewModel::send, enabled = !state.sending) {
                         if (state.sending) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)

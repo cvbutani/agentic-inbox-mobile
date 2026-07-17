@@ -2,23 +2,36 @@ package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** An email swiped away but not yet deleted server-side — held for [InboxViewModel.UNDO_WINDOW_MILLIS]
+ * so "Undo" can put it back at [originalIndex] without the row ever having really gone. */
+data class PendingDelete(
+    val email: EmailSummary,
+    val originalIndex: Int,
+)
 
 data class InboxUiState(
     val loading: Boolean = false,
@@ -39,7 +52,17 @@ data class InboxUiState(
     val folderDeleted: Boolean = false,
     val selectionMode: Boolean = false,
     val selectedEmailIds: Set<String> = emptySet(),
-)
+    val pendingDelete: PendingDelete? = null,
+    /** Locally saved drafts for this mailbox. Always observed, but only surfaced in the Drafts
+     * folder — see [showingDrafts]. */
+    val drafts: List<Draft> = emptyList(),
+) {
+    /** In the Drafts folder the list shows local drafts above whatever the server reports for
+     * that folder — drafts written here never sync (see [Draft]), so both have to be shown for
+     * the folder to be honest about what's in it. */
+    val showingDrafts: Boolean
+        get() = currentFolder.id == SystemFolders.DRAFT
+}
 
 class InboxViewModel(
     private val getEmails: GetEmailsUseCase,
@@ -51,6 +74,14 @@ class InboxViewModel(
     private val moveEmailUseCase: MoveEmailUseCase,
     private val deleteEmailUseCase: DeleteEmailUseCase,
     private val setEmailReadUseCase: SetEmailReadUseCase,
+    private val observeDraftsUseCase: ObserveDraftsUseCase,
+    private val deleteDraftUseCase: DeleteDraftUseCase,
+    /**
+     * Outlives this ViewModel. A staged delete has already been reported to the user as done, so
+     * its commit must not be cancelled just because the screen went away inside the undo
+     * window — on [viewModelScope] the row would quietly come back on the next load.
+     */
+    private val externalScope: CoroutineScope,
     private val mailboxId: String,
     private val mailboxName: String = "Inbox",
 ) : ViewModel() {
@@ -58,9 +89,34 @@ class InboxViewModel(
     private val _state = MutableStateFlow(InboxUiState(currentMailboxName = mailboxName))
     val state: StateFlow<InboxUiState> = _state.asStateFlow()
 
+    private var pendingDeleteJob: Job? = null
+
     init {
         loadFirstPage()
         loadFolders()
+        observeDrafts()
+    }
+
+    /** Collected for the ViewModel's whole life, not just while the Drafts folder is open, so
+     * switching to it shows what's there immediately. */
+    private fun observeDrafts() {
+        viewModelScope.launch {
+            observeDraftsUseCase(mailboxId).collect { list -> _state.update { it.copy(drafts = list) } }
+        }
+    }
+
+    fun deleteDraft(draftId: String) {
+        viewModelScope.launch { deleteDraftUseCase(draftId) }
+    }
+
+    companion object {
+        /**
+         * How long "Undo" stays available after a swipe-delete. Deliberately longer than the
+         * Snackbar's own `SnackbarDuration.Short` (~4s): if the two expired together, a tap on
+         * Undo in the Snackbar's last moments could land after the delete had already been sent,
+         * and the row the user just rescued would vanish anyway.
+         */
+        const val UNDO_WINDOW_MILLIS: Long = 6_000
     }
 
     fun loadFirstPage() {
@@ -92,6 +148,8 @@ class InboxViewModel(
 
     fun onRefresh() {
         if (_state.value.refreshing) return
+        // A reload would otherwise bring a swiped-away row straight back from the server.
+        commitPendingDelete()
         val folderId = _state.value.currentFolder.id
         _state.update { it.copy(refreshing = true, errorMessage = null) }
         viewModelScope.launch {
@@ -124,6 +182,7 @@ class InboxViewModel(
 
     fun selectFolder(folder: Folder) {
         if (folder.id == _state.value.currentFolder.id) return
+        commitPendingDelete()
         _state.update {
             it.copy(
                 currentFolder = folder,
@@ -265,8 +324,65 @@ class InboxViewModel(
         moveEmailUseCase(mailboxId, email.id, SystemFolders.ARCHIVE)
     }
 
-    fun deleteEmail(email: EmailSummary) = removeOptimistically(email) {
-        deleteEmailUseCase(mailboxId, email.id)
+    /**
+     * Stages a delete instead of performing one: the row leaves the list immediately, but the
+     * server call is deferred by [UNDO_WINDOW_MILLIS] so [undoPendingDelete] can take it back.
+     * Only one delete is ever pending — starting another lands the previous one first.
+     */
+    fun deleteEmail(email: EmailSummary) {
+        commitPendingDelete()
+        val originalIndex = _state.value.emails.indexOf(email)
+        if (originalIndex < 0) return
+        _state.update { current ->
+            current.copy(
+                emails = current.emails.filterNot { it.id == email.id },
+                totalCount = (current.totalCount - 1).coerceAtLeast(0),
+                pendingDelete = PendingDelete(email, originalIndex),
+            )
+        }
+        pendingDeleteJob = externalScope.launch {
+            delay(UNDO_WINDOW_MILLIS)
+            commitPendingDelete()
+        }
+    }
+
+    /** Puts the staged email back where it was. Nothing ever reached the server, so there's
+     * nothing to roll back. */
+    fun undoPendingDelete() {
+        pendingDeleteJob?.cancel()
+        pendingDeleteJob = null
+        val pending = _state.value.pendingDelete ?: return
+        _state.update { current ->
+            val restored = current.emails.toMutableList()
+                .apply { add(pending.originalIndex.coerceAtMost(size), pending.email) }
+            current.copy(
+                emails = restored,
+                totalCount = current.totalCount + 1,
+                pendingDelete = null,
+            )
+        }
+    }
+
+    /** Sends the staged delete now. Called when the undo window expires, when another delete
+     * starts, and before any list reload that would otherwise resurrect the row. */
+    fun commitPendingDelete() {
+        pendingDeleteJob?.cancel()
+        pendingDeleteJob = null
+        val pending = _state.value.pendingDelete ?: return
+        _state.update { it.copy(pendingDelete = null) }
+        externalScope.launch {
+            deleteEmailUseCase(mailboxId, pending.email.id).onFailure { t ->
+                _state.update { current ->
+                    val restored = current.emails.toMutableList()
+                        .apply { add(pending.originalIndex.coerceAtMost(size), pending.email) }
+                    current.copy(
+                        emails = restored,
+                        totalCount = current.totalCount + 1,
+                        errorMessage = t.message ?: t::class.simpleName ?: "Failed to delete",
+                    )
+                }
+            }
+        }
     }
 
     /** Optimistically drops [email] from the list (swipe actions read as instant), restoring it

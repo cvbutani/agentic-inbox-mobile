@@ -56,10 +56,10 @@ fun MailboxPickerScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(state.signedOut) {
-//        if (state.signedOut) {
-//            viewModel.consumeSignedOut()
-//            onSignedOut()
-//        }
+        if (state.signedOut) {
+            viewModel.consumeSignedOut()
+            onSignedOut()
+        }
     }
 
     var showCreateDialog by remember { mutableStateOf(false) }
