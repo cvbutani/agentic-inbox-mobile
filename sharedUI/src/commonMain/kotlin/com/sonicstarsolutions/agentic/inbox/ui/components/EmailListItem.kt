@@ -58,7 +58,7 @@ fun EmailListItem(
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
         ) {
@@ -87,7 +87,7 @@ fun EmailListItem(
                 ) {
                     Text(
                         text = EmailAddressUtils.displayName(email.sender, ownEmail = null),
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = contentWeight),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = contentWeight),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),

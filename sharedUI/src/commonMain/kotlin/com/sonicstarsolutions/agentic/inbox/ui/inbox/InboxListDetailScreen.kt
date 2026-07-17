@@ -149,7 +149,7 @@ private fun NoMessageSelectedPane() {
                 Icon(
                     imageVector = Icons.Default.Email,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    tint = MaterialTheme.colorScheme.outlineVariant,
                     modifier = Modifier.size(56.dp),
                 )
                 Text(
@@ -160,7 +160,7 @@ private fun NoMessageSelectedPane() {
                 Text(
                     text = "Pick a message from the list to read it here",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
             }

@@ -1,5 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,17 +10,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -36,17 +38,15 @@ import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -77,6 +77,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextAlign
@@ -88,6 +89,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
+import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -119,8 +121,10 @@ fun InboxScreen(
     // it fades can't arrive after the delete has already gone.
     LaunchedEffect(state.pendingDelete) {
         val pending = state.pendingDelete ?: return@LaunchedEffect
+        // Truncated so the snackbar stays one glanceable line even for long subjects.
+        val subject = pending.email.subject.let { if (it.length > 30) it.take(30) + "…" else it }
         val result = snackbarHostState.showSnackbar(
-            message = "Deleted \"${pending.email.subject}\"",
+            message = "Deleted \"$subject\"",
             actionLabel = "Undo",
             withDismissAction = false,
             duration = SnackbarDuration.Short,
@@ -282,7 +286,10 @@ fun InboxScreen(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                if (state.selectionMode) {
+                // Crossfade rather than a hard swap: entering selection is a mode change on the
+                // same screen, so the bar should morph, not blink.
+                Crossfade(targetState = state.selectionMode) { selecting ->
+                if (selecting) {
                     SelectionTopAppBar(
                         selectedCount = state.selectedEmailIds.size,
                         onClose = viewModel::clearSelection,
@@ -321,12 +328,17 @@ fun InboxScreen(
                         scrollBehavior = scrollBehavior,
                     )
                 }
+                }
             },
             floatingActionButton = {
                 if (!state.selectionMode) {
-                    FloatingActionButton(onClick = onComposeNew) {
-                        Icon(Icons.Default.Edit, contentDescription = "Compose")
-                    }
+                    // Labeled, not icon-only: the screen's primary action shouldn't require
+                    // icon literacy.
+                    ExtendedFloatingActionButton(
+                        onClick = onComposeNew,
+                        icon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                        text = { Text("Compose") },
+                    )
                 }
             },
         ) { paddingValues ->
@@ -338,10 +350,17 @@ fun InboxScreen(
                     .padding(paddingValues),
             ) {
                 when {
-                    state.loading && state.emails.isEmpty() -> Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) { CircularProgressIndicator() }
+                    // Skeleton rows on the same 72dp grid as real mail, so the app looks like
+                    // itself while loading instead of looking empty.
+                    state.loading && state.emails.isEmpty() -> Column(modifier = Modifier.fillMaxSize()) {
+                        repeat(7) {
+                            SkeletonEmailRow()
+                            HorizontalDivider(
+                                modifier = Modifier.padding(start = 72.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                    }
 
                     state.errorMessage != null && state.emails.isEmpty() -> Box(
                         modifier = Modifier
@@ -384,7 +403,7 @@ fun InboxScreen(
                             Icon(
                                 imageVector = Icons.Default.Inbox,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                tint = MaterialTheme.colorScheme.outlineVariant,
                                 modifier = Modifier.size(64.dp),
                             )
                             Text(
@@ -393,9 +412,9 @@ fun InboxScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
-                                text = "Pull down to refresh or check another folder",
+                                text = "Pull down to refresh",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                             )
                         }
@@ -407,18 +426,21 @@ fun InboxScreen(
                         contentPadding = PaddingValues(0.dp),
                     ) {
                         items(visibleDrafts, key = { "draft-${it.id}" }) { draft ->
-                            DraftListItem(
-                                draft = draft,
-                                onClick = { onDraftSelected(draft) },
-                                onDelete = { draftToDelete = draft },
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 72.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                            )
+                            Column(modifier = Modifier.animateItem()) {
+                                DraftListItem(
+                                    draft = draft,
+                                    onClick = { onDraftSelected(draft) },
+                                    onDelete = { draftToDelete = draft },
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 72.dp),
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                )
+                            }
                         }
 
                         items(state.emails, key = { it.id }) { email ->
+                            Column(modifier = Modifier.animateItem()) {
                             val emailItem: @Composable () -> Unit = {
                                 EmailListItem(
                                     email = email,
@@ -465,8 +487,10 @@ fun InboxScreen(
                                 modifier = Modifier.padding(start = 72.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant
                             )
+                            }
                         }
 
+                        // No end-of-list marker: the list visibly ends; narrating it is noise.
                         item {
                             if (state.loading && state.emails.size < state.totalCount) {
                                 Box(
@@ -480,16 +504,6 @@ fun InboxScreen(
                                         strokeWidth = 2.dp,
                                     )
                                 }
-                            } else if (state.emails.size >= state.totalCount && state.totalCount > 0) {
-                                Text(
-                                    text = "End of list",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
-                                        .wrapContentSize(Alignment.Center),
-                                )
                             }
                         }
                     }
@@ -519,20 +533,34 @@ private fun SelectionTopAppBar(
             }
         },
         actions = {
+            // Three visible actions is the parse-at-a-glance ceiling; read/unread live in the
+            // overflow where their labels do the explaining.
             IconButton(onClick = onSelectAll) {
                 Icon(Icons.Default.SelectAll, contentDescription = "Select all")
-            }
-            IconButton(onClick = onMarkRead) {
-                Icon(Icons.Default.MarkEmailRead, contentDescription = "Mark as read")
-            }
-            IconButton(onClick = onMarkUnread) {
-                Icon(Icons.Default.MarkEmailUnread, contentDescription = "Mark as unread")
             }
             IconButton(onClick = onArchive) {
                 Icon(Icons.Default.Archive, contentDescription = "Archive")
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete")
+            }
+            var showMenu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(Icons.Default.MarkEmailRead, contentDescription = null) },
+                        text = { Text("Mark as read") },
+                        onClick = { showMenu = false; onMarkRead() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(Icons.Default.MarkEmailUnread, contentDescription = null) },
+                        text = { Text("Mark as unread") },
+                        onClick = { showMenu = false; onMarkUnread() },
+                    )
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -555,24 +583,26 @@ private fun FolderDrawerContent(
 ) {
     ModalDrawerSheet(modifier = modifier) {
         Column(modifier = Modifier.padding(vertical = 12.dp)) {
+            // The mailbox header reuses InitialsAvatar so the drawer, inbox rows, and mailbox
+            // picker all speak one identity language. Its avatar starts on the same 28dp edge as
+            // the folder icons below it.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onSwitchMailbox)
                     .padding(horizontal = 28.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Default.AlternateEmail,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                InitialsAvatar(
+                    name = mailboxName,
+                    modifier = Modifier.size(40.dp),
                 )
                 Column {
                     Text(text = mailboxName, style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = "Switch mailbox",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -637,8 +667,13 @@ private fun FolderDrawerItem(
         label = { Text(text = folder.name) },
         badge = {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // A plain count, not a red Badge: unread mail is normal, not an alarm.
                 if (folder.unreadCount > 0) {
-                    Badge { Text(folder.unreadCount.toString()) }
+                    Text(
+                        text = if (folder.unreadCount > 99) "99+" else folder.unreadCount.toString(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 if (onRename != null || onDelete != null) {
                     Box {
@@ -674,12 +709,29 @@ private fun FolderDrawerItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeActionBackground(targetValue: SwipeToDismissBoxValue) {
-    val (color, icon, alignment) = when (targetValue) {
-        SwipeToDismissBoxValue.StartToEnd ->
-            Triple(MaterialTheme.colorScheme.primaryContainer, Icons.Default.Archive, Alignment.CenterStart)
-        SwipeToDismissBoxValue.EndToStart ->
-            Triple(MaterialTheme.colorScheme.errorContainer, Icons.Default.Delete, Alignment.CenterEnd)
-        SwipeToDismissBoxValue.Settled -> Triple(MaterialTheme.colorScheme.surface, null, Alignment.Center)
+    // Each container color pairs with its own "on" color — onSurface on errorContainer would
+    // wash out in dark mode.
+    val (color, iconTint, alignment) = when (targetValue) {
+        SwipeToDismissBoxValue.StartToEnd -> Triple(
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.onPrimaryContainer,
+            Alignment.CenterStart,
+        )
+        SwipeToDismissBoxValue.EndToStart -> Triple(
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer,
+            Alignment.CenterEnd,
+        )
+        SwipeToDismissBoxValue.Settled -> Triple(
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.onSurface,
+            Alignment.Center,
+        )
+    }
+    val icon = when (targetValue) {
+        SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Archive
+        SwipeToDismissBoxValue.EndToStart -> Icons.Default.Delete
+        SwipeToDismissBoxValue.Settled -> null
     }
     Box(
         modifier = Modifier
@@ -689,7 +741,7 @@ private fun SwipeActionBackground(targetValue: SwipeToDismissBoxValue) {
         contentAlignment = alignment,
     ) {
         icon?.let {
-            Icon(imageVector = it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+            Icon(imageVector = it, contentDescription = null, tint = iconTint)
         }
     }
 }
@@ -806,22 +858,40 @@ private fun RenameFolderDialog(
 }
 
 /** A draft's row in the Drafts folder. Deliberately not an [EmailListItem]: a draft has no sender,
- * no read state and nothing to star, and tapping it opens the composer rather than a thread. */
+ * no read state and nothing to star, and tapping it opens the composer rather than a thread. It
+ * still sits on the same 72dp grid — a 40dp leading slot in a 16dp gutter — so drafts and mail
+ * read as one list, not two designs. */
 @Composable
 private fun DraftListItem(
     draft: Draft,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Default.Drafts,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             Text(
                 text = draft.subject.ifBlank { "(No subject)" },
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        },
-        supportingContent = {
             Text(
                 text = draft.to.ifBlank { "(No recipient)" },
                 style = MaterialTheme.typography.bodySmall,
@@ -829,25 +899,59 @@ private fun DraftListItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        },
-        leadingContent = {
+        }
+        IconButton(onClick = onDelete) {
             Icon(
-                imageVector = Icons.Default.Drafts,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                imageVector = Icons.Default.DeleteOutline,
+                contentDescription = "Discard draft",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        },
-        trailingContent = {
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.DeleteOutline,
-                    contentDescription = "Discard draft",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        modifier = Modifier.clickable(onClick = onClick),
-    )
+        }
+    }
+}
+
+/** Placeholder for one email row while page one loads: same 72dp grid and row height rhythm as
+ * [EmailListItem], drawn as mute shapes. */
+@Composable
+private fun SkeletonEmailRow() {
+    val shapeColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(shapeColor),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.45f)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(shapeColor),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(shapeColor),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.6f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(shapeColor),
+            )
+        }
+    }
 }
 
 @Composable
