@@ -10,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,7 @@ class ThreadViewModel(
     private val setEmailRead: SetEmailReadUseCase,
     private val setEmailStarred: SetEmailStarredUseCase,
     private val markThreadRead: MarkThreadReadUseCase,
+    private val sendDraftEmail: SendDraftEmailUseCase,
     private val mailboxId: String,
     private val emailId: String,
     private val threadId: String?,
@@ -118,8 +120,8 @@ class ThreadViewModel(
         }
     }
 
-    fun toggleReadState() {
-        val target = _state.value.messages.firstOrNull { it.id == targetMessageId() } ?: return
+    fun toggleReadState(messageId: String) {
+        val target = _state.value.messages.firstOrNull { it.id == messageId } ?: return
         val newReadState = !target.read
         runAction(navigateBackOnSuccess = false) {
             setEmailRead(mailboxId, target.id, newReadState)
@@ -132,8 +134,8 @@ class ThreadViewModel(
         }
     }
 
-    fun toggleStarred() {
-        val target = _state.value.messages.firstOrNull { it.id == targetMessageId() } ?: return
+    fun toggleStarred(messageId: String) {
+        val target = _state.value.messages.firstOrNull { it.id == messageId } ?: return
         val newStarredState = !target.starred
         runAction(navigateBackOnSuccess = false) {
             setEmailStarred(mailboxId, target.id, newStarredState)
@@ -143,6 +145,31 @@ class ThreadViewModel(
                     }
                 }
                 .map { if (newStarredState) "Starred" else "Unstarred" }
+        }
+    }
+
+    /**
+     * Dispatches a draft message (a real row on the server sitting in the `draft` folder — see
+     * [SendDraftEmailUseCase]) exactly as its fields currently read. Unlike the other actions in
+     * this class this doesn't navigate back: the thread reloads instead, so the now-real sent
+     * message takes the draft's place in the conversation the user is still looking at.
+     */
+    fun sendDraft(draftMessageId: String) {
+        if (_state.value.actionInProgress) return
+        val draft = _state.value.messages.firstOrNull { it.id == draftMessageId } ?: return
+        _state.update { it.copy(actionInProgress = true) }
+        viewModelScope.launch {
+            sendDraftEmail(mailboxId, draft)
+                .onSuccess {
+                    _state.update {
+                        it.copy(actionInProgress = false, actionResult = ThreadActionResult.Success("Sent", shouldNavigateBack = false))
+                    }
+                    loadThread()
+                }
+                .onFailure { t ->
+                    val message = t.message ?: t::class.simpleName ?: "Failed to send"
+                    _state.update { it.copy(actionInProgress = false, actionResult = ThreadActionResult.Failure(message)) }
+                }
         }
     }
 

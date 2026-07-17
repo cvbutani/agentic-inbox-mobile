@@ -26,6 +26,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
@@ -62,6 +63,7 @@ val useCaseModule = module {
     singleOf(::SendEmailUseCase)
     singleOf(::ReplyEmailUseCase)
     singleOf(::ForwardEmailUseCase)
+    singleOf(::SendDraftEmailUseCase)
     singleOf(::SaveDraftUseCase)
     singleOf(::GetDraftUseCase)
     singleOf(::ObserveDraftsUseCase)

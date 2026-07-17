@@ -9,6 +9,7 @@ data class PrefilledFields(
     val cc: String,
     val subject: String,
     val body: String,
+    val bcc: String = "",
 )
 
 /** Derives the compose screen's initial field values from the message being replied to or

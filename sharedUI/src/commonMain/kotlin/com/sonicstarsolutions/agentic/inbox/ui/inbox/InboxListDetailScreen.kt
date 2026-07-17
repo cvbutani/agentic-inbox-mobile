@@ -57,6 +57,7 @@ fun InboxListDetailScreen(
     onReply: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
     onReplyAll: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
     onForward: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
+    onEditDraft: (draftMessageId: String, threadId: String?) -> Unit = { _, _ -> },
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -122,6 +123,7 @@ fun InboxListDetailScreen(
                             onReply = { id -> onReply(id, openThreadId) },
                             onReplyAll = { id -> onReplyAll(id, openThreadId) },
                             onForward = { id -> onForward(id, openThreadId) },
+                            onEditDraft = { id -> onEditDraft(id, openThreadId) },
                             viewModel = koinViewModel(key = "thread-$emailId") {
                                 parametersOf(mailboxId, emailId, openThreadId)
                             },

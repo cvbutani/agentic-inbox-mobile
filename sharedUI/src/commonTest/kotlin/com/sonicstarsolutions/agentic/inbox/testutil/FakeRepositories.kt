@@ -263,5 +263,12 @@ class FakeEmailRepository(
 class FakeThreadRepository(
     var result: Result<List<EmailDetail>> = Result.success(emptyList()),
 ) : ThreadRepository {
-    override suspend fun getThread(mailboxId: String, emailId: String, threadId: String?): Result<List<EmailDetail>> = result
+    data class GetThreadCall(val mailboxId: String, val emailId: String, val threadId: String?)
+
+    val calls = mutableListOf<GetThreadCall>()
+
+    override suspend fun getThread(mailboxId: String, emailId: String, threadId: String?): Result<List<EmailDetail>> {
+        calls += GetThreadCall(mailboxId, emailId, threadId)
+        return result
+    }
 }

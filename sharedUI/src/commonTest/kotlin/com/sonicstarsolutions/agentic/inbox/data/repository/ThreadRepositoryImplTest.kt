@@ -72,6 +72,60 @@ class ThreadRepositoryImplTest {
     )
 
     @Test
+    fun `getThread carries in_reply_to onto the domain model`() = runTest {
+        // A draft parked in the server's draft folder stores the id of the message it's replying
+        // to in in_reply_to — this is how the app later knows to send it via the reply endpoint
+        // (targeting that id) rather than as a brand-new email. See workers/index.ts's /drafts
+        // handler and reply-forward.ts in cloudflare/agentic-inbox.
+        val draftJson = """
+            {
+                "id": "d1",
+                "subject": "Re: Hello",
+                "sender": "mb1@example.dev",
+                "recipient": "a@example.dev",
+                "cc": null,
+                "bcc": null,
+                "date": "2026-07-16T00:00:00Z",
+                "read": true,
+                "starred": false,
+                "thread_id": "t1",
+                "folder_id": "draft",
+                "in_reply_to": "e1",
+                "body": "still writing this...",
+                "attachments": []
+            }
+        """.trimIndent()
+        val engine = MockEngine { _ ->
+            respond(
+                content = "[$draftJson]",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = ThreadRepositoryImpl(apiFor(engine))
+
+        val result = repository.getThread(mailboxId = "mb1", emailId = "d1", threadId = "t1")
+
+        assertEquals("e1", result.getOrThrow().single().inReplyTo)
+    }
+
+    @Test
+    fun `getThread leaves inReplyTo null when the server omits it`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = "[$emailJson]",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = ThreadRepositoryImpl(apiFor(engine))
+
+        val result = repository.getThread(mailboxId = "mb1", emailId = "e1", threadId = "t1")
+
+        assertEquals(null, result.getOrThrow().single().inReplyTo)
+    }
+
+    @Test
     fun `getThread with a threadId fetches the whole thread`() = runTest {
         val engine = MockEngine { request ->
             respond(

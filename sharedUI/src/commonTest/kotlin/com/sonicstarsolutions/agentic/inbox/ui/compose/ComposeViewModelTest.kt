@@ -3,6 +3,7 @@ package com.sonicstarsolutions.agentic.inbox.ui.compose
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
@@ -82,6 +83,7 @@ class ComposeViewModelTest {
         sendEmailUseCase = SendEmailUseCase(emailRepository),
         replyEmailUseCase = ReplyEmailUseCase(emailRepository),
         forwardEmailUseCase = ForwardEmailUseCase(emailRepository),
+        deleteEmailUseCase = DeleteEmailUseCase(emailRepository),
         saveDraftUseCase = SaveDraftUseCase(draftRepository),
         getDraftUseCase = GetDraftUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),

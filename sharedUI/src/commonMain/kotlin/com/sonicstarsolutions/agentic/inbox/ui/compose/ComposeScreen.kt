@@ -210,4 +210,5 @@ private fun titleFor(mode: ComposeMode): String = when (mode) {
     ComposeMode.REPLY -> "Reply"
     ComposeMode.REPLY_ALL -> "Reply all"
     ComposeMode.FORWARD -> "Forward"
+    ComposeMode.EDIT_DRAFT -> "Edit draft"
 }

@@ -79,6 +79,9 @@ fun AppNavHost() {
                     onForward = { emailId, threadId ->
                         navigator.goTo(Compose(key.mailboxId, ComposeMode.FORWARD.name, emailId, threadId))
                     },
+                    onEditDraft = { draftMessageId, threadId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.EDIT_DRAFT.name, draftMessageId, threadId))
+                    },
                     onDraftSelected = { draft ->
                         // A resumed draft reopens in the mode it was written in, so a half-written
                         // reply still replies to its original message rather than becoming a new one.
@@ -125,6 +128,9 @@ fun AppNavHost() {
                     },
                     onForward = { originalEmailId ->
                         navigator.goTo(Compose(key.mailboxId, ComposeMode.FORWARD.name, originalEmailId, key.threadId))
+                    },
+                    onEditDraft = { draftMessageId ->
+                        navigator.goTo(Compose(key.mailboxId, ComposeMode.EDIT_DRAFT.name, draftMessageId, key.threadId))
                     },
                 )
             }

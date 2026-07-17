@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
@@ -25,7 +26,17 @@ import kotlin.time.Clock
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
-enum class ComposeMode { NEW, REPLY, REPLY_ALL, FORWARD }
+enum class ComposeMode {
+    NEW, REPLY, REPLY_ALL, FORWARD,
+
+    /**
+     * Resumes a draft that's a real row on the server (sitting in the `draft` folder — see
+     * [com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail.inReplyTo]), reached from
+     * ThreadScreen. Distinct from the app's own local-only Draft (Room) feature, which resumes via
+     * [draftId] on the other modes instead.
+     */
+    EDIT_DRAFT,
+}
 
 data class ComposeUiState(
     val loading: Boolean = true,
@@ -50,6 +61,9 @@ class ComposeViewModel(
     private val sendEmailUseCase: SendEmailUseCase,
     private val replyEmailUseCase: ReplyEmailUseCase,
     private val forwardEmailUseCase: ForwardEmailUseCase,
+    /** Server-side cleanup after an EDIT_DRAFT send — distinct from [deleteDraftUseCase], which
+     * only ever touches this app's own local Room-backed drafts. */
+    private val deleteEmailUseCase: DeleteEmailUseCase,
     private val saveDraftUseCase: SaveDraftUseCase,
     private val getDraftUseCase: GetDraftUseCase,
     private val deleteDraftUseCase: DeleteDraftUseCase,
@@ -74,6 +88,11 @@ class ComposeViewModel(
     private var fromEmail: String = ""
     private var fromName: String = ""
     private var autosaveJob: Job? = null
+
+    /** Set while loading an EDIT_DRAFT message — the id of the message *that draft* was replying
+     * to (not the draft's own id), which is what actually decides the send path. Null means this
+     * was a from-scratch compose saved as a draft, so sending falls back to a plain send. */
+    private var editDraftInReplyTo: String? = null
 
     /** Only user edits mark the composer dirty. Prefilled reply/forward text doesn't, so opening
      * a reply and backing straight out leaves no draft behind. */
@@ -129,9 +148,29 @@ class ComposeViewModel(
                         ComposeMode.REPLY_ALL -> ComposePrefill.forReply(original, replyAll = true, ownEmail = fromEmail)
                         ComposeMode.FORWARD -> ComposePrefill.forForward(original)
                         ComposeMode.NEW -> PrefilledFields(to = "", cc = "", subject = "", body = "")
+                        ComposeMode.EDIT_DRAFT -> {
+                            // Continuing an existing draft, not deriving a fresh reply/forward — its
+                            // own current fields are the whole message, verbatim, not a starting point
+                            // to quote or re-prefix.
+                            editDraftInReplyTo = original.inReplyTo
+                            PrefilledFields(
+                                to = original.recipient,
+                                cc = original.cc.orEmpty(),
+                                bcc = original.bcc.orEmpty(),
+                                subject = original.subject,
+                                body = original.body.orEmpty(),
+                            )
+                        }
                     }
                     _state.update {
-                        it.copy(loading = false, to = fields.to, cc = fields.cc, subject = fields.subject, body = fields.body)
+                        it.copy(
+                            loading = false,
+                            to = fields.to,
+                            cc = fields.cc,
+                            bcc = fields.bcc,
+                            subject = fields.subject,
+                            body = fields.body,
+                        )
                     }
                 }
             }
@@ -242,12 +281,23 @@ class ComposeViewModel(
                 ComposeMode.NEW -> sendEmailUseCase(mailboxId, request)
                 ComposeMode.REPLY, ComposeMode.REPLY_ALL -> replyEmailUseCase(mailboxId, emailId!!, request)
                 ComposeMode.FORWARD -> forwardEmailUseCase(mailboxId, emailId!!, request)
+                // The draft's own inReplyTo (not emailId, which is the draft's own id) decides the
+                // path — the server derives correct threading headers from whatever message that
+                // id points to, matching workers/routes/reply-forward.ts in cloudflare/agentic-inbox.
+                ComposeMode.EDIT_DRAFT -> editDraftInReplyTo
+                    ?.let { originalEmailId -> replyEmailUseCase(mailboxId, originalEmailId, request) }
+                    ?: sendEmailUseCase(mailboxId, request)
             }
             result
                 .onSuccess {
                     // The message is out; its draft has served its purpose. A send that failed
                     // keeps the draft, so nothing the user wrote is lost.
                     _state.value.draftId?.let { deleteDraftUseCase(it) }
+                    // EDIT_DRAFT's draft is a real row on the server (emailId is its id), separate
+                    // from the local-only one above — best-effort, same reasoning as
+                    // SendDraftEmailUseCase: the send already succeeded, so a cleanup failure here
+                    // must not be reported as this send having failed.
+                    if (mode == ComposeMode.EDIT_DRAFT) emailId?.let { deleteEmailUseCase(mailboxId, it) }
                     _state.update { it.copy(sending = false, sent = true, draftId = null) }
                 }
                 .onFailure { t ->

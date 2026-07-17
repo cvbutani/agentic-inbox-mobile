@@ -1,16 +1,19 @@
 package com.sonicstarsolutions.agentic.inbox.ui.thread
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
+import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeThreadRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +64,9 @@ class ThreadViewModelTest {
         threadRepository: FakeThreadRepository,
         emailRepository: FakeEmailRepository = FakeEmailRepository(),
         folderRepository: FakeFolderRepository = FakeFolderRepository(),
+        mailboxRepository: FakeMailboxRepository = FakeMailboxRepository().apply {
+            getMailboxResult = { Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me")) }
+        },
         threadId: String? = "t1",
     ): ThreadViewModel = ThreadViewModel(
         getThread = GetThreadUseCase(threadRepository),
@@ -70,9 +76,27 @@ class ThreadViewModelTest {
         setEmailRead = SetEmailReadUseCase(emailRepository),
         setEmailStarred = SetEmailStarredUseCase(emailRepository),
         markThreadRead = MarkThreadReadUseCase(emailRepository),
+        sendDraftEmail = SendDraftEmailUseCase(emailRepository, mailboxRepository),
         mailboxId = "mb1",
         emailId = "e1",
         threadId = threadId,
+    )
+
+    private fun draftDetail(id: String, inReplyTo: String? = null) = EmailDetail(
+        id = id,
+        subject = "Re: Subject",
+        sender = "me@example.dev",
+        recipient = "a@example.dev",
+        cc = null,
+        bcc = null,
+        date = "2026-07-16T00:00:00Z",
+        read = true,
+        starred = false,
+        threadId = "t1",
+        folderId = SystemFolders.DRAFT,
+        body = "<p>Draft body</p>",
+        attachments = emptyList(),
+        inReplyTo = inReplyTo,
     )
 
     @Test
@@ -207,7 +231,7 @@ class ThreadViewModelTest {
         val emailRepository = FakeEmailRepository()
         val viewModel = buildViewModel(threadRepository, emailRepository)
 
-        viewModel.toggleReadState()
+        viewModel.toggleReadState("e1")
 
         assertEquals(listOf(FakeEmailRepository.SetReadCall("mb1", "e1", false)), emailRepository.setReadCalls)
         assertFalse(viewModel.state.value.messages.single().read)
@@ -222,7 +246,7 @@ class ThreadViewModelTest {
         val emailRepository = FakeEmailRepository()
         val viewModel = buildViewModel(threadRepository, emailRepository)
 
-        viewModel.toggleStarred()
+        viewModel.toggleStarred("e1")
 
         assertEquals(listOf(FakeEmailRepository.SetStarredCall("mb1", "e1", true)), emailRepository.setStarredCalls)
         assertTrue(viewModel.state.value.messages.single().starred)
@@ -232,12 +256,42 @@ class ThreadViewModelTest {
     }
 
     @Test
+    fun `toggleReadState can target a message other than the expanded one`() = runTest {
+        val threadRepository = FakeThreadRepository(
+            result = Result.success(listOf(detail("e1", read = true), detail("e2", read = true))),
+        )
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository) // expanded = e2
+
+        viewModel.toggleReadState("e1")
+
+        assertEquals(listOf(FakeEmailRepository.SetReadCall("mb1", "e1", false)), emailRepository.setReadCalls)
+        assertFalse(viewModel.state.value.messages.first { it.id == "e1" }.read)
+        assertTrue(viewModel.state.value.messages.first { it.id == "e2" }.read, "the other message must stay untouched")
+    }
+
+    @Test
+    fun `toggleStarred can target a message other than the expanded one`() = runTest {
+        val threadRepository = FakeThreadRepository(
+            result = Result.success(listOf(detail("e1", starred = false), detail("e2", starred = false))),
+        )
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository) // expanded = e2
+
+        viewModel.toggleStarred("e1")
+
+        assertEquals(listOf(FakeEmailRepository.SetStarredCall("mb1", "e1", true)), emailRepository.setStarredCalls)
+        assertTrue(viewModel.state.value.messages.first { it.id == "e1" }.starred)
+        assertFalse(viewModel.state.value.messages.first { it.id == "e2" }.starred, "the other message must stay untouched")
+    }
+
+    @Test
     fun `toggleStarred failure reports a failure result and leaves the message unchanged`() = runTest {
         val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1", starred = false))))
         val emailRepository = FakeEmailRepository(setStarredResult = Result.failure(RuntimeException("offline")))
         val viewModel = buildViewModel(threadRepository, emailRepository)
 
-        viewModel.toggleStarred()
+        viewModel.toggleStarred("e1")
 
         val result = viewModel.state.value.actionResult
         assertTrue(result is ThreadActionResult.Failure)
@@ -323,5 +377,95 @@ class ThreadViewModelTest {
         buildViewModel(threadRepository, emailRepository, threadId = null)
 
         assertTrue(emailRepository.setReadCalls.isEmpty())
+    }
+
+    @Test
+    fun `sendDraft with no inReplyTo sends via plain sendEmail and reports Sent without navigating back`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(draftDetail("d1"))))
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.sendDraft("d1")
+
+        assertEquals(1, emailRepository.sendCalls.size)
+        val result = viewModel.state.value.actionResult
+        assertTrue(result is ThreadActionResult.Success)
+        assertEquals("Sent", result.message)
+        assertFalse(result.shouldNavigateBack)
+        assertFalse(viewModel.state.value.actionInProgress)
+    }
+
+    @Test
+    fun `sendDraft with inReplyTo sends via replyEmail targeting the original message`() = runTest {
+        val threadRepository = FakeThreadRepository(
+            result = Result.success(listOf(draftDetail("d1", inReplyTo = "original1"))),
+        )
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.sendDraft("d1")
+
+        assertEquals(listOf("original1"), emailRepository.replyCalls.map { it.emailId })
+        assertTrue(emailRepository.sendCalls.isEmpty())
+    }
+
+    @Test
+    fun `a successful sendDraft deletes the draft row and reloads the thread`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(draftDetail("d1"))))
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+        val callsBeforeSend = threadRepository.calls.size
+
+        viewModel.sendDraft("d1")
+
+        assertEquals(listOf(FakeEmailRepository.DeleteCall("mb1", "d1")), emailRepository.deleteCalls)
+        assertTrue(threadRepository.calls.size > callsBeforeSend, "the thread should reload so the sent draft's real outcome shows")
+    }
+
+    @Test
+    fun `sendDraft failure reports a Failure result and does not delete the draft`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(draftDetail("d1"))))
+        val emailRepository = FakeEmailRepository(sendResult = Result.failure(RuntimeException("offline")))
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.sendDraft("d1")
+
+        val result = viewModel.state.value.actionResult
+        assertTrue(result is ThreadActionResult.Failure)
+        assertEquals("offline", result.message)
+        assertTrue(emailRepository.deleteCalls.isEmpty())
+    }
+
+    @Test
+    fun `sendDraft does nothing for a message id that is not in the thread`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(draftDetail("d1"))))
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.sendDraft("not-in-thread")
+
+        assertTrue(emailRepository.sendCalls.isEmpty())
+        assertTrue(emailRepository.replyCalls.isEmpty())
+    }
+
+    @Test
+    fun `a second sendDraft is ignored while one is already in flight`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(draftDetail("d1"))))
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+        val gate = CompletableDeferred<Unit>()
+        emailRepository.sendGate = gate
+
+        viewModel.sendDraft("d1")
+        assertTrue(viewModel.state.value.actionInProgress)
+
+        viewModel.sendDraft("d1") // should be ignored by the actionInProgress guard
+
+        assertEquals(1, emailRepository.sendCalls.size, "second sendDraft should not have dispatched a request")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.state.value.actionInProgress)
     }
 }

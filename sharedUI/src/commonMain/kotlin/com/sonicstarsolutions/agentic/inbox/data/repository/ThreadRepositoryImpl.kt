@@ -35,6 +35,7 @@ private fun EmailFullDto.toDomain(): EmailDetail = EmailDetail(
     folderId = folderId,
     body = body,
     attachments = attachments.map { it.toDomain() },
+    inReplyTo = inReplyTo,
 )
 
 private fun AttachmentDto.toDomain(): EmailAttachment = EmailAttachment(
