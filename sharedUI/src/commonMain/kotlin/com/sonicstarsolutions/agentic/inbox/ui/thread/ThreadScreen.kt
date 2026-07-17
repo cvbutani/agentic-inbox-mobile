@@ -396,7 +396,7 @@ private fun MessageCard(
                     )
                     if (!expanded) {
                         Text(
-                            text = formatTime(message.date),
+                            text = ThreadTimeFormatter.formatCollapsedTime(message.date),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -545,13 +545,6 @@ private fun formatDateTime(dateString: String): String {
     }
 }
 
-private fun formatTime(dateString: String): String {
-    return try {
-        formatClockTime(Instant.parse(dateString).toLocalDateTime(TimeZone.currentSystemDefault()))
-    } catch (e: Exception) {
-        dateString.take(10)
-    }
-}
 
 @Composable
 private fun DraftLabel() {

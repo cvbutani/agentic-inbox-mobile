@@ -14,8 +14,28 @@ android {
         targetSdk = 36
 
         applicationId = "com.sonicstarsolutions.agentic.inbox.androidApp"
-        versionCode = 1
-        versionName = "1.0.0"
+
+        versionCode = (project.properties["versionCode"] as? String)?.toInt() ?: 1
+        versionName = project.properties["versionName"] as? String ?: "1.0.0"
+    }
+
+    // Release signing is only configured when the CI keystore env vars are present,
+    // so local debug builds keep working without a keystore.
+    val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+    if (keystorePath != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+        buildTypes {
+            release {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     compileOptions {
