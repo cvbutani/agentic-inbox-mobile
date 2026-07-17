@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -40,6 +42,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -49,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,80 +92,85 @@ fun MailboxPickerScreen(
         }
     }
 
-    var showCreateDialog by remember { mutableStateOf(false) }
-    LaunchedEffect(state.mailboxCreated) {
-        if (state.mailboxCreated) {
-            showCreateDialog = false
-            viewModel.consumeMailboxCreated()
-        }
-    }
+    // Computed once at the top, rather than inside the Scaffold's content, so the create-mailbox
+    // dialog/sheet choice below can read it too.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val widthClass = windowWidthClassFor(maxWidth)
 
-    if (showCreateDialog) {
-        CreateMailboxDialog(
-            allowedDomains = state.allowedDomains,
-            creating = state.creatingMailbox,
-            errorMessage = state.createMailboxError,
-            onDismiss = {
+        var showCreateDialog by remember { mutableStateOf(false) }
+        LaunchedEffect(state.mailboxCreated) {
+            if (state.mailboxCreated) {
                 showCreateDialog = false
-                viewModel.consumeCreateMailboxError()
-            },
-            onCreate = { email, name -> viewModel.createMailbox(email, name) },
-        )
-    }
-
-    var mailboxToDelete by remember { mutableStateOf<Mailbox?>(null) }
-    LaunchedEffect(state.mailboxDeleted) {
-        if (state.mailboxDeleted) {
-            mailboxToDelete = null
-            viewModel.consumeMailboxDeleted()
+                viewModel.consumeMailboxCreated()
+            }
         }
-    }
 
-    mailboxToDelete?.let { mailbox ->
-        DeleteMailboxDialog(
-            mailboxName = mailbox.name,
-            deleting = state.deletingMailbox,
-            errorMessage = state.deleteMailboxError,
-            onDismiss = {
-                mailboxToDelete = null
-                viewModel.consumeDeleteMailboxError()
-            },
-            onConfirm = { viewModel.deleteMailbox(mailbox.id) },
-        )
-    }
-
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = { Text("Mailboxes") },
-                actions = {
-                    IconButton(onClick = viewModel::signOut) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
-                    }
+        if (showCreateDialog) {
+            // A sheet reads as the natural "more screen real estate for a form" gesture on
+            // phones; a dialog stays centred and modest on the room a tablet already has.
+            CreateMailboxSheetOrDialog(
+                widthClass = widthClass,
+                allowedDomains = state.allowedDomains,
+                creating = state.creatingMailbox,
+                errorMessage = state.createMailboxError,
+                onDismiss = {
+                    showCreateDialog = false
+                    viewModel.consumeCreateMailboxError()
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
+                onCreate = { email, name -> viewModel.createMailbox(email, name) },
             )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showCreateDialog = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New mailbox") },
+        }
+
+        var mailboxToDelete by remember { mutableStateOf<Mailbox?>(null) }
+        LaunchedEffect(state.mailboxDeleted) {
+            if (state.mailboxDeleted) {
+                mailboxToDelete = null
+                viewModel.consumeMailboxDeleted()
+            }
+        }
+
+        mailboxToDelete?.let { mailbox ->
+            DeleteMailboxDialog(
+                mailboxName = mailbox.name,
+                deleting = state.deletingMailbox,
+                errorMessage = state.deleteMailboxError,
+                onDismiss = {
+                    mailboxToDelete = null
+                    viewModel.consumeDeleteMailboxError()
+                },
+                onConfirm = { viewModel.deleteMailbox(mailbox.id) },
             )
-        },
-    ) { scaffoldPadding ->
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(contentPadding)
-                .padding(scaffoldPadding),
-        ) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val widthClass = windowWidthClassFor(maxWidth)
+        }
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = { Text("Mailboxes") },
+                    actions = {
+                        IconButton(onClick = viewModel::signOut) {
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+                )
+            },
+            floatingActionButton = {
+                ExtendedFloatingActionButton(
+                    onClick = { showCreateDialog = true },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("New mailbox") },
+                )
+            },
+        ) { scaffoldPadding ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding)
+                    .padding(scaffoldPadding),
+            ) {
                 val horizontalPadding = if (widthClass == WindowWidthClass.COMPACT) 16.dp else 24.dp
 
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -375,8 +384,15 @@ private fun DeleteMailboxDialog(
     )
 }
 
+/**
+ * Owns the create-mailbox form's state and picks its container: a [ModalBottomSheet] on phones,
+ * where a form benefits from the extra vertical room a sheet can grow into, or an [AlertDialog]
+ * on tablets, which already have room to spare and don't need a sheet's full-height affordance.
+ * Both containers render the same [CreateMailboxFields] so the two never drift apart.
+ */
 @Composable
-private fun CreateMailboxDialog(
+private fun CreateMailboxSheetOrDialog(
+    widthClass: WindowWidthClass,
     allowedDomains: List<String>,
     creating: Boolean,
     errorMessage: String?,
@@ -394,89 +410,59 @@ private fun CreateMailboxDialog(
     val canSubmit = name.isNotBlank() &&
         if (hasDomains) localPart.isNotBlank() && selectedDomain.isNotBlank() else freeformEmail.isNotBlank()
 
+    val fields: @Composable () -> Unit = {
+        CreateMailboxFields(
+            name = name,
+            onNameChange = { name = it },
+            localPart = localPart,
+            onLocalPartChange = { localPart = it },
+            freeformEmail = freeformEmail,
+            onFreeformEmailChange = { freeformEmail = it },
+            selectedDomain = selectedDomain,
+            onDomainSelected = { selectedDomain = it },
+            allowedDomains = allowedDomains,
+            hasDomains = hasDomains,
+            domainMenuExpanded = domainMenuExpanded,
+            onDomainMenuExpandedChange = { domainMenuExpanded = it },
+            creating = creating,
+            errorMessage = errorMessage,
+        )
+    }
+
+    if (widthClass == WindowWidthClass.COMPACT) {
+        CreateMailboxBottomSheet(
+            creating = creating,
+            canSubmit = canSubmit,
+            onDismiss = onDismiss,
+            onCreate = { onCreate(email, name) },
+            fields = fields,
+        )
+    } else {
+        CreateMailboxDialog(
+            creating = creating,
+            canSubmit = canSubmit,
+            onDismiss = onDismiss,
+            onCreate = { onCreate(email, name) },
+            fields = fields,
+        )
+    }
+}
+
+@Composable
+private fun CreateMailboxDialog(
+    creating: Boolean,
+    canSubmit: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: () -> Unit,
+    fields: @Composable () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = { if (!creating) onDismiss() },
         icon = { Icon(Icons.Outlined.AlternateEmail, contentDescription = null) },
         title = { Text("New mailbox") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Display name") },
-                    singleLine = true,
-                    enabled = !creating,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (hasDomains) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        OutlinedTextField(
-                            value = localPart,
-                            onValueChange = { localPart = it },
-                            label = { Text("Address") },
-                            singleLine = true,
-                            enabled = !creating,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text("@", style = MaterialTheme.typography.bodyLarge)
-                        if (allowedDomains.size == 1) {
-                            Text(
-                                text = selectedDomain,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            Box {
-                                TextButton(onClick = { if (!creating) domainMenuExpanded = true }) {
-                                    Text(selectedDomain)
-                                }
-                                DropdownMenu(
-                                    expanded = domainMenuExpanded,
-                                    onDismissRequest = { domainMenuExpanded = false },
-                                ) {
-                                    allowedDomains.forEach { domain ->
-                                        DropdownMenuItem(
-                                            text = { Text(domain) },
-                                            onClick = {
-                                                selectedDomain = domain
-                                                domainMenuExpanded = false
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // No domains loaded (still loading, or the Worker's config genuinely has
-                    // none) — fall back to a plain free-text address so the flow isn't a dead end.
-                    OutlinedTextField(
-                        value = freeformEmail,
-                        onValueChange = { freeformEmail = it },
-                        label = { Text("Email address") },
-                        singleLine = true,
-                        enabled = !creating,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                if (errorMessage != null) {
-                    Text(
-                        text = errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        },
+        text = fields,
         confirmButton = {
-            TextButton(
-                onClick = { onCreate(email, name) },
-                enabled = !creating && canSubmit,
-            ) {
+            TextButton(onClick = onCreate, enabled = !creating && canSubmit) {
                 if (creating) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
@@ -488,4 +474,150 @@ private fun CreateMailboxDialog(
             TextButton(onClick = onDismiss, enabled = !creating) { Text("Cancel") }
         },
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateMailboxBottomSheet(
+    creating: Boolean,
+    canSubmit: Boolean,
+    onDismiss: () -> Unit,
+    onCreate: () -> Unit,
+    fields: @Composable () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+
+    ModalBottomSheet(
+        onDismissRequest = { if (!creating) onDismiss() },
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.AlternateEmail, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("New mailbox", style = MaterialTheme.typography.titleLarge)
+            }
+            fields()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.End),
+            ) {
+                TextButton(onClick = onDismiss, enabled = !creating) { Text("Cancel") }
+                Button(onClick = onCreate, enabled = !creating && canSubmit) {
+                    if (creating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text("Create")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The form fields shared by both the dialog (tablet) and bottom sheet (phone) containers, so
+ * they can never drift into two different-looking forms. */
+@Composable
+private fun CreateMailboxFields(
+    name: String,
+    onNameChange: (String) -> Unit,
+    localPart: String,
+    onLocalPartChange: (String) -> Unit,
+    freeformEmail: String,
+    onFreeformEmailChange: (String) -> Unit,
+    selectedDomain: String,
+    onDomainSelected: (String) -> Unit,
+    allowedDomains: List<String>,
+    hasDomains: Boolean,
+    domainMenuExpanded: Boolean,
+    onDomainMenuExpandedChange: (Boolean) -> Unit,
+    creating: Boolean,
+    errorMessage: String?,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = onNameChange,
+            label = { Text("Display name") },
+            singleLine = true,
+            enabled = !creating,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (hasDomains) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedTextField(
+                    value = localPart,
+                    onValueChange = onLocalPartChange,
+                    label = { Text("Address") },
+                    singleLine = true,
+                    enabled = !creating,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("@", style = MaterialTheme.typography.bodyLarge)
+                if (allowedDomains.size == 1) {
+                    Text(
+                        text = selectedDomain,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Box {
+                        TextButton(onClick = { if (!creating) onDomainMenuExpandedChange(true) }) {
+                            Text(selectedDomain)
+                        }
+                        DropdownMenu(
+                            expanded = domainMenuExpanded,
+                            onDismissRequest = { onDomainMenuExpandedChange(false) },
+                        ) {
+                            allowedDomains.forEach { domain ->
+                                DropdownMenuItem(
+                                    text = { Text(domain) },
+                                    onClick = {
+                                        onDomainSelected(domain)
+                                        onDomainMenuExpandedChange(false)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // No domains loaded (still loading, or the Worker's config genuinely has none) —
+            // fall back to a plain free-text address so the flow isn't a dead end.
+            OutlinedTextField(
+                value = freeformEmail,
+                onValueChange = onFreeformEmailChange,
+                label = { Text("Email address") },
+                singleLine = true,
+                enabled = !creating,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
