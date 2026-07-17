@@ -34,6 +34,6 @@ val viewModelModule = module {
         )
     }
     viewModel { (mailboxId: String) ->
-        SearchViewModel(get(), mailboxId)
+        SearchViewModel(get(), get(), mailboxId)
     }
 }
