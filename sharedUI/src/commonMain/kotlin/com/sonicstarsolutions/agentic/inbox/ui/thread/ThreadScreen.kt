@@ -72,6 +72,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
+import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlSanitizer
 import kotlin.time.Instant
@@ -396,7 +397,7 @@ private fun MessageCard(
                     )
                     if (!expanded) {
                         Text(
-                            text = ThreadTimeFormatter.formatCollapsedTime(message.date),
+                            text = EmailTimeFormatter.format(message.date),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

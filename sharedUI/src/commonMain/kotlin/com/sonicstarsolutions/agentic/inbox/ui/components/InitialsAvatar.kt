@@ -32,7 +32,7 @@ fun InitialsAvatar(
         .joinToString("") { it.first().uppercase() }
         .take(2)
 
-    val backgroundColor = AVATAR_COLORS[name.hashCode().absoluteValue % AVATAR_COLORS.size]
+    val (backgroundColor, contentColor) = AVATAR_COLORS[name.hashCode().absoluteValue % AVATAR_COLORS.size]
 
     Box(
         modifier = modifier
@@ -40,13 +40,24 @@ fun InitialsAvatar(
             .background(backgroundColor),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = initials, color = Color.White, style = textStyle)
+        Text(text = initials, color = contentColor, style = textStyle)
     }
 }
 
+/** Tonal container/on-container pairs (light ~tone-85 fill, dark ~tone-25 text of the same hue),
+ * fixed rather than theme-derived so a sender keeps one identity color in light and dark mode.
+ * Every pair clears WCAG AA (≥ 4.5:1) — the old flat palette put white text on lime. */
 private val AVATAR_COLORS = listOf(
-    Color(0xFFEF5350), Color(0xFFEC407A), Color(0xFFAB47BC),
-    Color(0xFF7E57C2), Color(0xFF5C6BC0), Color(0xFF42A5F5),
-    Color(0xFF29B6F6), Color(0xFF26C6DA), Color(0xFF26A69A),
-    Color(0xFF66BB6A), Color(0xFF9CCC65), Color(0xFFD4E157),
+    Color(0xFFFFDAD6) to Color(0xFF8C1D18), // red
+    Color(0xFFFFD8E4) to Color(0xFF7D2949), // pink
+    Color(0xFFEADDFF) to Color(0xFF4F378B), // purple
+    Color(0xFFE8DEF8) to Color(0xFF4A4458), // lavender
+    Color(0xFFDEE0FF) to Color(0xFF3F4796), // indigo
+    Color(0xFFD3E4FF) to Color(0xFF004A77), // blue
+    Color(0xFFC2E8FF) to Color(0xFF004D65), // cyan
+    Color(0xFFCCF7EF) to Color(0xFF00504A), // teal
+    Color(0xFFC4EED0) to Color(0xFF0F5223), // green
+    Color(0xFFDDEDC8) to Color(0xFF33531B), // olive
+    Color(0xFFFFDF9E) to Color(0xFF5C4200), // amber
+    Color(0xFFFFDBC8) to Color(0xFF723B16), // sienna
 )
