@@ -66,6 +66,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.ui.WindowWidthClass
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.windowWidthClassFor
@@ -131,7 +132,7 @@ fun MailboxPickerScreen(
 
         mailboxToDelete?.let { mailbox ->
             DeleteMailboxDialog(
-                mailboxName = mailbox.name,
+                mailboxName = mailbox.displayName,
                 deleting = state.deletingMailbox,
                 errorMessage = state.deleteMailboxError,
                 onDismiss = {
@@ -287,7 +288,7 @@ private fun MailboxPickerContent(
                 items(state.mailboxes, key = { it.id }) { mailbox ->
                     MailboxCard(
                         mailbox = mailbox,
-                        onClick = { onMailboxSelected(mailbox.id, mailbox.name) },
+                        onClick = { onMailboxSelected(mailbox.id, mailbox.displayName) },
                         onDelete = { onDeleteRequested(mailbox) },
                     )
                 }
@@ -315,12 +316,12 @@ private fun MailboxCard(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            InitialsAvatar(name = mailbox.name, modifier = Modifier.size(44.dp))
+            InitialsAvatar(name = mailbox.displayName, modifier = Modifier.size(44.dp))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text(mailbox.name, style = MaterialTheme.typography.titleMedium)
+                Text(mailbox.displayName, style = MaterialTheme.typography.titleMedium)
                 Text(
                     mailbox.email,
                     style = MaterialTheme.typography.bodyMedium,

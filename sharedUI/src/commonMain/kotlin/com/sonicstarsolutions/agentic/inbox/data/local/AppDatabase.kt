@@ -10,7 +10,7 @@ import androidx.sqlite.execSQL
 
 @Database(
     entities = [MailboxEntity::class, FolderEntity::class, EmailEntity::class, DraftEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -45,6 +45,14 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
                 "`updatedAt` INTEGER NOT NULL, " +
                 "PRIMARY KEY(`id`))",
         )
+    }
+}
+
+/** Adds the `fromName` column to `mailboxes` — a cache column, so a plain nullable `ADD COLUMN`
+ * is enough; there's no data to backfill, it just refills on the next fetch. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `mailboxes` ADD COLUMN `fromName` TEXT")
     }
 }
 

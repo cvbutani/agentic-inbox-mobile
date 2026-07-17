@@ -5,6 +5,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
@@ -77,6 +78,7 @@ class ThreadViewModelTest {
         setEmailStarred = SetEmailStarredUseCase(emailRepository),
         markThreadRead = MarkThreadReadUseCase(emailRepository),
         sendDraftEmail = SendDraftEmailUseCase(emailRepository, mailboxRepository),
+        getMailbox = GetMailboxUseCase(mailboxRepository),
         mailboxId = "mb1",
         emailId = "e1",
         threadId = threadId,
@@ -110,6 +112,31 @@ class ThreadViewModelTest {
         assertFalse(viewModel.state.value.loading)
         assertEquals(listOf(detail("e1"), detail("e2"), detail("e3")), viewModel.state.value.messages)
         assertEquals("e3", viewModel.state.value.expandedMessageId)
+    }
+
+    @Test
+    fun `loads the current mailbox's own email for the You substitution`() = runTest {
+        val repository = FakeThreadRepository(result = Result.success(listOf(detail("e1"))))
+        val mailboxRepository = FakeMailboxRepository().apply {
+            getMailboxResult = { Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me")) }
+        }
+
+        val viewModel = buildViewModel(repository, mailboxRepository = mailboxRepository)
+
+        assertEquals("me@example.dev", viewModel.state.value.mailboxEmail)
+    }
+
+    @Test
+    fun `a failed mailbox lookup leaves mailboxEmail null without surfacing an error`() = runTest {
+        val repository = FakeThreadRepository(result = Result.success(listOf(detail("e1"))))
+        val mailboxRepository = FakeMailboxRepository().apply {
+            getMailboxResult = { Result.failure(RuntimeException("offline")) }
+        }
+
+        val viewModel = buildViewModel(repository, mailboxRepository = mailboxRepository)
+
+        assertNull(viewModel.state.value.mailboxEmail)
+        assertNull(viewModel.state.value.errorMessage)
     }
 
     @Test

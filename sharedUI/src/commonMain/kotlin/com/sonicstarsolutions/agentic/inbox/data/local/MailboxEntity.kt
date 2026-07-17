@@ -8,4 +8,5 @@ data class MailboxEntity(
     @PrimaryKey val id: String,
     val email: String,
     val name: String,
+    val fromName: String? = null,
 )

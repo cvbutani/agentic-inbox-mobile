@@ -13,5 +13,5 @@ internal const val DATABASE_NAME = "agentic_inbox.db"
 internal fun RoomDatabase.Builder<AppDatabase>.buildWithDefaults(): AppDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()

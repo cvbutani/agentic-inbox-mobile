@@ -7,6 +7,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
@@ -33,6 +34,10 @@ data class ThreadUiState(
     val folders: List<Folder> = emptyList(),
     val actionInProgress: Boolean = false,
     val actionResult: ThreadActionResult? = null,
+    /** The signed-in mailbox's own address, for showing "You" instead of the raw address when a
+     * message's sender/recipient is this mailbox. Null until loaded, or if the lookup fails —
+     * that failure is silent since it only degrades a display nicety, not core thread loading. */
+    val mailboxEmail: String? = null,
 )
 
 class ThreadViewModel(
@@ -44,6 +49,7 @@ class ThreadViewModel(
     private val setEmailStarred: SetEmailStarredUseCase,
     private val markThreadRead: MarkThreadReadUseCase,
     private val sendDraftEmail: SendDraftEmailUseCase,
+    private val getMailbox: GetMailboxUseCase,
     private val mailboxId: String,
     private val emailId: String,
     private val threadId: String?,
@@ -55,6 +61,13 @@ class ThreadViewModel(
     init {
         loadThread()
         loadFolders()
+        loadMailboxEmail()
+    }
+
+    private fun loadMailboxEmail() {
+        viewModelScope.launch {
+            getMailbox(mailboxId).onSuccess { mailbox -> _state.update { it.copy(mailboxEmail = mailbox.email) } }
+        }
     }
 
     private fun loadThread() {

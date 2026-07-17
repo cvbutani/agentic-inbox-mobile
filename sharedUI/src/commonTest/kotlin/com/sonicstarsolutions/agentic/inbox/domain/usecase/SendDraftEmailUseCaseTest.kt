@@ -70,6 +70,21 @@ class SendDraftEmailUseCaseTest {
     }
 
     @Test
+    fun `send uses the mailbox's configured fromName over its plain name when set`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val mailboxRepository = FakeMailboxRepository().apply {
+            getMailboxResult = {
+                Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me", fromName = "Marketing Team"))
+            }
+        }
+        val useCase = buildUseCase(emailRepository, mailboxRepository)
+
+        useCase("mb1", draft(inReplyTo = "original1"))
+
+        assertEquals("Marketing Team", emailRepository.replyCalls.single().request.fromName)
+    }
+
+    @Test
     fun `a draft without inReplyTo sends via plain sendEmail`() = runTest {
         val emailRepository = FakeEmailRepository()
         val useCase = buildUseCase(emailRepository)

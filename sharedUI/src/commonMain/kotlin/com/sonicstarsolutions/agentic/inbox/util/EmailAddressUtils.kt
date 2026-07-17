@@ -17,4 +17,13 @@ object EmailAddressUtils {
             .filter { it.isNotEmpty() }
             .map { extractAddress(it) }
             .filter { it.isNotEmpty() }
+
+    /** What to show for a `"Name <addr@example.dev>"` (or plain address) header string: "You"
+     * when it's the current mailbox's own address, otherwise the parsed display name. */
+    fun displayName(raw: String, ownEmail: String?): String {
+        if (ownEmail != null && extractAddress(raw).equals(ownEmail, ignoreCase = true)) return "You"
+        val trimmed = raw.trim()
+        val start = trimmed.indexOf('<')
+        return if (start > 0) trimmed.substring(0, start).trim() else trimmed
+    }
 }

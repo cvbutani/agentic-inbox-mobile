@@ -49,4 +49,52 @@ class EmailAddressUtilsTest {
     fun `parseAddressList on a blank string returns an empty list`() {
         assertEquals(emptyList(), EmailAddressUtils.parseAddressList("   "))
     }
+
+    @Test
+    fun `displayName returns the parsed name for a Name less-than email greater-than string`() {
+        assertEquals(
+            "Alice",
+            EmailAddressUtils.displayName("Alice <alice@example.dev>", ownEmail = "me@example.dev"),
+        )
+    }
+
+    @Test
+    fun `displayName returns a plain address unchanged when there is no bracketed name`() {
+        assertEquals(
+            "alice@example.dev",
+            EmailAddressUtils.displayName("alice@example.dev", ownEmail = "me@example.dev"),
+        )
+    }
+
+    @Test
+    fun `displayName returns You when the address matches the owner's email`() {
+        assertEquals(
+            "You",
+            EmailAddressUtils.displayName("Me <me@example.dev>", ownEmail = "me@example.dev"),
+        )
+    }
+
+    @Test
+    fun `displayName matching is case-insensitive`() {
+        assertEquals(
+            "You",
+            EmailAddressUtils.displayName("Me <ME@Example.dev>", ownEmail = "me@example.dev"),
+        )
+    }
+
+    @Test
+    fun `displayName does not say You when ownEmail is null`() {
+        assertEquals(
+            "Me",
+            EmailAddressUtils.displayName("Me <me@example.dev>", ownEmail = null),
+        )
+    }
+
+    @Test
+    fun `displayName does not say You for a different address`() {
+        assertEquals(
+            "Alice",
+            EmailAddressUtils.displayName("Alice <alice@example.dev>", ownEmail = "me@example.dev"),
+        )
+    }
 }

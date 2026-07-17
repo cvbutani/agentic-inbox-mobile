@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.domain.usecase
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
+import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
@@ -25,7 +26,7 @@ class SendDraftEmailUseCase(
         val mailbox = mailboxRepository.getMailbox(mailboxId).getOrElse { return Result.failure(it) }
         val request = ComposeEmailRequest(
             fromEmail = mailbox.email,
-            fromName = mailbox.name,
+            fromName = mailbox.displayName,
             to = EmailAddressUtils.parseAddressList(draft.recipient),
             cc = EmailAddressUtils.parseAddressList(draft.cc.orEmpty()),
             bcc = EmailAddressUtils.parseAddressList(draft.bcc.orEmpty()),

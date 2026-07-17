@@ -71,9 +71,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlSanitizer
 import kotlin.time.Instant
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
@@ -232,6 +234,7 @@ fun ThreadScreen(
                         expanded = message.id == state.expandedMessageId,
                         imagesAllowed = state.imagesAllowedFor.contains(message.id),
                         actionInProgress = state.actionInProgress,
+                        mailboxEmail = state.mailboxEmail,
                         onToggleExpanded = { viewModel.toggleExpanded(message.id) },
                         onAllowImages = { viewModel.allowImages(message.id) },
                         onToggleStarred = { viewModel.toggleStarred(message.id) },
@@ -319,6 +322,7 @@ private fun MessageCard(
     expanded: Boolean,
     imagesAllowed: Boolean,
     actionInProgress: Boolean,
+    mailboxEmail: String?,
     onToggleExpanded: () -> Unit,
     onAllowImages: () -> Unit,
     onToggleStarred: () -> Unit,
@@ -329,61 +333,98 @@ private fun MessageCard(
     modifier: Modifier = Modifier,
 ) {
     val isDraft = message.folderId == SystemFolders.DRAFT
+    val fromText = EmailAddressUtils.displayName(message.sender, mailboxEmail)
+    val toText = EmailAddressUtils.displayName(message.recipient, mailboxEmail)
 
     Surface(
         modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggleExpanded)
                     .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = parseDisplayName(message.sender),
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (isDraft) {
-                            DraftLabel()
+                // Line 1: from, then (collapsed only) the star, then the expand/collapse chevron.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = fromText,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (isDraft) {
+                        DraftLabel()
+                    }
+                    if (!expanded) {
+                        IconButton(onClick = onToggleStarred, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = if (message.starred) "Unstar" else "Star",
+                                tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
                         }
                     }
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                // Line 2: to, then (collapsed only) the time — the full date moves to its own line
+                // once expanded, alongside the star.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        text = "to ${parseDisplayName(message.recipient)}",
+                        text = "to $toText",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
+                    if (!expanded) {
+                        Text(
+                            text = formatTime(message.date),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                Text(
-                    text = formatDateTime(message.date),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                IconButton(onClick = onToggleStarred, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = if (message.starred) "Unstar" else "Star",
-                        tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
+
+                // Line 3 (expanded only): the full date and time, with the star moved down here.
+                if (expanded) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = formatDateTime(message.date),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = onToggleStarred, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = if (message.starred) "Unstar" else "Star",
+                                tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
                 }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             if (expanded) {
@@ -488,13 +529,25 @@ private val MONTH_ABBREVIATIONS = arrayOf(
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 )
 
+private fun formatClockTime(local: LocalDateTime): String {
+    val hour12 = when (val hour = local.hour % 12) { 0 -> 12; else -> hour }
+    val amPm = if (local.hour < 12) "AM" else "PM"
+    val minute = local.minute.toString().padStart(2, '0')
+    return "$hour12:$minute $amPm"
+}
+
 private fun formatDateTime(dateString: String): String {
     return try {
         val local = Instant.parse(dateString).toLocalDateTime(TimeZone.currentSystemDefault())
-        val hour12 = when (val hour = local.hour % 12) { 0 -> 12; else -> hour }
-        val amPm = if (local.hour < 12) "AM" else "PM"
-        val minute = local.minute.toString().padStart(2, '0')
-        "${MONTH_ABBREVIATIONS[local.month.ordinal]} ${local.day}, ${local.year}, $hour12:$minute $amPm"
+        "${MONTH_ABBREVIATIONS[local.month.ordinal]} ${local.day}, ${local.year}, ${formatClockTime(local)}"
+    } catch (e: Exception) {
+        dateString.take(10)
+    }
+}
+
+private fun formatTime(dateString: String): String {
+    return try {
+        formatClockTime(Instant.parse(dateString).toLocalDateTime(TimeZone.currentSystemDefault()))
     } catch (e: Exception) {
         dateString.take(10)
     }
@@ -534,14 +587,6 @@ private fun AttachmentChip(attachment: EmailAttachment) {
             )
         },
     )
-}
-
-private fun parseDisplayName(address: String): String {
-    val angleBracketIndex = address.indexOf('<')
-    if (angleBracketIndex > 0) {
-        return address.substring(0, angleBracketIndex).trim()
-    }
-    return address
 }
 
 private fun Color.toCssHex(): String {

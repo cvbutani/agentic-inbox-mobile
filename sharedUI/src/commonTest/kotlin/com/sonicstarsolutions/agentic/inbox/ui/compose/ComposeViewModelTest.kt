@@ -200,6 +200,22 @@ class ComposeViewModelTest {
     }
 
     @Test
+    fun `send uses the mailbox's configured fromName over its plain name when set`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val mailboxRepository = FakeMailboxRepository().apply {
+            getMailboxResult = {
+                Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me", fromName = "Marketing Team"))
+            }
+        }
+        val viewModel = buildViewModel(ComposeMode.NEW, emailRepository = emailRepository, mailboxRepository = mailboxRepository)
+        viewModel.onToChanged("bob@example.dev")
+
+        viewModel.send()
+
+        assertEquals("Marketing Team", emailRepository.sendCalls.single().request.fromName)
+    }
+
+    @Test
     fun `send in Reply mode calls replyEmail for the original email id`() = runTest {
         val emailRepository = FakeEmailRepository()
         val viewModel = buildViewModel(ComposeMode.REPLY, emailId = "e1", threadId = "t1", emailRepository = emailRepository)

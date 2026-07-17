@@ -179,6 +179,75 @@ class MailboxRepositoryImplTest {
     }
 
     @Test
+    fun `getMailbox parses settings fromName into the domain model`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"mb1","email":"a@example.dev","name":"mb1","settings":{"fromName":"Marketing Team","forwarding":{"enabled":false,"email":""}}}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
+
+        val result = repository.getMailbox("mb1")
+
+        assertEquals("Marketing Team", result.getOrThrow().fromName)
+    }
+
+    @Test
+    fun `getMailbox leaves fromName null when settings omits it`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"mb1","email":"a@example.dev","name":"mb1","settings":{"forwarding":{"enabled":false,"email":""}}}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
+
+        val result = repository.getMailbox("mb1")
+
+        assertEquals(null, result.getOrThrow().fromName)
+    }
+
+    @Test
+    fun `getMailbox caches the fetched mailbox including fromName`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"mb1","email":"a@example.dev","name":"mb1","settings":{"fromName":"Marketing Team"}}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val dao = FakeMailboxDao()
+        val repository = MailboxRepositoryImpl(apiFor(engine), dao)
+
+        repository.getMailbox("mb1")
+
+        assertEquals("Marketing Team", dao.getAll().single().fromName)
+    }
+
+    @Test
+    fun `getMailboxes preserves a previously cached fromName when the list endpoint omits it`() = runTest {
+        val dao = FakeMailboxDao()
+        dao.upsertAll(listOf(MailboxEntity(id = "mb1", email = "a@example.dev", name = "mb1", fromName = "Marketing Team")))
+        val engine = MockEngine { _ ->
+            respond(
+                // The list endpoint never includes `settings`, so this dto has no fromName of its own.
+                content = """[{"id":"mb1","email":"a@example.dev","name":"mb1"}]""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine), dao)
+
+        val result = repository.getMailboxes()
+
+        assertEquals("Marketing Team", result.getOrThrow().single().fromName)
+        assertEquals("Marketing Team", dao.getAll().single().fromName)
+    }
+
+    @Test
     fun `getMailboxes caches the network result on success`() = runTest {
         val engine = MockEngine { _ ->
             respond(

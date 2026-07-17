@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
+import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
@@ -108,7 +109,7 @@ class ComposeViewModel(
         viewModelScope.launch {
             getMailbox(mailboxId).onSuccess { mailbox ->
                 fromEmail = mailbox.email
-                fromName = mailbox.name
+                fromName = mailbox.displayName
             }
             val resumed = draftId?.let { getDraftUseCase(it) }
             if (resumed != null) {

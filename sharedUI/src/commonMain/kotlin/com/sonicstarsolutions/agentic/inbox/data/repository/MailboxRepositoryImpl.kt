@@ -8,6 +8,9 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class MailboxRepositoryImpl(
     private val api: AgenticInboxApi,
@@ -15,11 +18,17 @@ class MailboxRepositoryImpl(
 ) : MailboxRepository {
     override suspend fun getMailboxes(): Result<List<Mailbox>> {
         val networkResult = safeApiCall { api.listMailboxes().map { it.toDomain() } }
-        networkResult.onSuccess { mailboxes ->
+        val mailboxes = networkResult.getOrNull()
+        if (mailboxes != null) {
+            // The list endpoint never sends `settings`, so every dto here has a null fromName —
+            // carry forward whatever a previous single-mailbox GET already cached instead of
+            // wiping it out on every refresh.
+            val cachedFromNames = mailboxDao.getAll().associate { it.id to it.fromName }
+            val merged = mailboxes.map { it.copy(fromName = it.fromName ?: cachedFromNames[it.id]) }
             mailboxDao.deleteAll()
-            mailboxDao.upsertAll(mailboxes.map { it.toEntity() })
+            mailboxDao.upsertAll(merged.map { it.toEntity() })
+            return Result.success(merged)
         }
-        if (networkResult.isSuccess) return networkResult
 
         val cached = mailboxDao.getAll().map { it.toDomain() }
         return if (cached.isNotEmpty()) Result.success(cached) else networkResult
@@ -33,6 +42,7 @@ class MailboxRepositoryImpl(
 
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> =
         safeApiCall { api.getMailbox(mailboxId).toDomain() }
+            .onSuccess { mailboxDao.upsertAll(listOf(it.toEntity())) }
 
     override suspend fun deleteMailbox(mailboxId: String): Result<Unit> =
         safeApiCall { api.deleteMailbox(mailboxId) }
@@ -40,8 +50,13 @@ class MailboxRepositoryImpl(
     override suspend fun clearCache() = mailboxDao.deleteAll()
 }
 
-private fun MailboxDto.toDomain(): Mailbox = Mailbox(id = id, email = email, name = name)
+private fun MailboxDto.toDomain(): Mailbox = Mailbox(
+    id = id,
+    email = email,
+    name = name,
+    fromName = settings?.jsonObject?.get("fromName")?.jsonPrimitive?.contentOrNull,
+)
 
-private fun Mailbox.toEntity(): MailboxEntity = MailboxEntity(id = id, email = email, name = name)
+private fun Mailbox.toEntity(): MailboxEntity = MailboxEntity(id = id, email = email, name = name, fromName = fromName)
 
-private fun MailboxEntity.toDomain(): Mailbox = Mailbox(id = id, email = email, name = name)
+private fun MailboxEntity.toDomain(): Mailbox = Mailbox(id = id, email = email, name = name, fromName = fromName)
