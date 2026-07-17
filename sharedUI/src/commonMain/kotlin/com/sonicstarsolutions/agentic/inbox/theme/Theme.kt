@@ -99,6 +99,7 @@ internal fun AppTheme(
         onThemeChanged(!isDark)
         MaterialTheme(
             colorScheme = if (isDark) DarkColorScheme else LightColorScheme,
+            typography = appTypography(),
             content = { Surface(content = content) }
         )
     }
