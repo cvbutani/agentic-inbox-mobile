@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,24 +14,41 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,12 +58,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
-import com.sonicstarsolutions.agentic.inbox.ui.components.SectionTitle
+import com.sonicstarsolutions.agentic.inbox.ui.WindowWidthClass
+import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
+import com.sonicstarsolutions.agentic.inbox.ui.windowWidthClassFor
 import org.koin.compose.viewmodel.koinViewModel
 
+/** Content stops growing past this width on tablets — a grid of cards spaced across a full
+ * landscape tablet width reads as sparse, not spacious. */
+private val CONTENT_MAX_WIDTH = 960.dp
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MailboxPickerScreen(
     onMailboxSelected: (mailboxId: String, mailboxName: String) -> Unit,
@@ -106,53 +132,158 @@ fun MailboxPickerScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text("Mailboxes") },
+                actions = {
+                    IconButton(onClick = viewModel::signOut) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+            )
+        },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showCreateDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "New mailbox")
-            }
+            ExtendedFloatingActionButton(
+                onClick = { showCreateDialog = true },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("New mailbox") },
+            )
         },
     ) { scaffoldPadding ->
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Column(
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(contentPadding)
-                .padding(scaffoldPadding)
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(scaffoldPadding),
         ) {
-            SectionTitle("Your mailboxes")
-            TextButton(onClick = viewModel::signOut) { Text("Sign out") }
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val widthClass = windowWidthClassFor(maxWidth)
+                val horizontalPadding = if (widthClass == WindowWidthClass.COMPACT) 16.dp else 24.dp
 
-            when {
-                state.loading -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator() }
-
-                state.errorMessage != null -> Text(
-                    state.errorMessage!!,
-                    color = MaterialTheme.colorScheme.error,
-                )
-
-                state.mailboxes.isEmpty() -> Text("No mailboxes yet.")
-
-                else -> LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    items(state.mailboxes, key = { it.id }) { mailbox ->
-                        MailboxCard(
-                            mailbox = mailbox,
-                            onClick = { onMailboxSelected(mailbox.id, mailbox.name) },
-                            onDelete = { mailboxToDelete = mailbox },
-                        )
-                    }
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                    MailboxPickerContent(
+                        state = state,
+                        onRefresh = viewModel::refresh,
+                        onMailboxSelected = onMailboxSelected,
+                        onDeleteRequested = { mailboxToDelete = it },
+                        onCreateRequested = { showCreateDialog = true },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (widthClass == WindowWidthClass.COMPACT) {
+                                    Modifier
+                                } else {
+                                    // On a wide window a full-bleed grid reads as sparse; capping
+                                    // and centering it makes the tablet layout feel deliberate
+                                    // rather than a phone layout stretched to fit.
+                                    Modifier.widthIn(max = CONTENT_MAX_WIDTH)
+                                },
+                            )
+                            .padding(horizontal = horizontalPadding),
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun MailboxPickerContent(
+    state: MailboxPickerUiState,
+    onRefresh: () -> Unit,
+    onMailboxSelected: (mailboxId: String, mailboxName: String) -> Unit,
+    onDeleteRequested: (Mailbox) -> Unit,
+    onCreateRequested: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when {
+        state.loading && state.mailboxes.isEmpty() -> Box(
+            modifier = modifier,
+            contentAlignment = Alignment.Center,
+        ) { CircularProgressIndicator() }
+
+        state.errorMessage != null && state.mailboxes.isEmpty() -> Box(
+            modifier = modifier
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(48.dp),
+                )
+                Text(
+                    text = state.errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                OutlinedButton(onClick = onRefresh) { Text("Retry") }
+            }
+        }
+
+        state.mailboxes.isEmpty() -> Box(
+            modifier = modifier
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Inbox,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(64.dp),
+                )
+                Text(
+                    text = "No mailboxes yet",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Create one to start reading and sending mail through your Worker.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                )
+                Button(onClick = onCreateRequested) { Text("New mailbox") }
+            }
+        }
+
+        else -> PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = onRefresh,
+            modifier = modifier,
+        ) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 280.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(state.mailboxes, key = { it.id }) { mailbox ->
+                    MailboxCard(
+                        mailbox = mailbox,
+                        onClick = { onMailboxSelected(mailbox.id, mailbox.name) },
+                        onDelete = { onDeleteRequested(mailbox) },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -165,32 +296,42 @@ private fun MailboxCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    Box {
-        ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = onClick, onLongClick = { showMenu = true }),
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = { showMenu = true }),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    mailbox.name,
-                    style = MaterialTheme.typography.titleMedium,
-                )
+            InitialsAvatar(name = mailbox.name, modifier = Modifier.size(44.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(mailbox.name, style = MaterialTheme.typography.titleMedium)
                 Text(
                     mailbox.email,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-            DropdownMenuItem(
-                text = { Text("Delete") },
-                onClick = {
-                    showMenu = false
-                    onDelete()
-                },
-            )
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Mailbox options")
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            showMenu = false
+                            onDelete()
+                        },
+                    )
+                }
+            }
         }
     }
 }
@@ -205,6 +346,7 @@ private fun DeleteMailboxDialog(
 ) {
     AlertDialog(
         onDismissRequest = { if (!deleting) onDismiss() },
+        icon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
         title = { Text("Delete mailbox") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -254,6 +396,7 @@ private fun CreateMailboxDialog(
 
     AlertDialog(
         onDismissRequest = { if (!creating) onDismiss() },
+        icon = { Icon(Icons.Outlined.AlternateEmail, contentDescription = null) },
         title = { Text("New mailbox") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.Star
@@ -24,14 +23,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
-import kotlin.math.absoluteValue
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
@@ -83,8 +79,8 @@ fun EmailListItem(
                         modifier = Modifier.size(40.dp),
                     )
                 } else {
-                    SenderAvatar(
-                        sender = email.sender,
+                    InitialsAvatar(
+                        name = parseDisplayName(email.sender),
                         modifier = Modifier.size(40.dp),
                     )
                 }
@@ -162,41 +158,6 @@ fun EmailListItem(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun SenderAvatar(
-    sender: String,
-    modifier: Modifier = Modifier,
-) {
-    val initials = parseDisplayName(sender)
-        .split(" ")
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercase() }
-        .take(2)
-
-    val colors = listOf(
-        0xFFEF5350.toInt(), 0xFFEC407A.toInt(), 0xFFAB47BC.toInt(),
-        0xFF7E57C2.toInt(), 0xFF5C6BC0.toInt(), 0xFF42A5F5.toInt(),
-        0xFF29B6F6.toInt(), 0xFF26C6DA.toInt(), 0xFF26A69A.toInt(),
-        0xFF66BB6A.toInt(), 0xFF9CCC65.toInt(), 0xFFD4E157.toInt(),
-    )
-    val colorIndex = sender.hashCode().absoluteValue % colors.size
-    val backgroundColor = Color(colors[colorIndex])
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(backgroundColor),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = initials,
-            color = Color.White,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-        )
     }
 }
 
