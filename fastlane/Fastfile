@@ -1,0 +1,69 @@
+# Paths in this file are relative to the fastlane/ directory, hence the "../" prefixes.
+# Secret material (keystore, certs, API keys) is passed in via env vars from CI.
+
+ANDROID_PACKAGE_NAME = "com.sonicstarsolutions.agentic.inbox.androidApp"
+IOS_BUNDLE_ID = "com.sonicstarsolutions.agentic.inbox.iosApp"
+
+platform :android do
+  desc "Upload the already-built release AAB to the Play Store internal track"
+  lane :internal do
+    upload_to_play_store(
+      package_name: ANDROID_PACKAGE_NAME,
+      track: "internal",
+      aab: "../androidApp/build/outputs/bundle/release/androidApp-release.aab",
+      json_key: ENV.fetch("PLAY_STORE_JSON_KEY_PATH"),
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end
+
+platform :ios do
+  desc "Build the iOS app; upload to TestFlight when DEPLOY_TESTFLIGHT=true"
+  lane :beta do
+    setup_ci # creates a temporary keychain on the CI runner
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_KEY_CONTENT"),
+      is_key_content_base64: true
+    )
+
+    import_certificate(
+      certificate_path: ENV.fetch("IOS_CERT_PATH"),
+      certificate_password: ENV.fetch("IOS_CERT_PASSWORD"),
+      keychain_name: "fastlane_tmp_keychain",
+      keychain_password: ""
+    )
+
+    install_provisioning_profile(path: ENV.fetch("IOS_PROFILE_PATH"))
+
+    update_code_signing_settings(
+      path: "../iosApp/iosApp.xcodeproj",
+      use_automatic_signing: false,
+      team_id: ENV.fetch("APPLE_TEAM_ID"),
+      code_sign_identity: "Apple Distribution",
+      profile_name: ENV.fetch("IOS_PROFILE_NAME"),
+      bundle_identifier: IOS_BUNDLE_ID
+    )
+
+    build_app(
+      project: "../iosApp/iosApp.xcodeproj",
+      scheme: "iosApp",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "../build/ios",
+      output_name: "AgenticInbox.ipa"
+    )
+
+    if ENV["DEPLOY_TESTFLIGHT"] == "true"
+      upload_to_testflight(
+        api_key: api_key,
+        app_identifier: IOS_BUNDLE_ID,
+        skip_waiting_for_build_processing: true
+      )
+    end
+  end
+end

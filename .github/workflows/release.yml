@@ -1,0 +1,158 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    # The branch is chosen in the "Run workflow" dropdown (Use workflow from).
+    inputs:
+      version_bump:
+        description: "Version bump"
+        type: choice
+        options: [major, minor, bugfix, none]
+        default: bugfix
+      platform:
+        description: "Platform to build"
+        type: choice
+        options: [both, android, ios]
+        default: both
+      deploy:
+        description: "Upload to Play internal track / TestFlight"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Bump version
+    runs-on: ubuntu-latest
+    outputs:
+      version-name: ${{ steps.bump.outputs.versionName }}
+      version-code: ${{ steps.bump.outputs.versionCode }}
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump version (${{ inputs.version_bump }})
+        id: bump
+        run: bash scripts/bump_version.sh "${{ inputs.version_bump }}"
+
+      - name: Commit and push version bump
+        if: inputs.version_bump != 'none'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "ci: bump version to ${{ steps.bump.outputs.versionName }} (${{ steps.bump.outputs.versionCode }})"
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: Record build commit
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  android:
+    name: Android (AAB)
+    if: inputs.platform != 'ios'
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
+      - name: Build release bundle
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :androidApp:bundleRelease
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidApp-${{ needs.version.outputs.version-name }}-${{ needs.version.outputs.version-code }}.aab
+          path: androidApp/build/outputs/bundle/release/androidApp-release.aab
+
+      - uses: ruby/setup-ruby@v1
+        if: inputs.deploy
+        with:
+          ruby-version: "3.3"
+
+      - name: Install fastlane
+        if: inputs.deploy
+        run: bundle install
+
+      - name: Upload to Play Store internal track
+        if: inputs.deploy
+        env:
+          PLAY_STORE_JSON_KEY_BASE64: ${{ secrets.PLAY_STORE_JSON_KEY_BASE64 }}
+        run: |
+          echo "$PLAY_STORE_JSON_KEY_BASE64" | base64 -d > "$RUNNER_TEMP/play-store-key.json"
+          PLAY_STORE_JSON_KEY_PATH="$RUNNER_TEMP/play-store-key.json" bundle exec fastlane android internal
+
+  ios:
+    name: iOS (IPA)
+    if: inputs.platform != 'android'
+    needs: version
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Install fastlane
+        run: bundle install
+
+      - name: Decode signing assets
+        env:
+          IOS_CERT_BASE64: ${{ secrets.IOS_CERT_BASE64 }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+        run: |
+          echo "$IOS_CERT_BASE64" | base64 -d > "$RUNNER_TEMP/distribution.p12"
+          echo "$IOS_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/appstore.mobileprovision"
+
+      - name: Build (and optionally upload to TestFlight)
+        env:
+          IOS_CERT_PATH: ${{ runner.temp }}/distribution.p12
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          IOS_PROFILE_PATH: ${{ runner.temp }}/appstore.mobileprovision
+          IOS_PROFILE_NAME: ${{ secrets.IOS_PROFILE_NAME }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          DEPLOY_TESTFLIGHT: ${{ inputs.deploy }}
+        run: bundle exec fastlane ios beta
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iosApp-${{ needs.version.outputs.version-name }}-${{ needs.version.outputs.version-code }}.ipa
+          path: build/ios/AgenticInbox.ipa
