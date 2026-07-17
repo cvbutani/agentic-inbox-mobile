@@ -2,11 +2,14 @@ package com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearLocalCacheUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeCredentialsRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -47,9 +50,12 @@ class MailboxPickerViewModelTest {
     private fun buildViewModel(
         mailboxRepository: FakeMailboxRepository = FakeMailboxRepository(),
         credentialsRepository: FakeCredentialsRepository = FakeCredentialsRepository(),
+        folderRepository: FakeFolderRepository = FakeFolderRepository(),
+        emailRepository: FakeEmailRepository = FakeEmailRepository(),
     ): MailboxPickerViewModel = MailboxPickerViewModel(
         getMailboxes = GetMailboxesUseCase(mailboxRepository),
         clearCredentials = ClearCredentialsUseCase(credentialsRepository),
+        clearLocalCache = ClearLocalCacheUseCase(mailboxRepository, folderRepository, emailRepository),
         createMailboxUseCase = CreateMailboxUseCase(mailboxRepository),
         getAllowedDomains = GetAllowedDomainsUseCase(mailboxRepository),
         deleteMailboxUseCase = DeleteMailboxUseCase(mailboxRepository),
@@ -87,6 +93,27 @@ class MailboxPickerViewModelTest {
         viewModel.signOut()
 
         assertTrue(viewModel.state.value.signedOut)
+    }
+
+    @Test
+    fun `signOut also clears the local mailbox folder and email cache`() = runTest {
+        // Otherwise a different account signing in on this device would read the previous
+        // account's mail straight out of the offline cache before its first refresh completes.
+        val mailboxRepository = FakeMailboxRepository()
+        val folderRepository = FakeFolderRepository()
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(
+            mailboxRepository = mailboxRepository,
+            folderRepository = folderRepository,
+            emailRepository = emailRepository,
+        )
+        viewModel.awaitLoaded()
+
+        viewModel.signOut()
+
+        assertTrue(mailboxRepository.clearCacheCalled)
+        assertTrue(folderRepository.clearCacheCalled)
+        assertTrue(emailRepository.clearCacheCalled)
     }
 
     @Test

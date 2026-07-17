@@ -14,4 +14,7 @@ interface FolderDao {
 
     @Query("DELETE FROM folders WHERE mailboxId = :mailboxId")
     suspend fun deleteForMailbox(mailboxId: String)
+
+    @Query("DELETE FROM folders")
+    suspend fun deleteAll()
 }

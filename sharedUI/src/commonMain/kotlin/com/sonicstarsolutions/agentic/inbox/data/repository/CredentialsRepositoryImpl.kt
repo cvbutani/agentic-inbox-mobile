@@ -20,6 +20,10 @@ class CredentialsRepositoryImpl(
     private val _state = MutableStateFlow(Credentials())
     override val state: StateFlow<Credentials> = _state.asStateFlow()
 
+    override suspend fun stage(credentials: Credentials) {
+        _state.update { credentials }
+    }
+
     override suspend fun save(credentials: Credentials) {
         ksafe.put(KEY_CREDENTIALS, credentials)
         _state.update { credentials }

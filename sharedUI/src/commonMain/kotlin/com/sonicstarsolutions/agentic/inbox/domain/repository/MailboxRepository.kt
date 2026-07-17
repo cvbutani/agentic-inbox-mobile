@@ -13,4 +13,9 @@ interface MailboxRepository {
     suspend fun getMailbox(mailboxId: String): Result<Mailbox>
 
     suspend fun deleteMailbox(mailboxId: String): Result<Unit>
+
+    /** Wipes the locally cached mailbox list — the offline-read mirror, not anything server-side.
+     * Used on sign-out so a different account signing in on this device never reads the previous
+     * account's cache through [getMailboxes]'s offline fallback. */
+    suspend fun clearCache()
 }

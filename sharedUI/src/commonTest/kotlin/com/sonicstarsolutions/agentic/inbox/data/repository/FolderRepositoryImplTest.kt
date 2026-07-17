@@ -274,4 +274,22 @@ class FolderRepositoryImplTest {
 
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `clearCache empties the cached folder table for every mailbox`() = runTest {
+        val dao = FakeFolderDao()
+        dao.upsertAll(
+            listOf(
+                FolderEntity(mailboxId = "mb1", id = "work", name = "Work", unreadCount = 0, isSystem = false),
+                FolderEntity(mailboxId = "mb2", id = "receipts", name = "Receipts", unreadCount = 0, isSystem = false),
+            ),
+        )
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = FolderRepositoryImpl(apiFor(engine), dao)
+
+        repository.clearCache()
+
+        assertTrue(dao.getForMailbox("mb1").isEmpty())
+        assertTrue(dao.getForMailbox("mb2").isEmpty())
+    }
 }

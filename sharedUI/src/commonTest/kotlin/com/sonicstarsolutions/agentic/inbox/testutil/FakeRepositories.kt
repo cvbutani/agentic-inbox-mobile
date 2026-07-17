@@ -27,6 +27,13 @@ class FakeCredentialsRepository(
     private val _state = MutableStateFlow(Credentials())
     override val state: StateFlow<Credentials> = _state.asStateFlow()
 
+    val stageCalls = mutableListOf<Credentials>()
+
+    override suspend fun stage(credentials: Credentials) {
+        stageCalls += credentials
+        _state.value = credentials
+    }
+
     override suspend fun save(credentials: Credentials) {
         stored = credentials
         _state.value = credentials
@@ -83,6 +90,12 @@ class FakeFolderRepository(
         deleteGate?.await()
         return deleteResult
     }
+
+    var clearCacheCalled: Boolean = false
+
+    override suspend fun clearCache() {
+        clearCacheCalled = true
+    }
 }
 
 class FakeMailboxRepository(
@@ -125,6 +138,12 @@ class FakeMailboxRepository(
         deleteCalls += mailboxId
         deleteGate?.await()
         return deleteResult
+    }
+
+    var clearCacheCalled: Boolean = false
+
+    override suspend fun clearCache() {
+        clearCacheCalled = true
     }
 }
 
@@ -232,6 +251,12 @@ class FakeEmailRepository(
         forwardCalls += ForwardCall(mailboxId, emailId, request)
         sendGate?.await()
         return forwardResult
+    }
+
+    var clearCacheCalled: Boolean = false
+
+    override suspend fun clearCache() {
+        clearCacheCalled = true
     }
 }
 

@@ -590,4 +590,22 @@ class EmailRepositoryImplTest {
 
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `clearCache empties the cached email table for every mailbox and folder`() = runTest {
+        val dao = FakeEmailDao()
+        dao.upsertAll(
+            listOf(
+                EmailEntity(mailboxId = "mb1", id = "e1", folderId = "inbox", subject = "A", sender = "a", recipient = "b", date = "2026-07-16T00:00:00Z", read = true, starred = false, threadId = null, snippet = null, threadUnreadCount = 0),
+                EmailEntity(mailboxId = "mb2", id = "e2", folderId = "sent", subject = "B", sender = "a", recipient = "b", date = "2026-07-16T00:00:00Z", read = true, starred = false, threadId = null, snippet = null, threadUnreadCount = 0),
+            ),
+        )
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        repository.clearCache()
+
+        assertTrue(dao.getForFolder("mb1", "inbox").isEmpty())
+        assertTrue(dao.getForFolder("mb2", "sent").isEmpty())
+    }
 }

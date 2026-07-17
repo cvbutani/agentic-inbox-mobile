@@ -53,6 +53,8 @@ class FolderRepositoryImpl(
 
     override suspend fun deleteFolder(mailboxId: String, folderId: String): Result<Unit> =
         safeApiCall { api.deleteFolder(mailboxId, folderId) }
+
+    override suspend fun clearCache() = folderDao.deleteAll()
 }
 
 private fun Folder.toEntity(mailboxId: String): FolderEntity =

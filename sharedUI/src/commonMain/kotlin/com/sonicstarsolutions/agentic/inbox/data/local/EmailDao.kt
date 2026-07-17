@@ -14,4 +14,7 @@ interface EmailDao {
 
     @Query("DELETE FROM emails WHERE mailboxId = :mailboxId AND folderId = :folderId")
     suspend fun deleteForFolder(mailboxId: String, folderId: String)
+
+    @Query("DELETE FROM emails")
+    suspend fun deleteAll()
 }

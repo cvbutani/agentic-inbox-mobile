@@ -6,6 +6,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.LoadCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.StageCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ValidateConnectionUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +25,7 @@ data class OnboardingUiState(
 
 class OnboardingViewModel(
     private val saveCredentials: SaveCredentialsUseCase,
+    private val stageCredentials: StageCredentialsUseCase,
     private val validateConnection: ValidateConnectionUseCase,
     private val observeCredentials: ObserveCredentialsUseCase,
     private val loadCredentials: LoadCredentialsUseCase,
@@ -66,9 +68,16 @@ class OnboardingViewModel(
                 clientId = current.clientId.trim(),
                 clientSecret = current.clientSecret.trim(),
             )
-            saveCredentials(credentials)
+            // Staged (in-memory only) rather than saved: the HTTP client reads the repository's
+            // live state to build this very request, so it needs the candidate credentials before
+            // validateConnection() can even attempt a connection with them. They only become
+            // durably persisted below, once the attempt has actually succeeded — otherwise a
+            // rejected worker URL/token would sit in storage, and the next cold launch would read
+            // it back as "complete" and route straight past Onboarding to the mailbox picker.
+            stageCredentials(credentials)
             validateConnection()
                 .onSuccess {
+                    saveCredentials(credentials)
                     _state.update { it.copy(validating = false, saved = true) }
                 }
                 .onFailure { t ->

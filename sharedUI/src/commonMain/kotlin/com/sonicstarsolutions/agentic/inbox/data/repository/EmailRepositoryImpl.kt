@@ -91,6 +91,8 @@ class EmailRepositoryImpl(
 
     override suspend fun forwardEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> =
         safeApiCall { api.forwardEmail(mailboxId, emailId, request.toDto()) }.map {}
+
+    override suspend fun clearCache() = emailDao.deleteAll()
 }
 
 private fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequestDto(

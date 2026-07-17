@@ -259,4 +259,16 @@ class MailboxRepositoryImplTest {
 
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `clearCache empties the cached mailbox table`() = runTest {
+        val dao = FakeMailboxDao()
+        dao.upsertAll(listOf(MailboxEntity(id = "mb1", email = "a@example.dev", name = "Alice")))
+        val engine = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = MailboxRepositoryImpl(apiFor(engine), dao)
+
+        repository.clearCache()
+
+        assertTrue(dao.getAll().isEmpty())
+    }
 }

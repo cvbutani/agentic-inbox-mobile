@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.di
 
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearLocalCacheUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
@@ -28,6 +29,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.StageCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ValidateConnectionUseCase
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -35,7 +37,9 @@ import org.koin.dsl.module
 val useCaseModule = module {
     singleOf(::ObserveCredentialsUseCase)
     singleOf(::SaveCredentialsUseCase)
+    singleOf(::StageCredentialsUseCase)
     singleOf(::ClearCredentialsUseCase)
+    singleOf(::ClearLocalCacheUseCase)
     singleOf(::LoadCredentialsUseCase)
     singleOf(::ValidateConnectionUseCase)
     singleOf(::GetMailboxesUseCase)

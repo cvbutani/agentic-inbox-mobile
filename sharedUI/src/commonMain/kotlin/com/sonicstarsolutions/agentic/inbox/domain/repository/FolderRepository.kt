@@ -12,4 +12,7 @@ interface FolderRepository {
     suspend fun renameFolder(mailboxId: String, folderId: String, name: String): Result<Folder>
 
     suspend fun deleteFolder(mailboxId: String, folderId: String): Result<Unit>
+
+    /** Wipes every locally cached folder for every mailbox. See [MailboxRepository.clearCache]. */
+    suspend fun clearCache()
 }

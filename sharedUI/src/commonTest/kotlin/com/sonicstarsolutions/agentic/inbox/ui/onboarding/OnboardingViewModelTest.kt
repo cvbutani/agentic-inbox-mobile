@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.LoadCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.StageCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ValidateConnectionUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeCredentialsRepository
@@ -39,6 +40,7 @@ class OnboardingViewModelTest {
         connectionRepository: FakeConnectionRepository = FakeConnectionRepository(),
     ): OnboardingViewModel = OnboardingViewModel(
         saveCredentials = SaveCredentialsUseCase(credentialsRepository),
+        stageCredentials = StageCredentialsUseCase(credentialsRepository),
         validateConnection = ValidateConnectionUseCase(connectionRepository),
         observeCredentials = ObserveCredentialsUseCase(credentialsRepository),
         loadCredentials = LoadCredentialsUseCase(credentialsRepository),
@@ -94,6 +96,45 @@ class OnboardingViewModelTest {
         assertEquals("unreachable", viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.saved)
         assertFalse(viewModel.state.value.validating)
+    }
+
+    @Test
+    fun `a failed connection never persists the credentials that were tried`() = runTest {
+        // Regression: SplashViewModel decides where the app opens purely from whether *stored*
+        // credentials are complete (see SplashViewModelTest). If a failed validate here left bad
+        // credentials in storage, the next cold launch would read them back as "complete" and
+        // route straight past Onboarding into the mailbox picker — the exact bug this guards.
+        val credentialsRepository = FakeCredentialsRepository()
+        val viewModel = buildViewModel(
+            credentialsRepository = credentialsRepository,
+            connectionRepository = FakeConnectionRepository(result = Result.failure(RuntimeException("unreachable"))),
+        )
+
+        viewModel.onBaseUrlChanged("bad-worker.example.dev")
+        viewModel.onClientIdChanged("id")
+        viewModel.onClientSecretChanged("secret")
+        viewModel.validateAndSave()
+
+        assertEquals(Credentials(), credentialsRepository.stored, "nothing should ever reach durable storage")
+    }
+
+    @Test
+    fun `validateAndSave stages the candidate credentials before validating so the connection attempt uses them`() = runTest {
+        val credentialsRepository = FakeCredentialsRepository()
+        val viewModel = buildViewModel(
+            credentialsRepository = credentialsRepository,
+            connectionRepository = FakeConnectionRepository(result = Result.failure(RuntimeException("unreachable"))),
+        )
+
+        viewModel.onBaseUrlChanged("my-worker.example.dev")
+        viewModel.onClientIdChanged("id")
+        viewModel.onClientSecretChanged("secret")
+        viewModel.validateAndSave()
+
+        assertEquals(
+            Credentials(baseUrl = "my-worker.example.dev", clientId = "id", clientSecret = "secret"),
+            credentialsRepository.stageCalls.single(),
+        )
     }
 
     @Test

@@ -36,6 +36,10 @@ class FakeFolderDao : FolderDao {
     override suspend fun deleteForMailbox(mailboxId: String) {
         rows.removeAll { it.mailboxId == mailboxId }
     }
+
+    override suspend fun deleteAll() {
+        rows.clear()
+    }
 }
 
 class FakeEmailDao : EmailDao {
@@ -50,5 +54,9 @@ class FakeEmailDao : EmailDao {
 
     override suspend fun deleteForFolder(mailboxId: String, folderId: String) {
         rows.removeAll { it.mailboxId == mailboxId && it.folderId == folderId }
+    }
+
+    override suspend fun deleteAll() {
+        rows.clear()
     }
 }

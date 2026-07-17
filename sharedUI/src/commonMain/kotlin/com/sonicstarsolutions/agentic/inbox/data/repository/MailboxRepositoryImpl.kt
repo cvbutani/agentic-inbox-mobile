@@ -36,6 +36,8 @@ class MailboxRepositoryImpl(
 
     override suspend fun deleteMailbox(mailboxId: String): Result<Unit> =
         safeApiCall { api.deleteMailbox(mailboxId) }
+
+    override suspend fun clearCache() = mailboxDao.deleteAll()
 }
 
 private fun MailboxDto.toDomain(): Mailbox = Mailbox(id = id, email = email, name = name)

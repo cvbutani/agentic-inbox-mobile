@@ -28,4 +28,7 @@ interface EmailRepository {
     suspend fun sendEmail(mailboxId: String, request: ComposeEmailRequest): Result<Unit>
     suspend fun replyEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit>
     suspend fun forwardEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit>
+
+    /** Wipes every locally cached email for every mailbox/folder. See [MailboxRepository.clearCache]. */
+    suspend fun clearCache()
 }
