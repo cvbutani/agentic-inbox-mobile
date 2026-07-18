@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
@@ -146,10 +147,16 @@ fun ComposeScreen(
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
         } else {
+            // Capped and centered on wide windows — full-bleed single-line fields on a tablet
+            // read as a stretched phone layout, not a composer.
+            Box(
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentAlignment = Alignment.TopCenter,
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .widthIn(max = FORM_MAX_WIDTH)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
@@ -201,9 +208,13 @@ fun ComposeScreen(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
             }
+            }
         }
     }
 }
+
+/** Fields stay readable up to roughly this width; past it a composer is just stretched. */
+private val FORM_MAX_WIDTH = 720.dp
 
 private fun titleFor(mode: ComposeMode): String = when (mode) {
     ComposeMode.NEW -> "New message"

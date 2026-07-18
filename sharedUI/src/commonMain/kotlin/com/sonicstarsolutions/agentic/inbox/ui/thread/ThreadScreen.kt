@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -206,11 +207,19 @@ fun ThreadScreen(
             }
         },
     ) { paddingValues ->
+        // Capped and centered on wide windows: a message card stretched across a full tablet
+        // runs body text far past a readable line length. In the inbox split the pane already
+        // constrains this; the cap only bites on the pushed route (e.g. opened from search).
+        Box(
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        Box(modifier = Modifier.fillMaxSize().widthIn(max = CONTENT_MAX_WIDTH)) {
         when {
             // Skeleton message cards on the same grid as the real ones — the screen looks like
             // itself while loading instead of showing a bare spinner.
             state.loading -> Column(
-                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxSize().padding(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 repeat(2) {
@@ -228,13 +237,12 @@ fun ThreadScreen(
                 icon = Icons.Default.ErrorOutline,
                 title = "Couldn't load this conversation",
                 detail = state.errorMessage,
-                modifier = Modifier.padding(paddingValues),
             ) {
                 Button(onClick = viewModel::retry) { Text("Retry") }
             }
 
             else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -268,8 +276,13 @@ fun ThreadScreen(
                 }
             }
         }
+        }
+        }
     }
 }
+
+/** Content stops growing past this width on tablets — message bodies stay a readable measure. */
+private val CONTENT_MAX_WIDTH = 840.dp
 
 @Composable
 private fun DraftBottomBar(

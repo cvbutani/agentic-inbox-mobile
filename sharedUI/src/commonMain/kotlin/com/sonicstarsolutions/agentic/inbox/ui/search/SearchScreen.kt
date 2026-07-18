@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -195,7 +196,13 @@ fun SearchScreen(
             )
         },
     ) { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        // Capped and centered on wide windows: a results row stretched to a tablet's full
+        // width puts the sender and its time a metre apart.
+        Box(
+            modifier = Modifier.fillMaxSize().padding(paddingValues),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        Column(modifier = Modifier.fillMaxSize().widthIn(max = CONTENT_MAX_WIDTH)) {
             if (state.hasActiveFilters) {
                 ActiveFilterChips(state = state, viewModel = viewModel)
             }
@@ -270,8 +277,12 @@ fun SearchScreen(
                 }
             }
         }
+        }
     }
 }
+
+/** Content stops growing past this width on tablets — the same cap the mailbox grid uses. */
+private val CONTENT_MAX_WIDTH = 840.dp
 
 /** Every active filter as a removable chip, so what narrowed the results is visible — and
  * undoable — without reopening the sheet. */
