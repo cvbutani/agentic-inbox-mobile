@@ -8,7 +8,7 @@
 | Input | What it does |
 |---|---|
 | *Use workflow from* (branch dropdown) | The branch to build from. The version bump commit is pushed back to this branch. |
-| `version_bump` | `major`, `minor`, `bugfix`, or `none`. Bumps `versionName` in `gradle.properties` and `MARKETING_VERSION` in the Xcode project, and increments `versionCode` / `CURRENT_PROJECT_VERSION` by 1. `none` builds with the current version. |
+| `version_bump` | `major`, `minor`, `bugfix`, `build-number`, or `none`. The first three bump `versionName` in `gradle.properties` / `MARKETING_VERSION` in the Xcode project **and** increment `versionCode` / `CURRENT_PROJECT_VERSION` by 1. `build-number` keeps the version name and only increments the build number (e.g. re-uploading the same version to the stores). `none` builds with the current version untouched. |
 | `platform` | `both`, `android`, or `ios`. |
 | `deploy` | When checked, uploads the AAB to the Play Store **internal** track and the IPA to **TestFlight** via fastlane. When unchecked, the AAB/IPA are only attached as workflow artifacts. |
 

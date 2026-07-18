@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Bumps the app version across Android and iOS.
 #
-# Usage: scripts/bump_version.sh <major|minor|bugfix|none>
+# Usage: scripts/bump_version.sh <major|minor|bugfix|build-number|none>
+#
+# build-number leaves the semver versionName untouched and only increments
+# versionCode / CURRENT_PROJECT_VERSION (e.g. re-uploading the same version).
 #
 # - gradle.properties: versionName (semver) and versionCode (+1)
 # - iosApp/iosApp.xcodeproj/project.pbxproj: MARKETING_VERSION and
@@ -11,7 +14,7 @@
 # Writes versionName/versionCode to $GITHUB_OUTPUT when running in CI.
 set -euo pipefail
 
-BUMP="${1:?usage: bump_version.sh <major|minor|bugfix|none>}"
+BUMP="${1:?usage: bump_version.sh <major|minor|bugfix|build-number|none>}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROPS="$ROOT/gradle.properties"
@@ -31,6 +34,7 @@ case "$BUMP" in
   major)  major=$((major + 1)); minor=0; patch=0 ;;
   minor)  minor=$((minor + 1)); patch=0 ;;
   bugfix|patch) patch=$((patch + 1)) ;;
+  build-number) ;; # versionName stays as-is; only the build number moves
   none) ;;
   *) echo "unknown bump type: $BUMP" >&2; exit 1 ;;
 esac
