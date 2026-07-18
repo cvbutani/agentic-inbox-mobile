@@ -101,6 +101,11 @@ fun AppNavHost() {
                     onSearch = {
                         navigator.goTo(Search(mailboxId = key.mailboxId))
                     },
+                    // Window narrowed out of the split with a conversation open — push it as a
+                    // full-screen thread so the user keeps what they were reading.
+                    onOpenEmailFullScreen = { emailId, threadId ->
+                        navigator.goTo(EmailThread(key.mailboxId, emailId, threadId))
+                    },
                 )
             }
 

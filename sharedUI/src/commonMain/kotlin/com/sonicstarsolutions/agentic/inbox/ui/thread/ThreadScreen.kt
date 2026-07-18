@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ReplyAll
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
@@ -95,6 +96,9 @@ fun ThreadScreen(
     threadId: String?,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
+    /** True when this screen is the detail pane of a split, where [onBack] empties the pane
+     * rather than popping a route — a Close (X) glyph says that; a back arrow lies. */
+    useCloseAffordance: Boolean = false,
     onReply: (emailId: String) -> Unit = {},
     onReplyAll: (emailId: String) -> Unit = {},
     onForward: (emailId: String) -> Unit = {},
@@ -171,7 +175,11 @@ fun ThreadScreen(
                 title = {},
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        if (useCloseAffordance) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        } else {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 actions = {

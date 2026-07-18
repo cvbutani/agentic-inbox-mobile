@@ -25,15 +25,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.LaunchedEffect
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.ui.WindowWidthClass
 import com.sonicstarsolutions.agentic.inbox.ui.thread.ThreadScreen
+import com.sonicstarsolutions.agentic.inbox.ui.windowWidthClassFor
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-/** Material 3's "expanded" width class. Below it, a split view would leave both panes too narrow
- * to read, so phones and tablets in portrait stay single-pane. */
-private val TWO_PANE_MIN_WIDTH = 840.dp
 
 /**
  * The Inbox destination: an email list that, on a wide enough window, keeps the conversation
@@ -58,13 +58,31 @@ fun InboxListDetailScreen(
     onReplyAll: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
     onForward: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
     onEditDraft: (draftMessageId: String, threadId: String?) -> Unit = { _, _ -> },
+    /** Fired when the window narrows out of the split while an email is open in the detail
+     * pane — the host should push it as a full-screen thread so it doesn't silently vanish. */
+    onOpenEmailFullScreen: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val twoPane = maxWidth >= TWO_PANE_MIN_WIDTH
+        // Below EXPANDED a split would leave both panes too narrow to read, so phones and
+        // tablets in portrait stay single-pane. Shared breakpoint, not a local constant, so
+        // "tablet" means the same width here as on every other adaptive screen.
+        val twoPane = windowWidthClassFor(maxWidth) == WindowWidthClass.EXPANDED
 
         var openEmailId by rememberSaveable { mutableStateOf<String?>(null) }
         var openThreadId by rememberSaveable { mutableStateOf<String?>(null) }
+
+        // Rotating out of the split with a conversation open used to just hide it; hand it to
+        // the back stack instead so the user keeps what they were reading.
+        LaunchedEffect(twoPane) {
+            if (!twoPane) {
+                val emailId = openEmailId ?: return@LaunchedEffect
+                val threadId = openThreadId
+                openEmailId = null
+                openThreadId = null
+                onOpenEmailFullScreen(emailId, threadId)
+            }
+        }
 
         if (!twoPane) {
             InboxScreen(
@@ -112,6 +130,7 @@ fun InboxListDetailScreen(
                             mailboxId = mailboxId,
                             emailId = emailId,
                             threadId = openThreadId,
+                            useCloseAffordance = true,
                             onBack = {
                                 // In this layout there's nowhere to go "back" to — the list is
                                 // already onscreen. Closing the thread means emptying the pane,
