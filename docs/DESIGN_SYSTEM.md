@@ -57,10 +57,22 @@ or ad-hoc sizes.
 - At most 3 icon actions in an app bar; the rest go in an overflow menu with text labels.
 - List mutations animate via `Modifier.animateItem()`.
 
+## Detail cards (thread screen)
+
+- Message cards: 16dp horizontal gutter, 12dp radius via `Surface(shape=)` (never a clip
+  modifier), `surfaceContainerLow` fill — and exactly **one** surface per card: anything
+  rendered inside (including themed HTML bodies) uses the card's own color.
+- Labeled actions: icon-only buttons are allowed only in app bars. Inside content, actions
+  carry text labels (`TextButton` with a small leading icon), start-aligned — never
+  `SpaceEvenly` stretched.
+- Expanding content animates (`AnimatedVisibility`, expand/shrink + fade); nothing pops.
+
 ## States
 
 - **Loading (first page)**: skeleton rows on the 72dp grid (`surfaceContainerHigh` shapes),
   not a centered spinner.
-- **Empty**: icon (`outlineVariant`) + one-line headline + one short action hint
-  ("Pull down to refresh"). No narration of the obvious — no "End of list" markers.
+- **Empty / error**: always the shared `StatusPane` component (icon in `outlineVariant` +
+  headline + optional detail + optional action). Errors that replace an empty screen get a
+  Retry action; errors over existing content stay in a snackbar. No narration of the
+  obvious — no "End of list" markers.
 - **Snackbars**: one glanceable line; truncate embedded subjects to ~30 chars.
