@@ -1,5 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.di
 
+import com.sonicstarsolutions.agentic.inbox.data.local.KSafeCredentialsStorage
 import com.sonicstarsolutions.agentic.inbox.data.repository.ConnectionRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.CredentialsRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.DraftRepositoryImpl
@@ -18,7 +19,13 @@ import eu.anifantakis.lib.ksafe.KSafe
 import org.koin.dsl.module
 
 val repositoryModule = module {
-    single<CredentialsRepository> { CredentialsRepositoryImpl(get<KSafe>()) }
+    single<CredentialsRepository> {
+        CredentialsRepositoryImpl(
+            storage = KSafeCredentialsStorage(get<KSafe>()),
+            // App-lifetime scope: hydration must survive whichever screen happens to be composing.
+            scope = get(),
+        )
+    }
     single<MailboxRepository> { MailboxRepositoryImpl(get(), get()) }
     single<EmailRepository> { EmailRepositoryImpl(get(), get()) }
     single<FolderRepository> { FolderRepositoryImpl(get(), get()) }

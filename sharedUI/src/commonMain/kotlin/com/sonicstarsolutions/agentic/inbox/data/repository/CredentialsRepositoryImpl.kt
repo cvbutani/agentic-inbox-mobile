@@ -1,40 +1,50 @@
 package com.sonicstarsolutions.agentic.inbox.data.repository
 
+import com.sonicstarsolutions.agentic.inbox.data.local.CredentialsStorage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
-import eu.anifantakis.lib.ksafe.KSafe
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class CredentialsRepositoryImpl(
-    private val ksafe: KSafe,
+    private val storage: CredentialsStorage,
+    scope: CoroutineScope,
 ) : CredentialsRepository {
-    companion object {
-        private const val KEY_CREDENTIALS = "credentials"
-    }
 
-    // Starts empty; callers await loadIntoState() before relying on a hydrated value
-    // (KSafe's read is suspend, so it can't run inside this property initializer).
     private val _state = MutableStateFlow(Credentials())
     override val state: StateFlow<Credentials> = _state.asStateFlow()
+
+    init {
+        // Self-hydration, not trust in Splash: an Activity recreation (theme change, locale,
+        // process-death restore) rebuilds the DI graph while the saveable nav backstack skips
+        // Splash — the only caller of loadIntoState(). Without this, every request after such a
+        // recreation fired with blank credentials. compareAndSet so a slow disk read can only
+        // fill an *empty* state, never clobber something staged or saved in the meantime.
+        scope.launch {
+            val loaded = storage.read()
+            _state.compareAndSet(Credentials(), loaded)
+        }
+    }
 
     override suspend fun stage(credentials: Credentials) {
         _state.update { credentials }
     }
 
     override suspend fun save(credentials: Credentials) {
-        ksafe.put(KEY_CREDENTIALS, credentials)
+        storage.write(credentials)
         _state.update { credentials }
     }
 
     override suspend fun clear() {
-        ksafe.delete(KEY_CREDENTIALS)
+        storage.delete()
         _state.update { Credentials() }
     }
 
     override suspend fun loadIntoState() {
-        _state.value = ksafe.get(KEY_CREDENTIALS, Credentials())
+        _state.value = storage.read()
     }
 }
