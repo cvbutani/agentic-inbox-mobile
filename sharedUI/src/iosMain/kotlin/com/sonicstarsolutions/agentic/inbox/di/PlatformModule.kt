@@ -2,8 +2,12 @@ package com.sonicstarsolutions.agentic.inbox.di
 
 import androidx.room.Room
 import com.sonicstarsolutions.agentic.inbox.data.local.AppDatabase
+import com.sonicstarsolutions.agentic.inbox.data.local.AttachmentStore
 import com.sonicstarsolutions.agentic.inbox.data.local.DATABASE_NAME
+import com.sonicstarsolutions.agentic.inbox.data.local.IosAttachmentStore
 import com.sonicstarsolutions.agentic.inbox.data.local.buildWithDefaults
+import com.sonicstarsolutions.agentic.inbox.platform.AttachmentOpener
+import com.sonicstarsolutions.agentic.inbox.platform.IosAttachmentOpener
 import eu.anifantakis.lib.ksafe.KSafe
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.darwin.Darwin
@@ -20,6 +24,8 @@ val platformSettingsDataStoreModule = module {
     // that sent every request to localhost.
     single<HttpClientEngine> { Darwin.create() }
     single { KSafe() }
+    single<AttachmentStore> { IosAttachmentStore() }
+    single<AttachmentOpener> { IosAttachmentOpener() }
     single<AppDatabase> {
         Room.databaseBuilder<AppDatabase>(name = "${documentDirectory()}/$DATABASE_NAME").buildWithDefaults()
     }

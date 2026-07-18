@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Grants FileProvider access to the shared module's attachment cache
+     (cacheDir/attachments — see AndroidAttachmentStore). -->
+<paths>
+    <cache-path name="attachments" path="attachments/" />
+</paths>

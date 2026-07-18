@@ -1,9 +1,11 @@
 package com.sonicstarsolutions.agentic.inbox.ui.thread
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
@@ -12,6 +14,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeAttachmentOpener
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeAttachmentRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
@@ -68,6 +72,8 @@ class ThreadViewModelTest {
         mailboxRepository: FakeMailboxRepository = FakeMailboxRepository().apply {
             getMailboxResult = { Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me")) }
         },
+        attachmentRepository: FakeAttachmentRepository = FakeAttachmentRepository(),
+        attachmentOpener: FakeAttachmentOpener = FakeAttachmentOpener(),
         threadId: String? = "t1",
     ): ThreadViewModel = ThreadViewModel(
         getThread = GetThreadUseCase(threadRepository),
@@ -79,9 +85,18 @@ class ThreadViewModelTest {
         markThreadRead = MarkThreadReadUseCase(emailRepository),
         sendDraftEmail = SendDraftEmailUseCase(emailRepository, mailboxRepository),
         getMailbox = GetMailboxUseCase(mailboxRepository),
+        downloadAttachment = DownloadAttachmentUseCase(attachmentRepository),
+        attachmentOpener = attachmentOpener,
         mailboxId = "mb1",
         emailId = "e1",
         threadId = threadId,
+    )
+
+    private fun attachment(id: String = "a1") = EmailAttachment(
+        id = id,
+        filename = "invoice.pdf",
+        mimetype = "application/pdf",
+        size = 1024,
     )
 
     private fun draftDetail(id: String, inReplyTo: String? = null) = EmailDetail(
@@ -148,6 +163,72 @@ class ThreadViewModelTest {
         assertFalse(viewModel.state.value.loading)
         assertEquals("not found", viewModel.state.value.errorMessage)
         assertTrue(viewModel.state.value.messages.isEmpty())
+    }
+
+    @Test
+    fun `opening an attachment downloads it and hands the file to the platform opener`() = runTest {
+        val message = detail("e1").copy(attachments = listOf(attachment()))
+        val attachmentRepository = FakeAttachmentRepository(result = Result.success("/cache/a1/invoice.pdf"))
+        val opener = FakeAttachmentOpener()
+        val viewModel = buildViewModel(
+            threadRepository = FakeThreadRepository(result = Result.success(listOf(message))),
+            attachmentRepository = attachmentRepository,
+            attachmentOpener = opener,
+        )
+
+        viewModel.openAttachment("e1", "a1")
+
+        assertEquals(listOf(FakeAttachmentOpener.OpenCall("/cache/a1/invoice.pdf", "application/pdf")), opener.openCalls)
+        assertTrue(viewModel.state.value.downloadingAttachmentIds.isEmpty())
+    }
+
+    @Test
+    fun `sharing an attachment routes to the opener's share sheet`() = runTest {
+        val message = detail("e1").copy(attachments = listOf(attachment()))
+        val opener = FakeAttachmentOpener()
+        val viewModel = buildViewModel(
+            threadRepository = FakeThreadRepository(result = Result.success(listOf(message))),
+            attachmentOpener = opener,
+        )
+
+        viewModel.shareAttachment("e1", "a1")
+
+        assertEquals(1, opener.shareCalls.size)
+        assertTrue(opener.openCalls.isEmpty())
+    }
+
+    @Test
+    fun `a failed attachment download surfaces the error and clears the in-progress marker`() = runTest {
+        val message = detail("e1").copy(attachments = listOf(attachment()))
+        val viewModel = buildViewModel(
+            threadRepository = FakeThreadRepository(result = Result.success(listOf(message))),
+            attachmentRepository = FakeAttachmentRepository(result = Result.failure(RuntimeException("offline"))),
+        )
+
+        viewModel.openAttachment("e1", "a1")
+
+        assertEquals(ThreadActionResult.Failure("offline"), viewModel.state.value.actionResult)
+        assertTrue(viewModel.state.value.downloadingAttachmentIds.isEmpty())
+    }
+
+    @Test
+    fun `a second tap while an attachment is downloading is ignored`() = runTest {
+        val message = detail("e1").copy(attachments = listOf(attachment()))
+        val attachmentRepository = FakeAttachmentRepository().apply { gate = CompletableDeferred() }
+        val viewModel = buildViewModel(
+            threadRepository = FakeThreadRepository(result = Result.success(listOf(message))),
+            attachmentRepository = attachmentRepository,
+        )
+
+        viewModel.openAttachment("e1", "a1")
+        assertEquals(setOf("a1"), viewModel.state.value.downloadingAttachmentIds)
+        viewModel.openAttachment("e1", "a1")
+
+        assertEquals(1, attachmentRepository.calls.size, "the in-flight download must swallow the second tap")
+
+        attachmentRepository.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.downloadingAttachmentIds.isEmpty())
     }
 
     @Test

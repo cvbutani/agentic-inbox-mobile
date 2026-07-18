@@ -13,6 +13,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.LoadCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
@@ -55,6 +56,7 @@ val useCaseModule = module {
     singleOf(::RenameFolderUseCase)
     singleOf(::DeleteFolderUseCase)
     singleOf(::GetThreadUseCase)
+    singleOf(::DownloadAttachmentUseCase)
     singleOf(::MoveEmailUseCase)
     singleOf(::DeleteEmailUseCase)
     singleOf(::SetEmailReadUseCase)

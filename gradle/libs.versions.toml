@@ -14,6 +14,7 @@ nav3-browser = "1.1.0"
 kotlinx-serialization = "1.11.0"
 coil = "3.4.0"
 kotlinx-datetime = "0.8.0"
+androidx-core = "1.16.0"
 room = "2.8.4"
 sqlite = "2.6.2"
 ksp = "2.3.9"
@@ -66,6 +67,7 @@ sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sql
 materialKolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
+androidx-core = { module = "androidx.core:core", version.ref = "androidx-core" }
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
 koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }

@@ -2,10 +2,12 @@ package com.sonicstarsolutions.agentic.inbox.ui.thread
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
@@ -14,6 +16,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
+import com.sonicstarsolutions.agentic.inbox.platform.AttachmentOpener
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +34,8 @@ data class ThreadUiState(
     val errorMessage: String? = null,
     val expandedMessageId: String? = null,
     val imagesAllowedFor: Set<String> = emptySet(),
+    /** Attachments currently being fetched — drives the per-chip progress spinner. */
+    val downloadingAttachmentIds: Set<String> = emptySet(),
     val folders: List<Folder> = emptyList(),
     val actionInProgress: Boolean = false,
     val actionResult: ThreadActionResult? = null,
@@ -50,6 +55,8 @@ class ThreadViewModel(
     private val markThreadRead: MarkThreadReadUseCase,
     private val sendDraftEmail: SendDraftEmailUseCase,
     private val getMailbox: GetMailboxUseCase,
+    private val downloadAttachment: DownloadAttachmentUseCase,
+    private val attachmentOpener: AttachmentOpener,
     private val mailboxId: String,
     private val emailId: String,
     private val threadId: String?,
@@ -189,6 +196,38 @@ class ThreadViewModel(
                     val message = t.message ?: t::class.simpleName ?: "Failed to send"
                     _state.update { it.copy(actionInProgress = false, actionResult = ThreadActionResult.Failure(message)) }
                 }
+        }
+    }
+
+    fun openAttachment(messageId: String, attachmentId: String) =
+        withDownloadedAttachment(messageId, attachmentId) { path, attachment ->
+            attachmentOpener.open(path, attachment.mimetype)
+        }
+
+    fun shareAttachment(messageId: String, attachmentId: String) =
+        withDownloadedAttachment(messageId, attachmentId) { path, attachment ->
+            attachmentOpener.share(path, attachment.mimetype)
+        }
+
+    /** Downloads (cache-first) then hands the local file to [action]. One in-flight download per
+     * attachment — repeat taps while the spinner shows are swallowed, not queued. */
+    private fun withDownloadedAttachment(
+        messageId: String,
+        attachmentId: String,
+        action: (path: String, attachment: EmailAttachment) -> Result<Unit>,
+    ) {
+        val message = _state.value.messages.firstOrNull { it.id == messageId } ?: return
+        val attachment = message.attachments.firstOrNull { it.id == attachmentId } ?: return
+        if (attachmentId in _state.value.downloadingAttachmentIds) return
+        _state.update { it.copy(downloadingAttachmentIds = it.downloadingAttachmentIds + attachmentId) }
+        viewModelScope.launch {
+            downloadAttachment(mailboxId, message.id, attachment)
+                .mapCatching { path -> action(path, attachment).getOrThrow() }
+                .onFailure { t ->
+                    val text = t.message ?: t::class.simpleName ?: "Couldn't open attachment"
+                    _state.update { it.copy(actionResult = ThreadActionResult.Failure(text)) }
+                }
+            _state.update { it.copy(downloadingAttachmentIds = it.downloadingAttachmentIds - attachmentId) }
         }
     }
 

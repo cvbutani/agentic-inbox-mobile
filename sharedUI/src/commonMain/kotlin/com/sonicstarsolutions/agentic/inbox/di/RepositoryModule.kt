@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.di
 
 import com.sonicstarsolutions.agentic.inbox.data.local.KSafeCredentialsStorage
+import com.sonicstarsolutions.agentic.inbox.data.repository.AttachmentRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.ConnectionRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.CredentialsRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.DraftRepositoryImpl
@@ -8,6 +9,7 @@ import com.sonicstarsolutions.agentic.inbox.data.repository.EmailRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.FolderRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.MailboxRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.ThreadRepositoryImpl
+import com.sonicstarsolutions.agentic.inbox.domain.repository.AttachmentRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.DraftRepository
@@ -32,4 +34,5 @@ val repositoryModule = module {
     single<ThreadRepository> { ThreadRepositoryImpl(get()) }
     single<DraftRepository> { DraftRepositoryImpl(get()) }
     single<ConnectionRepository> { ConnectionRepositoryImpl(get()) }
+    single<AttachmentRepository> { AttachmentRepositoryImpl(get(), get()) }
 }

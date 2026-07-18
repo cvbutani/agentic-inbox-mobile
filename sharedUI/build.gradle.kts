@@ -78,6 +78,8 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.koin.core)
             implementation(libs.koin.android)
+            // FileProvider, for granting viewers/share targets access to cached attachments.
+            implementation(libs.androidx.core)
         }
 
         iosMain.dependencies {

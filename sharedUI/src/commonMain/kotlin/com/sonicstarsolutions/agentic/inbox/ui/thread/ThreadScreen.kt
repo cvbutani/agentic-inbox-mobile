@@ -5,7 +5,9 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +39,6 @@ import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,6 +67,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -273,6 +275,7 @@ fun ThreadScreen(
                         imagesAllowed = state.imagesAllowedFor.contains(message.id),
                         actionInProgress = state.actionInProgress,
                         mailboxEmail = state.mailboxEmail,
+                        downloadingAttachmentIds = state.downloadingAttachmentIds,
                         onToggleExpanded = { viewModel.toggleExpanded(message.id) },
                         onAllowImages = { viewModel.allowImages(message.id) },
                         onToggleStarred = { viewModel.toggleStarred(message.id) },
@@ -280,6 +283,8 @@ fun ThreadScreen(
                         onReply = { onReply(message.id) },
                         onReplyAll = { onReplyAll(message.id) },
                         onForward = { onForward(message.id) },
+                        onOpenAttachment = { viewModel.openAttachment(message.id, it) },
+                        onShareAttachment = { viewModel.shareAttachment(message.id, it) },
                     )
                 }
             }
@@ -365,6 +370,7 @@ private fun MessageCard(
     imagesAllowed: Boolean,
     actionInProgress: Boolean,
     mailboxEmail: String?,
+    downloadingAttachmentIds: Set<String>,
     onToggleExpanded: () -> Unit,
     onAllowImages: () -> Unit,
     onToggleStarred: () -> Unit,
@@ -372,6 +378,8 @@ private fun MessageCard(
     onReply: () -> Unit,
     onReplyAll: () -> Unit,
     onForward: () -> Unit,
+    onOpenAttachment: (attachmentId: String) -> Unit,
+    onShareAttachment: (attachmentId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isDraft = message.folderId == SystemFolders.DRAFT
@@ -568,8 +576,13 @@ private fun MessageCard(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(message.attachments, key = { it.filename }) { attachment ->
-                            AttachmentChip(attachment)
+                        items(message.attachments, key = { it.id }) { attachment ->
+                            AttachmentChip(
+                                attachment = attachment,
+                                downloading = attachment.id in downloadingAttachmentIds,
+                                onOpen = { onOpenAttachment(attachment.id) },
+                                onShare = { onShareAttachment(attachment.id) },
+                            )
                         }
                     }
                 }
@@ -632,25 +645,64 @@ private fun DraftLabel() {
     }
 }
 
+/** One attachment: tap opens it (downloading first if needed), long-press shares it. The
+ * spinner replaces the paperclip while the bytes are in flight. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AttachmentChip(attachment: EmailAttachment) {
-    AssistChip(
-        onClick = { /* TODO: download/preview — see plan M3 */ },
-        label = {
-            Text(
-                text = attachment.filename,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Default.AttachFile,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-            )
-        },
-    )
+private fun AttachmentChip(
+    attachment: EmailAttachment,
+    downloading: Boolean,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .combinedClickable(onClick = onOpen, onLongClick = onShare),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (downloading) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    imageVector = Icons.Default.AttachFile,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column {
+                Text(
+                    text = attachment.filename,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 180.dp),
+                )
+                Text(
+                    text = formatAttachmentSize(attachment.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun formatAttachmentSize(bytes: Long): String = when {
+    bytes >= 10 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+    bytes >= 1024 * 1024 -> {
+        val tenths = bytes * 10 / (1024 * 1024)
+        "${tenths / 10}.${tenths % 10} MB"
+    }
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
 }
 
 private fun Color.toCssHex(): String {

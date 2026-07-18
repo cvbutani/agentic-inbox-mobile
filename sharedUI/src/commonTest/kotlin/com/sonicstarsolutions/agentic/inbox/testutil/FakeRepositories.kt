@@ -17,6 +17,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
+import com.sonicstarsolutions.agentic.inbox.domain.repository.AttachmentRepository
+import com.sonicstarsolutions.agentic.inbox.platform.AttachmentOpener
 import kotlinx.coroutines.flow.asStateFlow
 
 /** In-memory test double: separates "persisted" storage from the observable [state], the way the
@@ -270,5 +273,40 @@ class FakeThreadRepository(
     override suspend fun getThread(mailboxId: String, emailId: String, threadId: String?): Result<List<EmailDetail>> {
         calls += GetThreadCall(mailboxId, emailId, threadId)
         return result
+    }
+}
+
+class FakeAttachmentRepository(
+    var result: Result<String> = Result.success("/cache/attachments/a1/file.pdf"),
+) : AttachmentRepository {
+    data class DownloadCall(val mailboxId: String, val emailId: String, val attachment: EmailAttachment)
+
+    val calls = mutableListOf<DownloadCall>()
+
+    /** When set, [download] suspends here until completed — lets tests hold a download in flight. */
+    var gate: CompletableDeferred<Unit>? = null
+
+    override suspend fun download(mailboxId: String, emailId: String, attachment: EmailAttachment): Result<String> {
+        calls += DownloadCall(mailboxId, emailId, attachment)
+        gate?.await()
+        return result
+    }
+}
+
+class FakeAttachmentOpener : AttachmentOpener {
+    data class OpenCall(val path: String, val mimeType: String)
+
+    val openCalls = mutableListOf<OpenCall>()
+    val shareCalls = mutableListOf<OpenCall>()
+    var openResult: Result<Unit> = Result.success(Unit)
+
+    override fun open(path: String, mimeType: String): Result<Unit> {
+        openCalls += OpenCall(path, mimeType)
+        return openResult
+    }
+
+    override fun share(path: String, mimeType: String): Result<Unit> {
+        shareCalls += OpenCall(path, mimeType)
+        return Result.success(Unit)
     }
 }
