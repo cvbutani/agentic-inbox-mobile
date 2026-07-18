@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
@@ -71,14 +73,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlSanitizer
-import kotlin.time.Instant
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -160,14 +159,9 @@ fun ThreadScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = state.messages.firstOrNull()?.subject.orEmpty(),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
+                // The subject lives in the content as the thread's title, where it can wrap —
+                // a one-line ellipsized bar title hides exactly the words that matter.
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -212,16 +206,13 @@ fun ThreadScreen(
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
 
-            state.errorMessage != null -> Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(24.dp),
-                contentAlignment = Alignment.Center,
+            state.errorMessage != null -> StatusPane(
+                icon = Icons.Default.ErrorOutline,
+                title = "Couldn't load this conversation",
+                detail = state.errorMessage,
+                modifier = Modifier.padding(paddingValues),
             ) {
-                Text(
-                    text = state.errorMessage!!,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
+                Button(onClick = viewModel::retry) { Text("Retry") }
             }
 
             else -> LazyColumn(
@@ -229,6 +220,17 @@ fun ThreadScreen(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                state.messages.firstOrNull()?.subject?.takeIf { it.isNotBlank() }?.let { subject ->
+                    item(key = "subject") {
+                        Text(
+                            text = subject,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+
                 items(state.messages, key = { it.id }) { message ->
                     MessageCard(
                         message = message,
@@ -349,7 +351,8 @@ private fun MessageCard(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                // Line 1: from, then (collapsed only) the star, then the expand/collapse chevron.
+                // Line 1: from, then the star (same place in both states — a control the user
+                // just aimed at must not teleport on tap), then the expand/collapse chevron.
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -364,15 +367,15 @@ private fun MessageCard(
                     if (isDraft) {
                         DraftLabel()
                     }
-                    if (!expanded) {
-                        IconButton(onClick = onToggleStarred, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = if (message.starred) "Unstar" else "Star",
-                                tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
+                    // No size override: IconButton's default 48dp minimum touch target is the
+                    // accessibility floor.
+                    IconButton(onClick = onToggleStarred) {
+                        Icon(
+                            imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = if (message.starred) "Unstar" else "Star",
+                            tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -404,27 +407,13 @@ private fun MessageCard(
                     }
                 }
 
-                // Line 3 (expanded only): the full date and time, with the star moved down here.
+                // Line 3 (expanded only): the full date and time.
                 if (expanded) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = formatDateTime(message.date),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = onToggleStarred, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = if (message.starred) "Unstar" else "Star",
-                                tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
+                    Text(
+                        text = EmailTimeFormatter.formatAbsolute(message.date),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -458,7 +447,9 @@ private fun MessageCard(
                 }
 
                 if (body.isNotBlank()) {
-                    val backgroundColor = MaterialTheme.colorScheme.surface
+                    // The card's own color — theming the body to plain `surface` split the card
+                    // into two visible background tones in dark mode.
+                    val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
                     val themedHtml = EmailHtmlDocumentBuilder.wrap(
                         bodyHtml = sanitized,
                         textColorHex = MaterialTheme.colorScheme.onSurface.toCssHex(),
@@ -482,13 +473,14 @@ private fun MessageCard(
                 }
 
                 if (message.attachments.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    // LazyRow, not Row: a plain Row pushes the third-and-later attachments off
+                    // the card edge with no way to reach them.
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        message.attachments.forEach { attachment ->
+                        items(message.attachments, key = { it.filename }) { attachment ->
                             AttachmentChip(attachment)
                         }
                     }
@@ -524,28 +516,6 @@ private fun MessageCard(
         }
     }
 }
-
-private val MONTH_ABBREVIATIONS = arrayOf(
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-)
-
-private fun formatClockTime(local: LocalDateTime): String {
-    val hour12 = when (val hour = local.hour % 12) { 0 -> 12; else -> hour }
-    val amPm = if (local.hour < 12) "AM" else "PM"
-    val minute = local.minute.toString().padStart(2, '0')
-    return "$hour12:$minute $amPm"
-}
-
-private fun formatDateTime(dateString: String): String {
-    return try {
-        val local = Instant.parse(dateString).toLocalDateTime(TimeZone.currentSystemDefault())
-        "${MONTH_ABBREVIATIONS[local.month.ordinal]} ${local.day}, ${local.year}, ${formatClockTime(local)}"
-    } catch (e: Exception) {
-        dateString.take(10)
-    }
-}
-
 
 @Composable
 private fun DraftLabel() {

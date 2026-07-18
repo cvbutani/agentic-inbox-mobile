@@ -44,6 +44,19 @@ object EmailTimeFormatter {
         dateString.take(10)
     }
 
+    /** The full date-and-time line on an expanded thread message: "Jul 17, 2026, 3:00 PM".
+     * Always absolute — this is the one place precision beats brevity. */
+    fun formatAbsolute(
+        dateString: String,
+        zone: TimeZone = TimeZone.currentSystemDefault(),
+    ): String = try {
+        val instant = Instant.parse(dateString)
+        val local = instant.toLocalDateTime(zone)
+        "${MONTH_ABBREVIATIONS[local.month.ordinal]} ${local.day}, ${local.year}, ${formatClockTime(instant, zone)}"
+    } catch (e: Exception) {
+        dateString.take(10)
+    }
+
     private fun formatClockTime(instant: Instant, zone: TimeZone): String {
         val local = instant.toLocalDateTime(zone)
         val hour12 = when (val hour = local.hour % 12) { 0 -> 12; else -> hour }

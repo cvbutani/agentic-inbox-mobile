@@ -151,6 +151,21 @@ class ThreadViewModelTest {
     }
 
     @Test
+    fun `retry after a failed load clears the error and loads the thread`() = runTest {
+        val repository = FakeThreadRepository(result = Result.failure(RuntimeException("network down")))
+        val viewModel = buildViewModel(repository)
+        assertEquals("network down", viewModel.state.value.errorMessage)
+
+        repository.result = Result.success(listOf(detail("e1"), detail("e2")))
+        viewModel.retry()
+
+        assertNull(viewModel.state.value.errorMessage)
+        assertFalse(viewModel.state.value.loading)
+        assertEquals(listOf(detail("e1"), detail("e2")), viewModel.state.value.messages)
+        assertEquals(2, repository.calls.size, "retry must issue a second thread request")
+    }
+
+    @Test
     fun `toggling the already-expanded message collapses it`() = runTest {
         val repository = FakeThreadRepository(result = Result.success(listOf(detail("e1"), detail("e2"))))
         val viewModel = buildViewModel(repository)

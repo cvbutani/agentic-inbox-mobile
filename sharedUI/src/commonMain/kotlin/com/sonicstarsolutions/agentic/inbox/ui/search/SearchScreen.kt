@@ -69,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
+import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -211,7 +212,7 @@ fun SearchScreen(
                 }
 
                 state.errorMessage != null && state.results.isEmpty() && state.hasSearched ->
-                    SearchStatusPane(
+                    StatusPane(
                         icon = Icons.Default.ErrorOutline,
                         title = "Something went wrong",
                         detail = state.errorMessage,
@@ -219,13 +220,13 @@ fun SearchScreen(
                         Button(onClick = { viewModel.search() }) { Text("Retry") }
                     }
 
-                !state.hasSearched -> SearchStatusPane(
+                !state.hasSearched -> StatusPane(
                     icon = Icons.Default.Search,
                     title = "Search your mail",
                     detail = "Find emails by sender, subject, or keywords",
                 )
 
-                state.results.isEmpty() -> SearchStatusPane(
+                state.results.isEmpty() -> StatusPane(
                     icon = Icons.Default.SearchOff,
                     title = if (state.queryText.isBlank()) "No results" else "No results for “${state.queryText.trim()}”",
                     detail = "Try different keywords or filters",
@@ -268,52 +269,6 @@ fun SearchScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-/** Centered icon + title + optional detail and action — the one shape every non-list search
- * state (pre-search, empty, error) shares. */
-@Composable
-private fun SearchStatusPane(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    detail: String? = null,
-    action: (@Composable () -> Unit)? = null,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.size(64.dp),
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-            )
-            if (detail != null) {
-                Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-            }
-            action?.invoke()
         }
     }
 }

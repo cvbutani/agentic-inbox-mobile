@@ -86,4 +86,27 @@ class EmailTimeFormatterTest {
     fun `an unparseable date string falls back to its first 10 characters`() {
         assertEquals("not-a-date", EmailTimeFormatter.format("not-a-date-string", Instant.parse("2026-01-05T10:00:00Z"), utc))
     }
+
+    // -- formatAbsolute: the full date-and-time line on an expanded thread message ----------
+
+    @Test
+    fun `formatAbsolute renders a full date with a 12-hour clock time`() {
+        assertEquals("Jul 17, 2026, 3:00 PM", EmailTimeFormatter.formatAbsolute("2026-07-17T15:00:00Z", utc))
+    }
+
+    @Test
+    fun `formatAbsolute renders midnight as 12 AM and noon as 12 PM`() {
+        assertEquals("Jan 1, 2026, 12:00 AM", EmailTimeFormatter.formatAbsolute("2026-01-01T00:00:00Z", utc))
+        assertEquals("Jan 1, 2026, 12:00 PM", EmailTimeFormatter.formatAbsolute("2026-01-01T12:00:00Z", utc))
+    }
+
+    @Test
+    fun `formatAbsolute pads minutes to two digits`() {
+        assertEquals("Feb 3, 2025, 9:05 AM", EmailTimeFormatter.formatAbsolute("2025-02-03T09:05:00Z", utc))
+    }
+
+    @Test
+    fun `formatAbsolute falls back to the first 10 characters of an unparseable string`() {
+        assertEquals("not-a-date", EmailTimeFormatter.formatAbsolute("not-a-date-string", utc))
+    }
 }

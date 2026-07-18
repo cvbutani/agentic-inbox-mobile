@@ -70,6 +70,12 @@ class ThreadViewModel(
         }
     }
 
+    /** Re-runs the initial thread load after a failure — the error screen's Retry button. */
+    fun retry() {
+        _state.update { it.copy(loading = true, errorMessage = null) }
+        loadThread()
+    }
+
     private fun loadThread() {
         viewModelScope.launch {
             getThread(mailboxId, emailId, threadId)
