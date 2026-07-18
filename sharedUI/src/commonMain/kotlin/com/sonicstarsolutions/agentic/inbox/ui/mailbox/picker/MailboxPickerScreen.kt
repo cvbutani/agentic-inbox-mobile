@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
@@ -59,6 +60,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
@@ -292,6 +296,7 @@ private fun MailboxPickerContent(
                         mailbox = mailbox,
                         onClick = { onMailboxSelected(mailbox.id, mailbox.displayName) },
                         onDelete = { onDeleteRequested(mailbox) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -305,13 +310,14 @@ private fun MailboxCard(
     mailbox: Mailbox,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
     // Tonal, not elevated: this was the only drop shadow in the app — every other container
     // is a flat tonal surface.
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = { showMenu = true }),
         shape = RoundedCornerShape(12.dp),
@@ -343,8 +349,16 @@ private fun MailboxCard(
                     Icon(Icons.Default.MoreVert, contentDescription = "Mailbox options")
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    // Reads as destructive before the confirmation dialog, not only in it.
                     DropdownMenuItem(
-                        text = { Text("Delete") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Outlined.DeleteOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                         onClick = {
                             showMenu = false
                             onDelete()
@@ -559,6 +573,10 @@ private fun CreateMailboxFields(
     creating: Boolean,
     errorMessage: String?,
 ) {
+    // The address is the field users came to fill — focus it as soon as the form appears.
+    val addressFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { addressFocusRequester.requestFocus() }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = name,
@@ -580,7 +598,8 @@ private fun CreateMailboxFields(
                     label = { Text("Address") },
                     singleLine = true,
                     enabled = !creating,
-                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.weight(1f).focusRequester(addressFocusRequester),
                 )
                 Text("@", style = MaterialTheme.typography.bodyLarge)
                 if (allowedDomains.size == 1) {
@@ -620,7 +639,8 @@ private fun CreateMailboxFields(
                 label = { Text("Email address") },
                 singleLine = true,
                 enabled = !creating,
-                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                modifier = Modifier.fillMaxWidth().focusRequester(addressFocusRequester),
             )
         }
         if (errorMessage != null) {
