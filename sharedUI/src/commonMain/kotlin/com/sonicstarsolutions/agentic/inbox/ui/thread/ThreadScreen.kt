@@ -24,9 +24,6 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
@@ -62,7 +59,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -73,7 +69,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
+import com.sonicstarsolutions.agentic.inbox.ui.components.folderIcon
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
@@ -145,7 +143,8 @@ fun ThreadScreen(
 
     if (showMoveSheet) {
         MoveToFolderSheet(
-            folders = state.folders,
+            // Offering the folder the message is already in would be a no-op row.
+            folders = state.folders.filter { it.id != currentMessage?.folderId },
             onFolderSelected = { folderId ->
                 showMoveSheet = false
                 viewModel.moveTo(folderId)
@@ -245,7 +244,7 @@ fun ThreadScreen(
                         onReply = { onReply(message.id) },
                         onReplyAll = { onReplyAll(message.id) },
                         onForward = { onForward(message.id) },
-                        modifier = Modifier.padding(horizontal = 12.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
             }
@@ -308,7 +307,7 @@ private fun MoveToFolderSheet(
                 ListItem(
                     headlineContent = { Text(folder.name) },
                     leadingContent = {
-                        Icon(Icons.Default.Folder, contentDescription = null)
+                        Icon(folderIcon(folder), contentDescription = null)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -340,80 +339,99 @@ private fun MessageCard(
     val toText = EmailAddressUtils.displayName(message.recipient, mailboxEmail)
 
     Surface(
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Column(
+            // Header: avatar beside the text block — the same identity language as the inbox
+            // rows, drawer, and mailbox picker. The whole header toggles expansion; no chevron
+            // (the visible body is the state).
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggleExpanded)
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Top,
             ) {
-                // Line 1: from, then the star (same place in both states — a control the user
-                // just aimed at must not teleport on tap), then the expand/collapse chevron.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                InitialsAvatar(
+                    name = fromText,
+                    modifier = Modifier.size(40.dp),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        text = fromText,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (isDraft) {
-                        DraftLabel()
-                    }
-                    // No size override: IconButton's default 48dp minimum touch target is the
-                    // accessibility floor.
-                    IconButton(onClick = onToggleStarred) {
-                        Icon(
-                            imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
-                            contentDescription = if (message.starred) "Unstar" else "Star",
-                            tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Collapse" else "Expand",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                // Line 2: to, then (collapsed only) the time — the full date moves to its own line
-                // once expanded, alongside the star.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "to $toText",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (!expanded) {
+                    // Line 1: from, then the star (same place in both states — a control the
+                    // user just aimed at must not teleport on tap), then read-toggle when open.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = EmailTimeFormatter.format(message.date),
+                            text = fromText,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (isDraft) {
+                            DraftLabel()
+                        }
+                        // No size overrides: IconButton's default 48dp minimum touch target is
+                        // the accessibility floor.
+                        IconButton(onClick = onToggleStarred) {
+                            Icon(
+                                imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = if (message.starred) "Unstar" else "Star",
+                                tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        if (expanded && !isDraft) {
+                            IconButton(onClick = onToggleRead, enabled = !actionInProgress) {
+                                Icon(
+                                    imageVector = if (message.read) Icons.Default.MarkEmailUnread else Icons.Default.MarkEmailRead,
+                                    contentDescription = if (message.read) "Mark as unread" else "Mark as read",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    // Line 2: to, then (collapsed only) the time — the full date moves to its
+                    // own line once expanded.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "to $toText",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (!expanded) {
+                            Text(
+                                text = EmailTimeFormatter.format(message.date),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    // Line 3 (expanded only): the full date and time.
+                    if (expanded) {
+                        Text(
+                            text = EmailTimeFormatter.formatAbsolute(message.date),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                }
-
-                // Line 3 (expanded only): the full date and time.
-                if (expanded) {
-                    Text(
-                        text = EmailTimeFormatter.formatAbsolute(message.date),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
@@ -490,25 +508,36 @@ private fun MessageCard(
                 // Send/Edit instead, from the screen-level bottom bar.
                 if (!isDraft) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    // Labeled, start-aligned — the three actions users came for shouldn't
+                    // demand icon literacy or be stretched across the card as filler.
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        IconButton(onClick = onReply, enabled = !actionInProgress) {
-                            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = "Reply")
-                        }
-                        IconButton(onClick = onReplyAll, enabled = !actionInProgress) {
-                            Icon(Icons.AutoMirrored.Filled.ReplyAll, contentDescription = "Reply all")
-                        }
-                        IconButton(onClick = onForward, enabled = !actionInProgress) {
-                            Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = "Forward")
-                        }
-                        IconButton(onClick = onToggleRead, enabled = !actionInProgress) {
+                        TextButton(onClick = onReply, enabled = !actionInProgress) {
                             Icon(
-                                imageVector = if (message.read) Icons.Default.MarkEmailUnread else Icons.Default.MarkEmailRead,
-                                contentDescription = if (message.read) "Mark as unread" else "Mark as read",
+                                Icons.AutoMirrored.Filled.Reply,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
                             )
+                            Text("Reply", modifier = Modifier.padding(start = 6.dp))
+                        }
+                        TextButton(onClick = onReplyAll, enabled = !actionInProgress) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ReplyAll,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text("Reply all", modifier = Modifier.padding(start = 6.dp))
+                        }
+                        TextButton(onClick = onForward, enabled = !actionInProgress) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Forward,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text("Forward", modifier = Modifier.padding(start = 6.dp))
                         }
                     }
                 }

@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
@@ -25,13 +24,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Drafts
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
@@ -87,6 +84,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
+import com.sonicstarsolutions.agentic.inbox.ui.components.folderIcon
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -741,16 +739,6 @@ private fun SwipeActionBackground(targetValue: SwipeToDismissBoxValue) {
             Icon(imageVector = it, contentDescription = null, tint = iconTint)
         }
     }
-}
-
-private fun folderIcon(folder: Folder): ImageVector = when (folder.id) {
-    SystemFolders.INBOX -> Icons.Default.Inbox
-    SystemFolders.DRAFT -> Icons.Default.Drafts
-    SystemFolders.SENT -> Icons.AutoMirrored.Filled.Send
-    SystemFolders.ARCHIVE -> Icons.Default.Archive
-    SystemFolders.SPAM -> Icons.Default.Report
-    SystemFolders.TRASH -> Icons.Default.Delete
-    else -> Icons.Default.Folder
 }
 
 @Composable
