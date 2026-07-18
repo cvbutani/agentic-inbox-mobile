@@ -49,19 +49,15 @@ Each screen is a `Screen` composable backed by a `ViewModel` exposing a single `
 - A Cloudflare Access **service token** (Client ID + Client Secret) for that Worker
 - JDK 17+, Android Studio (latest stable); Xcode for the iOS target (macOS only)
 
-### Build & run
+### Getting an Access service token
 
-```sh
-# Android
-./gradlew :androidApp:installDebug
+The app authenticates to your Worker with a Cloudflare Access **service token**:
 
-# Shared-code unit tests
-./gradlew :sharedUI:testAndroidHostTest
-```
+1. In the Cloudflare dashboard, open **Zero Trust → Access → Service auth → Service tokens** and click **Create Service Token**. Give it a name and a duration.
+2. Copy the **Client ID** and **Client Secret** immediately — the secret is shown only this once.
+3. In **Zero Trust → Access → Applications**, open the application protecting your Worker and add a policy with the **Service Auth** action that includes your new token (without this policy the token authenticates but is still denied).
 
-For iOS, open `iosApp/iosApp.xcodeproj` in Xcode and run — the shared framework builds as a dependency.
-
-On first launch the app asks for your Worker URL, Access Client ID, and Access Client Secret. They are stored only on the device.
+On first launch the app asks for your Worker URL, the Client ID, and the Client Secret. They are stored only on the device.
 
 ## Development conventions
 
@@ -69,12 +65,7 @@ On first launch the app asks for your Worker URL, Access Client ID, and Access C
 - **Design system** — [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) defines the 72dp list grid, unread/selected conventions, token-only colors (no alpha-mixed values), 48dp touch-target floor, and the shared `StatusPane` / `ErrorBanner` / `InitialsAvatar` components. Check it before styling anything.
 - **Adaptive layouts** — screens measure themselves against the shared `WindowWidthClass` breakpoints (600dp / 840dp) rather than inventing their own cutoffs.
 
-## Release
-
-Releases build via GitHub Actions (**Actions → Release Build → Run workflow**): version bumping, signed AAB to the Play Store internal track, and IPA to TestFlight via fastlane. Inputs, required secrets, and one-off store setup are documented in [docs/CI-CD.md](docs/CI-CD.md).
-
 ## Project docs
 
 - [agentic-inbox-cmp-plan.md](agentic-inbox-cmp-plan.md) — original scope and architecture plan
 - [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) — UI conventions all screens follow
-- [docs/CI-CD.md](docs/CI-CD.md) — release pipeline reference
