@@ -6,12 +6,15 @@ import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailMetadataDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FromDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.OutboundAttachmentDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 
@@ -95,6 +98,7 @@ class EmailRepositoryImpl(
     override suspend fun clearCache() = emailDao.deleteAll()
 }
 
+@OptIn(ExperimentalEncodingApi::class)
 private fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequestDto(
     to = to,
     cc = cc.ifEmpty { null },
@@ -102,6 +106,9 @@ private fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequestD
     from = FromDto(email = fromEmail, name = fromName),
     subject = subject,
     text = body,
+    attachments = attachments
+        .map { OutboundAttachmentDto(content = Base64.encode(it.bytes), filename = it.filename, type = it.mimeType) }
+        .ifEmpty { null },
 )
 
 private fun EmailMetadataDto.toDomain(): EmailSummary = EmailSummary(

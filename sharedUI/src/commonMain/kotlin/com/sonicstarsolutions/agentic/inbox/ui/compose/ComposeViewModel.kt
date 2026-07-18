@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.ui.compose
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
@@ -53,6 +54,9 @@ data class ComposeUiState(
     val sending: Boolean = false,
     val errorMessage: String? = null,
     val sent: Boolean = false,
+    /** Files to send with this message. Not persisted with drafts (v1 limitation): a resumed
+     * draft that silently lost its files would be worse than re-attaching. */
+    val attachments: List<ComposeAttachment> = emptyList(),
     /** Non-null once this composer has a draft — either resumed from one or after its first
      * autosave. Drives whether the screen offers "Discard draft". */
     val draftId: String? = null,
@@ -107,6 +111,12 @@ class ComposeViewModel(
         /** Quiet period after the last keystroke before an autosave fires. Long enough that
          * ordinary typing doesn't hit the database on every character. */
         const val AUTOSAVE_DEBOUNCE_MILLIS: Long = 2_000
+
+        /** Caps chosen for the transport: the whole message travels as one JSON body with
+         * base64 (~4/3 inflation) to the Worker, and mail providers reject ~25MB anyway.
+         * Refusing here beats timing out mid-send. */
+        const val MAX_ATTACHMENT_BYTES: Int = 15 * 1024 * 1024
+        const val MAX_TOTAL_ATTACHMENT_BYTES: Int = 25 * 1024 * 1024
     }
 
     init {
@@ -191,6 +201,31 @@ class ComposeViewModel(
      * bodies that are already plain pass through byte-for-byte. */
     private fun editableBody(body: String): String =
         if (HtmlTextExtractor.containsHtml(body)) HtmlTextExtractor.toEditableText(body) else body
+
+    // Deliberately not edit(): attachment changes never mark the draft dirty, because drafts
+    // can't persist the bytes — a draft row that resumes without its files would lose them
+    // more silently than never claiming one.
+    fun addAttachment(filename: String, mimeType: String, bytes: ByteArray) {
+        if (bytes.size > MAX_ATTACHMENT_BYTES) {
+            _state.update { it.copy(errorMessage = "\"$filename\" is larger than 15 MB") }
+            return
+        }
+        val currentTotal = _state.value.attachments.sumOf { it.bytes.size }
+        if (currentTotal + bytes.size > MAX_TOTAL_ATTACHMENT_BYTES) {
+            _state.update { it.copy(errorMessage = "Attachments can't exceed 25 MB in total") }
+            return
+        }
+        _state.update {
+            it.copy(attachments = it.attachments + ComposeAttachment(filename, mimeType, bytes), errorMessage = null)
+        }
+    }
+
+    fun removeAttachment(index: Int) {
+        _state.update {
+            if (index !in it.attachments.indices) it
+            else it.copy(attachments = it.attachments.filterIndexed { i, _ -> i != index })
+        }
+    }
 
     fun onToChanged(value: String) = edit { it.copy(to = value, errorMessage = null) }
     fun onCcChanged(value: String) = edit { it.copy(cc = value) }
@@ -289,6 +324,7 @@ class ComposeViewModel(
                 bcc = EmailAddressUtils.parseAddressList(_state.value.bcc),
                 subject = _state.value.subject.trim(),
                 body = _state.value.body,
+                attachments = _state.value.attachments,
             )
             val result = when (mode) {
                 ComposeMode.NEW -> sendEmailUseCase(mailboxId, request)

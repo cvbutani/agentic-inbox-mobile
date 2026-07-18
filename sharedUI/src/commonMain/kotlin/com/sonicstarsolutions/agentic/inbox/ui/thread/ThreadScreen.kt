@@ -87,6 +87,7 @@ import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlSanitizer
+import com.sonicstarsolutions.agentic.inbox.util.formatFileSize
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -686,7 +687,7 @@ private fun AttachmentChip(
                     modifier = Modifier.widthIn(max = 180.dp),
                 )
                 Text(
-                    text = formatAttachmentSize(attachment.size),
+                    text = formatFileSize(attachment.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -695,15 +696,6 @@ private fun AttachmentChip(
     }
 }
 
-private fun formatAttachmentSize(bytes: Long): String = when {
-    bytes >= 10 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-    bytes >= 1024 * 1024 -> {
-        val tenths = bytes * 10 / (1024 * 1024)
-        "${tenths / 10}.${tenths % 10} MB"
-    }
-    bytes >= 1024 -> "${bytes / 1024} KB"
-    else -> "$bytes B"
-}
 
 private fun Color.toCssHex(): String {
     fun component(value: Float) = (value.coerceIn(0f, 1f) * 255).toInt().toString(16).padStart(2, '0')

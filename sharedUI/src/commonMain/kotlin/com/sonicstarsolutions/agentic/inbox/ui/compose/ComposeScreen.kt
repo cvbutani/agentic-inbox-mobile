@@ -3,16 +3,20 @@ package com.sonicstarsolutions.agentic.inbox.ui.compose
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
@@ -21,6 +25,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -49,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
+import com.sonicstarsolutions.agentic.inbox.util.formatFileSize
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -125,6 +132,10 @@ fun ComposeScreen(
                     }
                 },
                 actions = {
+                    val pickFiles = rememberAttachmentPicker(onFilePicked = viewModel::addAttachment)
+                    IconButton(onClick = pickFiles, enabled = !state.sending) {
+                        Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
+                    }
                     // Only offered once there's actually a draft to throw away.
                     if (state.draftId != null) {
                         IconButton(onClick = { showDiscardDialog = true }, enabled = !state.sending) {
@@ -249,6 +260,30 @@ fun ComposeScreen(
                     keyboardActions = nextField,
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                if (state.attachments.isNotEmpty()) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        itemsIndexed(state.attachments) { index, attachment ->
+                            InputChip(
+                                selected = false,
+                                onClick = { viewModel.removeAttachment(index) },
+                                label = { Text("${attachment.filename} · ${formatFileSize(attachment.bytes.size.toLong())}") },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove attachment",
+                                        modifier = Modifier.size(InputChipDefaults.IconSize),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
 
                 TextField(
                     value = state.body,

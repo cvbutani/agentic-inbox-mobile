@@ -58,6 +58,9 @@ kotlin {
             implementation(libs.room.runtime)
             implementation(libs.sqlite.bundled)
             implementation(libs.materialKolor)
+            // Platform file pickers for compose attachments. Quarantined behind
+            // ui/compose/AttachmentPicker.kt — nothing else may import FileKit.
+            implementation(libs.filekit.dialogs.compose)
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
