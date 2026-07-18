@@ -24,7 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Visibility
@@ -57,6 +56,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
 import org.koin.compose.viewmodel.koinViewModel
 
 /** Long-form text stays readable up to roughly this width; past it, fields just look stretched. */
@@ -164,7 +164,7 @@ private fun ExpandedOnboarding(state: OnboardingUiState, viewModel: OnboardingVi
             ) {
                 Text(
                     text = "Connect your Worker",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 ConnectionForm(state = state, viewModel = viewModel)
@@ -231,10 +231,12 @@ private fun Headline(centred: Boolean) {
         horizontalAlignment = if (centred) Alignment.CenterHorizontally else Alignment.Start,
         modifier = Modifier.fillMaxWidth(),
     ) {
+        // SemiBold, and the same style the expanded layout uses — the same words shouldn't
+        // change voice with window size, and Open Sans Bold is heavy at display sizes.
         Text(
             text = "Connect your Worker",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = "Point Agentic Inbox at your deployment to get started.",
@@ -354,33 +356,6 @@ private fun ConnectionForm(state: OnboardingUiState, viewModel: OnboardingViewMo
             } else {
                 Text("Connect", style = MaterialTheme.typography.labelLarge)
             }
-        }
-    }
-}
-
-@Composable
-private fun ErrorBanner(message: String) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.errorContainer,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.ErrorOutline,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(18.dp),
-            )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-            )
         }
     }
 }

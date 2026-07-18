@@ -35,7 +35,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -65,6 +64,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.ui.WindowWidthClass
+import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
@@ -308,17 +308,21 @@ private fun MailboxCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    ElevatedCard(
+    // Tonal, not elevated: this was the only drop shadow in the app — every other container
+    // is a flat tonal surface.
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = { showMenu = true }),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            InitialsAvatar(name = mailbox.displayName, modifier = Modifier.size(44.dp))
+            InitialsAvatar(name = mailbox.displayName, modifier = Modifier.size(40.dp))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -620,11 +624,7 @@ private fun CreateMailboxFields(
             )
         }
         if (errorMessage != null) {
-            Text(
-                text = errorMessage,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            ErrorBanner(errorMessage)
         }
     }
 }
