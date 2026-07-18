@@ -1,5 +1,10 @@
 package com.sonicstarsolutions.agentic.inbox.ui.thread
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,8 +75,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
+import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import com.sonicstarsolutions.agentic.inbox.ui.components.folderIcon
+import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
@@ -200,10 +207,22 @@ fun ThreadScreen(
         },
     ) { paddingValues ->
         when {
-            state.loading -> Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
+            // Skeleton message cards on the same grid as the real ones — the screen looks like
+            // itself while loading instead of showing a bare spinner.
+            state.loading -> Column(
+                modifier = Modifier.fillMaxSize().padding(paddingValues).padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                repeat(2) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ) {
+                        SkeletonEmailRow()
+                    }
+                }
+            }
 
             state.errorMessage != null -> StatusPane(
                 icon = Icons.Default.ErrorOutline,
@@ -232,6 +251,7 @@ fun ThreadScreen(
 
                 items(state.messages, key = { it.id }) { message ->
                     MessageCard(
+                        modifier = Modifier.padding(horizontal = 16.dp).animateItem(),
                         message = message,
                         expanded = message.id == state.expandedMessageId,
                         imagesAllowed = state.imagesAllowedFor.contains(message.id),
@@ -244,7 +264,6 @@ fun ThreadScreen(
                         onReply = { onReply(message.id) },
                         onReplyAll = { onReplyAll(message.id) },
                         onForward = { onForward(message.id) },
-                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
                 }
             }
@@ -432,10 +451,32 @@ private fun MessageCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+
+                    // Collapsed messages get one preview line — in a long thread, a header
+                    // with no content hint is unidentifiable without expanding it.
+                    if (!expanded) {
+                        val preview = HtmlTextExtractor.toPlainText(message.body.orEmpty())
+                        if (preview.isNotBlank()) {
+                            Text(
+                                text = preview,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
 
-            if (expanded) {
+            // Animated, not an instant pop — expanding a message is the screen's defining
+            // interaction and should read as motion, not a glitch.
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 val body = message.body.orEmpty()
@@ -443,24 +484,32 @@ private fun MessageCard(
                 val hasBlockedImages = !imagesAllowed && sanitized.contains("data-src=")
 
                 if (hasBlockedImages) {
-                    Row(
+                    // A calm tonal banner with a text action — a filled Button here was the
+                    // loudest element in the message for what is only a notice.
+                    Surface(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text(
-                            text = "Images blocked for your privacy",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(onClick = onAllowImages) { Text("Load images") }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text(
+                                text = "Images blocked for your privacy",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = onAllowImages) { Text("Load images") }
+                        }
                     }
                 }
 
@@ -540,6 +589,7 @@ private fun MessageCard(
                             Text("Forward", modifier = Modifier.padding(start = 6.dp))
                         }
                     }
+                }
                 }
             }
         }
