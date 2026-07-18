@@ -101,6 +101,38 @@ class ComposeEditDraftTest {
     )
 
     @Test
+    fun `an html draft body is converted to editable text for the plain-text composer`() = runTest {
+        // The Worker's AI writes drafts as HTML. The composer's Message field is a plain
+        // TextField — handing it raw markup means the user edits angle brackets.
+        val threadRepository = FakeThreadRepository(
+            result = Result.success(
+                listOf(
+                    draftMessage(
+                        body = """<div style="white-space:pre-wrap">Sounds good.</div><br>""" +
+                            """<blockquote>On Fri, Alice wrote:<br>See you then.</blockquote>""",
+                    ),
+                ),
+            ),
+        )
+
+        val viewModel = buildViewModel(threadRepository = threadRepository)
+
+        val body = viewModel.state.value.body
+        assertEquals("Sounds good.\n\nOn Fri, Alice wrote:\nSee you then.", body)
+    }
+
+    @Test
+    fun `a plain text draft body is loaded verbatim`() = runTest {
+        val threadRepository = FakeThreadRepository(
+            result = Result.success(listOf(draftMessage(body = "Dear Bob,\n\n5 < 6 and a & b."))),
+        )
+
+        val viewModel = buildViewModel(threadRepository = threadRepository)
+
+        assertEquals("Dear Bob,\n\n5 < 6 and a & b.", viewModel.state.value.body)
+    }
+
+    @Test
     fun `prefills directly from the draft message's own fields rather than deriving reply text`() = runTest {
         val threadRepository = FakeThreadRepository(result = Result.success(listOf(draftMessage())))
 

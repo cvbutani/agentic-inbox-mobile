@@ -59,7 +59,9 @@ object ComposePrefill {
     }
 
     private fun quoteOriginal(original: EmailDetail): String {
-        val plainBody = HtmlTextExtractor.toPlainText(original.body.orEmpty())
+        // toEditableText, not toPlainText: the quote lands in the composer's editor, where the
+        // original's paragraphs should survive rather than collapse into one line.
+        val plainBody = HtmlTextExtractor.toEditableText(original.body.orEmpty())
         return """
 
 

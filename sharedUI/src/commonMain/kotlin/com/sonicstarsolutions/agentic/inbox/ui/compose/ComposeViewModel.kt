@@ -15,6 +15,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
+import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -120,7 +121,7 @@ class ComposeViewModel(
                         cc = resumed.cc,
                         bcc = resumed.bcc,
                         subject = resumed.subject,
-                        body = resumed.body,
+                        body = editableBody(resumed.body),
                         draftId = resumed.id,
                     )
                 }
@@ -151,15 +152,17 @@ class ComposeViewModel(
                         ComposeMode.NEW -> PrefilledFields(to = "", cc = "", subject = "", body = "")
                         ComposeMode.EDIT_DRAFT -> {
                             // Continuing an existing draft, not deriving a fresh reply/forward — its
-                            // own current fields are the whole message, verbatim, not a starting point
-                            // to quote or re-prefix.
+                            // own current fields are the whole message, not a starting point to
+                            // quote or re-prefix. The body still converts to editable text: server
+                            // drafts (the Worker's AI writes these) are HTML, and the composer is
+                            // a plain TextField — raw markup would make the user edit angle brackets.
                             editDraftInReplyTo = original.inReplyTo
                             PrefilledFields(
                                 to = original.recipient,
                                 cc = original.cc.orEmpty(),
                                 bcc = original.bcc.orEmpty(),
                                 subject = original.subject,
-                                body = original.body.orEmpty(),
+                                body = editableBody(original.body.orEmpty()),
                             )
                         }
                     }
@@ -179,6 +182,11 @@ class ComposeViewModel(
                 _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
             }
     }
+
+    /** HTML bodies (server drafts, legacy autosaves of them) become editable plain text;
+     * bodies that are already plain pass through byte-for-byte. */
+    private fun editableBody(body: String): String =
+        if (HtmlTextExtractor.containsHtml(body)) HtmlTextExtractor.toEditableText(body) else body
 
     fun onToChanged(value: String) = edit { it.copy(to = value, errorMessage = null) }
     fun onCcChanged(value: String) = edit { it.copy(cc = value) }
