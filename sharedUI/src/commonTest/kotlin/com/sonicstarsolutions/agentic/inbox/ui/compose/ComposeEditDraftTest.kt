@@ -101,6 +101,15 @@ class ComposeEditDraftTest {
     )
 
     @Test
+    fun `state exposes the sending mailbox address for the From row`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(draftMessage())))
+
+        val viewModel = buildViewModel(threadRepository = threadRepository)
+
+        assertEquals("me@example.dev", viewModel.state.value.fromAddress)
+    }
+
+    @Test
     fun `an html draft body is converted to editable text for the plain-text composer`() = runTest {
         // The Worker's AI writes drafts as HTML. The composer's Message field is a plain
         // TextField — handing it raw markup means the user edits angle brackets.

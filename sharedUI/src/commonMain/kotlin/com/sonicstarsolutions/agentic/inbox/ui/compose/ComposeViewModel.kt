@@ -42,6 +42,9 @@ enum class ComposeMode {
 
 data class ComposeUiState(
     val loading: Boolean = true,
+    /** The sending mailbox's address, for the composer's read-only From row — in a
+     * multi-mailbox app the sender identity shouldn't be a mystery. */
+    val fromAddress: String = "",
     val to: String = "",
     val cc: String = "",
     val bcc: String = "",
@@ -111,6 +114,7 @@ class ComposeViewModel(
             getMailbox(mailboxId).onSuccess { mailbox ->
                 fromEmail = mailbox.email
                 fromName = mailbox.displayName
+                _state.update { it.copy(fromAddress = mailbox.email) }
             }
             val resumed = draftId?.let { getDraftUseCase(it) }
             if (resumed != null) {

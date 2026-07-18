@@ -1,14 +1,16 @@
 package com.sonicstarsolutions.agentic.inbox.ui.compose
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
@@ -20,12 +22,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -37,8 +38,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -56,7 +66,6 @@ fun ComposeScreen(
     viewModel: ComposeViewModel = koinViewModel { parametersOf(mailboxId, mode, emailId, threadId, draftId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
     var showCcBcc by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
 
@@ -103,15 +112,10 @@ fun ComposeScreen(
         )
     }
 
-    LaunchedEffect(state.errorMessage) {
-        val message = state.errorMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
-        viewModel.consumeError()
-    }
-
+    // Errors render as a persistent inline banner above the fields (the app's form-error
+    // convention) rather than a snackbar that vanishes while the user is still reading it.
     Scaffold(
         modifier = modifier,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(titleFor(mode)) },
@@ -147,64 +151,110 @@ fun ComposeScreen(
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
         } else {
+            val focusManager = LocalFocusManager.current
+            val toFocusRequester = remember { FocusRequester() }
+            // A brand-new message starts at the To field; replies and drafts already have
+            // recipients, so the user's next act there is reading or writing, not addressing.
+            LaunchedEffect(Unit) {
+                if (mode == ComposeMode.NEW) toFocusRequester.requestFocus()
+            }
+
+            val addressKeyboard = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next,
+            )
+            val nextField = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
+
             // Capped and centered on wide windows — full-bleed single-line fields on a tablet
             // read as a stretched phone layout, not a composer.
             Box(
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentAlignment = Alignment.TopCenter,
             ) {
+            // Borderless rows split by hairline dividers — the mail-composer convention.
+            // Outlined boxes around every field read as a settings form, not a message.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .widthIn(max = FORM_MAX_WIDTH)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                    .widthIn(max = FORM_MAX_WIDTH),
             ) {
-                OutlinedTextField(
+                state.errorMessage?.let { message ->
+                    ErrorBanner(message, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                }
+
+                if (state.fromAddress.isNotBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "From",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = state.fromAddress,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+
+                ComposeFieldRow(
                     value = state.to,
                     onValueChange = viewModel::onToChanged,
-                    label = { Text("To") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    prefixLabel = "To",
+                    keyboardOptions = addressKeyboard,
+                    keyboardActions = nextField,
+                    trailing = if (!showCcBcc) {
+                        {
+                            TextButton(onClick = { showCcBcc = true }) { Text("Cc/Bcc") }
+                        }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.focusRequester(toFocusRequester),
                 )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                 if (showCcBcc) {
-                    OutlinedTextField(
+                    ComposeFieldRow(
                         value = state.cc,
                         onValueChange = viewModel::onCcChanged,
-                        label = { Text("Cc") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        prefixLabel = "Cc",
+                        keyboardOptions = addressKeyboard,
+                        keyboardActions = nextField,
                     )
-                    OutlinedTextField(
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    ComposeFieldRow(
                         value = state.bcc,
                         onValueChange = viewModel::onBccChanged,
-                        label = { Text("Bcc") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        prefixLabel = "Bcc",
+                        keyboardOptions = addressKeyboard,
+                        keyboardActions = nextField,
                     )
-                } else {
-                    Text(
-                        text = "Cc/Bcc",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .clickable { showCcBcc = true }
-                            .padding(vertical = 6.dp, horizontal = 4.dp),
-                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
-                OutlinedTextField(
+
+                ComposeFieldRow(
                     value = state.subject,
                     onValueChange = viewModel::onSubjectChanged,
-                    label = { Text("Subject") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = "Subject",
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = nextField,
                 )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                OutlinedTextField(
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                TextField(
                     value = state.body,
                     onValueChange = viewModel::onBodyChanged,
-                    label = { Text("Message") },
+                    placeholder = { Text("Compose email") },
+                    colors = borderlessFieldColors(),
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 )
             }
@@ -212,6 +262,51 @@ fun ComposeScreen(
         }
     }
 }
+
+/** One borderless single-line field row: an optional muted prefix label ("To"), the input, and
+ * an optional trailing control — the shape every recipient/subject row shares. */
+@Composable
+private fun ComposeFieldRow(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    prefixLabel: String? = null,
+    placeholder: String? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        prefix = prefixLabel?.let {
+            {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 12.dp),
+                )
+            }
+        },
+        placeholder = placeholder?.let { { Text(it) } },
+        trailingIcon = trailing,
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        colors = borderlessFieldColors(),
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun borderlessFieldColors() = TextFieldDefaults.colors(
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+    disabledContainerColor = Color.Transparent,
+    focusedIndicatorColor = Color.Transparent,
+    unfocusedIndicatorColor = Color.Transparent,
+    disabledIndicatorColor = Color.Transparent,
+)
 
 /** Fields stay readable up to roughly this width; past it a composer is just stretched. */
 private val FORM_MAX_WIDTH = 720.dp
