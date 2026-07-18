@@ -21,8 +21,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
@@ -43,7 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -62,13 +60,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.ui.WindowWidthClass
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
+import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
+import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import com.sonicstarsolutions.agentic.inbox.ui.windowWidthClassFor
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -143,13 +142,36 @@ fun MailboxPickerScreen(
             )
         }
 
+        // Signing out discards stored Worker credentials, and the Access secret was shown only
+        // once at creation — one mis-tapped icon shouldn't be able to lock the user out.
+        var showSignOutDialog by remember { mutableStateOf(false) }
+        if (showSignOutDialog) {
+            AlertDialog(
+                onDismissRequest = { showSignOutDialog = false },
+                icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                title = { Text("Sign out") },
+                text = { Text("You'll need your Worker URL and Access credentials to reconnect.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showSignOutDialog = false
+                            viewModel.signOut()
+                        },
+                    ) { Text("Sign out") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSignOutDialog = false }) { Text("Cancel") }
+                },
+            )
+        }
+
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
                 TopAppBar(
                     title = { Text("Mailboxes") },
                     actions = {
-                        IconButton(onClick = viewModel::signOut) {
+                        IconButton(onClick = { showSignOutDialog = true }) {
                             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
                         }
                     },
@@ -211,64 +233,44 @@ private fun MailboxPickerContent(
     modifier: Modifier = Modifier,
 ) {
     when {
-        state.loading && state.mailboxes.isEmpty() -> Box(
-            modifier = modifier,
-            contentAlignment = Alignment.Center,
-        ) { CircularProgressIndicator() }
-
-        state.errorMessage != null && state.mailboxes.isEmpty() -> Box(
-            modifier = modifier
-                .verticalScroll(rememberScrollState())
-                .padding(vertical = 48.dp),
-            contentAlignment = Alignment.Center,
+        // Skeleton cards on the same grid as real mailboxes — the screen looks like itself
+        // while loading instead of showing a bare spinner.
+        state.loading && state.mailboxes.isEmpty() -> Column(
+            modifier = modifier.padding(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.ErrorOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(48.dp),
-                )
-                Text(
-                    text = state.errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                OutlinedButton(onClick = onRefresh) { Text("Retry") }
+            repeat(2) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    SkeletonEmailRow()
+                }
             }
         }
 
-        state.mailboxes.isEmpty() -> Box(
-            modifier = modifier
-                .verticalScroll(rememberScrollState())
-                .padding(vertical = 48.dp),
-            contentAlignment = Alignment.Center,
+        state.errorMessage != null && state.mailboxes.isEmpty() -> StatusPane(
+            icon = Icons.Outlined.ErrorOutline,
+            title = "Couldn't load mailboxes",
+            detail = state.errorMessage,
+            modifier = modifier,
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+            Button(onClick = onRefresh) { Text("Retry") }
+        }
+
+        // Inside the refresh container: a user whose mailboxes failed to sync silently
+        // shouldn't find the pull gesture dead-ended on the empty screen.
+        state.mailboxes.isEmpty() -> PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = onRefresh,
+            modifier = modifier,
+        ) {
+            StatusPane(
+                icon = Icons.Rounded.Inbox,
+                title = "No mailboxes yet",
+                detail = "Create one to start reading and sending mail through your Worker.",
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Inbox,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(64.dp),
-                )
-                Text(
-                    text = "No mailboxes yet",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = "Create one to start reading and sending mail through your Worker.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                )
                 Button(onClick = onCreateRequested) { Text("New mailbox") }
             }
         }
@@ -322,11 +324,15 @@ private fun MailboxCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(mailbox.displayName, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    mailbox.email,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // A mailbox with no display name falls back to its address — repeating the
+                // same string on both lines reads as a rendering bug.
+                if (mailbox.displayName != mailbox.email) {
+                    Text(
+                        mailbox.email,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Box {
                 IconButton(onClick = { showMenu = true }) {
