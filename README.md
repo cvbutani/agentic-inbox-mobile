@@ -69,3 +69,16 @@ On first launch the app asks for your Worker URL, the Client ID, and the Client 
 
 - [agentic-inbox-cmp-plan.md](agentic-inbox-cmp-plan.md) — original scope and architecture plan
 - [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) — UI conventions all screens follow
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to build, test, and submit changes
+
+## License
+
+Copyright © 2026 Chirag Butani (Sonic Star Solutions). The source code is licensed under the
+[Apache License 2.0](LICENSE).
+
+**The "Agentic Inbox" name and the app icon are not covered by this license.** Forks and
+derived apps must ship under their own name and branding — please don't publish builds that
+could be mistaken for the official app.
+
+The project began from the [Kotlin Multiplatform template](https://github.com/Kotlin/KMP-App-Template)
+scaffold (Apache 2.0); it has since been substantially rewritten.

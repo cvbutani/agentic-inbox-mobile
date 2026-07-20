@@ -16,3 +16,7 @@ Pods/
 *.gpg
 *yarn.lock
 .claude
+# Session/agent scratch space — never source
+scratchpad/
+# User-local Xcode state (schemes managed per machine)
+iosApp/iosApp.xcodeproj/xcshareddata/
