@@ -16,7 +16,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "com.sonicstarsolutions.agentic.inbox"
+        namespace = "com.sonicstarsolutions.agentic.inbox.cmp"
         compileSdk = 36
         minSdk = 24
         androidResources.enable = true
@@ -38,7 +38,7 @@ kotlin {
             api(libs.compose.resources)
             api(libs.compose.ui.tooling.preview)
             api(libs.compose.material3)
-            implementation(compose.materialIconsExtended)
+            implementation(libs.material.icons.extended)
             implementation(libs.kermit)
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.ktorfit)

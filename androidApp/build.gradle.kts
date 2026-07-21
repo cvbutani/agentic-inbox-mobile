@@ -6,14 +6,14 @@ plugins {
 }
 
 android {
-    namespace = "com.sonicstarsolutions.agentic.inbox.androidApp"
-    compileSdk = 36
+    namespace = "com.sonicstarsolutions.agentic.inbox"
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
 
-        applicationId = "com.sonicstarsolutions.agentic.inbox.androidApp"
+        applicationId = "com.sonicstarsolutions.agentic.inbox"
 
         versionCode = (project.properties["versionCode"] as? String)?.toInt() ?: 1
         versionName = project.properties["versionName"] as? String ?: "1.0.0"

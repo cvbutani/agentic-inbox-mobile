@@ -1,4 +1,4 @@
-package com.sonicstarsolutions.agentic.inbox.androidApp
+package com.sonicstarsolutions.agentic.inbox
 
 import android.app.Activity
 import android.os.Bundle
@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowInsetsControllerCompat
-import com.sonicstarsolutions.agentic.inbox.App
 import com.sonicstarsolutions.agentic.inbox.di.platformModule
 
 class AppActivity : ComponentActivity() {

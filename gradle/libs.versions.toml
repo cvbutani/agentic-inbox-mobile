@@ -3,13 +3,14 @@
 kotlin = "2.4.0"
 compose-multiplatform = "1.11.1"
 material3 = "1.11.0-alpha07"
-agp = "9.0.0"
+agp = "9.2.1"
 androidx-activityCompose = "1.12.0"
 kermit = "2.1.0"
 kotlinx-coroutines = "1.11.0"
 ktor = "3.5.0"
 androidx-lifecycle = "2.11.0-beta01"
 androidx-nav3 = "1.1.1"
+materialIconsExtended = "1.7.3"
 nav3-browser = "1.1.0"
 kotlinx-serialization = "1.11.0"
 coil = "3.4.0"
@@ -57,6 +58,7 @@ androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:life
 androidx-lifecycle-runtime = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-viewmodel-navigation3 = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "androidx-lifecycle" }
 compose-nav3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "androidx-nav3" }
+material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 nav3-browser = { module = "com.github.terrakok:navigation3-browser", version.ref = "nav3-browser" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 coil = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
