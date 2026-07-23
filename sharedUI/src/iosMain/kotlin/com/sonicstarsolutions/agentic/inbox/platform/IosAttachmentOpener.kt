@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.platform
 
 import platform.Foundation.NSURL
 import platform.UIKit.UIActivityViewController
+import platform.UIKit.popoverPresentationController
 import platform.UIKit.UIApplication
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue

@@ -13,6 +13,7 @@ import platform.Foundation.NSFileSize
 import platform.Foundation.NSNumber
 import platform.Foundation.NSUserDomainMask
 import platform.Foundation.dataWithBytes
+import platform.Foundation.writeToFile
 
 @OptIn(ExperimentalForeignApi::class)
 class IosAttachmentStore : AttachmentStore {
