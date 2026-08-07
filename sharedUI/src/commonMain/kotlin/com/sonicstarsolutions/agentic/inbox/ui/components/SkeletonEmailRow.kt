@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
 
 /** Placeholder for one email row while a list loads: same 72dp grid and row height rhythm as
  * [EmailListItem], drawn as mute shapes. Used by the inbox and search first-page loads. */
@@ -26,17 +27,20 @@ fun SkeletonEmailRow(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(
+                horizontal = ListRowDimens.horizontalPadding,
+                vertical = ListRowDimens.verticalPadding,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(ListRowDimens.contentGap),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(ListRowDimens.avatarSize)
                 .clip(CircleShape)
                 .background(shapeColor),
         )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(ListRowDimens.trailingGap)) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.45f)

@@ -85,6 +85,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.folderIcon
+import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -351,7 +352,7 @@ fun InboxScreen(
                         repeat(7) {
                             SkeletonEmailRow()
                             HorizontalDivider(
-                                modifier = Modifier.padding(start = 72.dp),
+                                modifier = Modifier.padding(start = ListRowDimens.textEdge),
                                 color = MaterialTheme.colorScheme.outlineVariant,
                             )
                         }
@@ -428,7 +429,7 @@ fun InboxScreen(
                                     onDelete = { draftToDelete = draft },
                                 )
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(start = 72.dp),
+                                    modifier = Modifier.padding(start = ListRowDimens.textEdge),
                                     color = MaterialTheme.colorScheme.outlineVariant,
                                 )
                             }
@@ -479,7 +480,7 @@ fun InboxScreen(
                                 )
                             }
                             HorizontalDivider(
-                                modifier = Modifier.padding(start = 72.dp),
+                                modifier = Modifier.padding(start = ListRowDimens.textEdge),
                                 color = MaterialTheme.colorScheme.outlineVariant
                             )
                             }

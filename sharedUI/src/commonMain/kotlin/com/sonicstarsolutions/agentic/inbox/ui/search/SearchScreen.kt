@@ -71,6 +71,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
+import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -212,7 +213,7 @@ fun SearchScreen(
                     repeat(7) {
                         SkeletonEmailRow()
                         HorizontalDivider(
-                            modifier = Modifier.padding(start = 72.dp),
+                            modifier = Modifier.padding(start = ListRowDimens.textEdge),
                             color = MaterialTheme.colorScheme.outlineVariant,
                         )
                     }
@@ -258,7 +259,7 @@ fun SearchScreen(
                                 onToggleStarred = { viewModel.toggleStarred(email) },
                             )
                             HorizontalDivider(
-                                modifier = Modifier.padding(start = 72.dp),
+                                modifier = Modifier.padding(start = ListRowDimens.textEdge),
                                 color = MaterialTheme.colorScheme.outlineVariant,
                             )
                         }

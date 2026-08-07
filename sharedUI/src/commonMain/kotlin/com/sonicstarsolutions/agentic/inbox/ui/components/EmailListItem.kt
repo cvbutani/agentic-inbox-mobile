@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
@@ -58,8 +59,11 @@ fun EmailListItem(
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(
+                horizontal = ListRowDimens.horizontalPadding,
+                vertical = ListRowDimens.verticalPadding,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(ListRowDimens.contentGap),
             verticalAlignment = Alignment.Top,
         ) {
             // Avatar, or a checkbox in place of it while selecting
@@ -67,22 +71,22 @@ fun EmailListItem(
                 Checkbox(
                     checked = selected,
                     onCheckedChange = { onClick() },
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(ListRowDimens.avatarSize),
                 )
             } else {
                 InitialsAvatar(
                     name = EmailAddressUtils.displayName(email.sender, ownEmail = null),
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(ListRowDimens.avatarSize),
                 )
             }
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(ListRowDimens.lineGap),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(ListRowDimens.trailingGap),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -105,12 +109,12 @@ fun EmailListItem(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(ListRowDimens.trailingGap),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(ListRowDimens.lineGap),
                     ) {
                         Text(
                             text = email.subject,
