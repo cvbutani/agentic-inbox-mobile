@@ -56,7 +56,13 @@ platform :ios do
       configuration: "Release",
       export_method: "app-store",
       output_directory: "build/ios",
-      output_name: "AgenticInbox.ipa"
+      output_name: "AgenticInbox.ipa",
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          IOS_BUNDLE_ID => ENV.fetch("IOS_PROFILE_NAME")
+        }
+      }
     )
 
     if ENV["DEPLOY_TESTFLIGHT"] == "true"
