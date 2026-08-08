@@ -1,4 +1,5 @@
-# Paths in this file are relative to the fastlane/ directory, hence the "../" prefixes.
+# Fastlane treats the parent of the fastlane/ folder as the project root, so all
+# paths here are relative to the project root (not to this fastlane/ directory).
 # Secret material (keystore, certs, API keys) is passed in via env vars from CI.
 
 ANDROID_PACKAGE_NAME = "com.sonicstarsolutions.agentic.inbox.androidApp"
@@ -10,7 +11,7 @@ platform :android do
     upload_to_play_store(
       package_name: ANDROID_PACKAGE_NAME,
       track: "internal",
-      aab: "../androidApp/build/outputs/bundle/release/androidApp-release.aab",
+      aab: "androidApp/build/outputs/bundle/release/androidApp-release.aab",
       json_key: ENV.fetch("PLAY_STORE_JSON_KEY_PATH"),
       skip_upload_metadata: true,
       skip_upload_images: true,
@@ -41,7 +42,7 @@ platform :ios do
     install_provisioning_profile(path: ENV.fetch("IOS_PROFILE_PATH"))
 
     update_code_signing_settings(
-      path: "../iosApp/iosApp.xcodeproj",
+      path: "iosApp/iosApp.xcodeproj",
       use_automatic_signing: false,
       team_id: ENV.fetch("APPLE_TEAM_ID"),
       code_sign_identity: "Apple Distribution",
@@ -50,11 +51,11 @@ platform :ios do
     )
 
     build_app(
-      project: "../iosApp/iosApp.xcodeproj",
+      project: "iosApp/iosApp.xcodeproj",
       scheme: "iosApp",
       configuration: "Release",
       export_method: "app-store",
-      output_directory: "../build/ios",
+      output_directory: "build/ios",
       output_name: "AgenticInbox.ipa"
     )
 

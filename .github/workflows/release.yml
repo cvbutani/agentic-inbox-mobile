@@ -138,6 +138,25 @@ jobs:
           echo "$IOS_CERT_BASE64" | base64 -d > "$RUNNER_TEMP/distribution.p12"
           echo "$IOS_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/appstore.mobileprovision"
 
+      - name: Verify P12 certificate password
+        env:
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+        run: |
+          P12_PATH="$RUNNER_TEMP/distribution.p12"
+          # Try both the legacy provider (older RC2/3DES-encrypted p12s) and the
+          # default provider (newer AES-encrypted p12s) since OpenSSL/LibreSSL
+          # builds on macOS runners vary in which one they need.
+          if openssl pkcs12 -in "$P12_PATH" -passin "pass:$IOS_CERT_PASSWORD" -legacy -noout 2>/tmp/p12_legacy.err \
+             || openssl pkcs12 -in "$P12_PATH" -passin "pass:$IOS_CERT_PASSWORD" -noout 2>/tmp/p12_default.err; then
+            echo "P12 certificate password verified."
+          else
+            echo "::error::IOS_CERT_PASSWORD does not match the password for the .p12 decoded from IOS_CERT_BASE64."
+            echo "Re-export the certificate from Keychain Access and update both IOS_CERT_BASE64 and IOS_CERT_PASSWORD together so they stay in sync."
+            echo "--- openssl (legacy) output ---"; cat /tmp/p12_legacy.err 2>/dev/null
+            echo "--- openssl (default) output ---"; cat /tmp/p12_default.err 2>/dev/null
+            exit 1
+          fi
+
       - name: Build (and optionally upload to TestFlight)
         env:
           IOS_CERT_PATH: ${{ runner.temp }}/distribution.p12
