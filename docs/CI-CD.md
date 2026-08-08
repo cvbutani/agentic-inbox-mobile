@@ -37,7 +37,7 @@ Set these in **Settings → Secrets and variables → Actions**.
 |---|---|
 | `IOS_CERT_BASE64` | Apple Distribution certificate (.p12), base64-encoded |
 | `IOS_CERT_PASSWORD` | Password of the .p12 |
-| `IOS_PROFILE_BASE64` | App Store provisioning profile (.mobileprovision) for `com.sonicstarsolutions.agentic.inbox.iosApp`, base64-encoded |
+| `IOS_PROFILE_BASE64` | App Store provisioning profile (.mobileprovision) for `com.sonicstarsolutions.agentic.inbox`, base64-encoded |
 | `IOS_PROFILE_NAME` | The provisioning profile's name exactly as it appears in the Apple Developer portal |
 | `APPLE_TEAM_ID` | 10-character Apple Developer team ID |
 | `ASC_KEY_ID` | App Store Connect API key ID |
@@ -49,7 +49,7 @@ Set these in **Settings → Secrets and variables → Actions**.
 - **Play Store**: the very first AAB for an app cannot be uploaded by the API — create the
   app in Play Console and upload one build manually, then the pipeline can publish to the
   internal track.
-- **App Store Connect**: create the app record (bundle ID `com.sonicstarsolutions.agentic.inbox.iosApp`)
+- **App Store Connect**: create the app record (bundle ID `com.sonicstarsolutions.agentic.inbox`)
   before the first TestFlight upload.
 
 ## How it runs

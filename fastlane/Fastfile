@@ -3,7 +3,7 @@
 # Secret material (keystore, certs, API keys) is passed in via env vars from CI.
 
 ANDROID_PACKAGE_NAME = "com.sonicstarsolutions.agentic.inbox.androidApp"
-IOS_BUNDLE_ID = "com.sonicstarsolutions.agentic.inbox.iosApp"
+IOS_BUNDLE_ID = "com.sonicstarsolutions.agentic.inbox"
 
 platform :android do
   desc "Upload the already-built release AAB to the Play Store internal track"
