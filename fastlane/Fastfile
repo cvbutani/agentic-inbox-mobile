@@ -2,7 +2,7 @@
 # paths here are relative to the project root (not to this fastlane/ directory).
 # Secret material (keystore, certs, API keys) is passed in via env vars from CI.
 
-ANDROID_PACKAGE_NAME = "com.sonicstarsolutions.agentic.inbox.androidApp"
+ANDROID_PACKAGE_NAME = "com.sonicstarsolutions.agentic.inbox"
 IOS_BUNDLE_ID = "com.sonicstarsolutions.agentic.inbox"
 
 platform :android do

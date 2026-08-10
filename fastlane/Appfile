@@ -1,2 +1,2 @@
 app_identifier("com.sonicstarsolutions.agentic.inbox")
-package_name("com.sonicstarsolutions.agentic.inbox.androidApp")
+package_name("com.sonicstarsolutions.agentic.inbox")
