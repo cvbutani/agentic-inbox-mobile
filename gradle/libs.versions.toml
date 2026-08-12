@@ -16,6 +16,7 @@ kotlinx-serialization = "1.11.0"
 coil = "3.4.0"
 kotlinx-datetime = "0.8.0"
 androidx-core = "1.16.0"
+androidx-splashscreen = "1.0.1"
 filekit = "0.14.2"
 room = "2.8.4"
 sqlite = "2.6.2"
@@ -71,6 +72,7 @@ materialKolor = { module = "com.materialkolor:material-kolor", version.ref = "ma
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
 androidx-core = { module = "androidx.core:core", version.ref = "androidx-core" }
+androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "androidx-splashscreen" }
 filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }

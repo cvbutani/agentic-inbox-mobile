@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the launcher adaptive icon background (primaryContainer seed) so the
+         cold-start splash reads as a continuation of the home-screen icon, not a new color. -->
+    <color name="splash_background">#FFD5E3FF</color>
+</resources>
