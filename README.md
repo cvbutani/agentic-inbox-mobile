@@ -4,6 +4,11 @@ A native Android + iOS email client for the [`cloudflare/agentic-inbox`](https:/
 
 You point the app at your own Worker deployment — mail, credentials, and cache stay between your device and your Cloudflare account.
 
+<a href="https://play.google.com/store/apps/details?id=com.sonicstarsolutions.agentic.inbox">
+  <img alt="Get it on Google Play" height="80"
+       src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png">
+</a>
+
 ## Features
 
 - **Mailboxes** — list, create (against your Worker's allowed domains), switch, delete
