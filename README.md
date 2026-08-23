@@ -4,8 +4,12 @@ A native Android + iOS email client for the [`cloudflare/agentic-inbox`](https:/
 
 You point the app at your own Worker deployment — mail, credentials, and cache stay between your device and your Cloudflare account.
 
+<a href="https://apps.apple.com/us/app/agentic-inbox/id6793996922">
+  <img alt="Download on the App Store" height="60"
+       src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83">
+</a>
 <a href="https://play.google.com/store/apps/details?id=com.sonicstarsolutions.agentic.inbox">
-  <img alt="Get it on Google Play" height="80"
+  <img alt="Get it on Google Play" height="83"
        src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png">
 </a>
 
