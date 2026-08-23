@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Agentic Inbox</title>
+<meta name="description" content="Privacy policy for the Agentic Inbox mobile app. No analytics, no tracking, no backend I operate.">
+<meta name="theme-color" content="#1D3557">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <img src="assets/icon.png" alt="">
+    <strong>Agentic Inbox</strong>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="https://github.com/cvbutani/agentic-inbox-mobile">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap prose">
+<h1>Privacy Policy</h1>
+<p><strong>Agentic Inbox</strong> ("the App") is developed by Chirag Butani ("I", "me"). This policy explains what data the App accesses, where it goes, and what control you have over it.</p>
+<p class="effective"><strong>Effective date:</strong> August 12, 2026</p>
+<h2>1. What the App is</h2>
+<p>Agentic Inbox is a native Android and iOS email client. It is <strong>bring-your-own-backend</strong>: it does not connect to any email provider or server I operate. Instead, during setup you enter the URL and access credentials of a <a href="https://github.com/cloudflare/agentic-inbox"><code>cloudflare/agentic-inbox</code></a> Cloudflare Worker that <strong>you</strong> deploy and control. All of your email data lives on that Worker and whatever mail provider it is configured to connect to — not on any server belonging to me.</p>
+<p>I do not operate a backend, and the App does not send any data to me. I have no ability to see your email, credentials, or usage of the App.</p>
+<h2>2. Data the App accesses</h2>
+<h3>2.1 Your Worker credentials</h3>
+<p>During setup you provide a Worker URL and a Cloudflare Access service token (a Client ID and Client Secret). These are sent as HTTP headers on every request the App makes to your Worker, so your Worker can authenticate the request. I never receive these values myself.</p>
+<h3>2.2 Your email data</h3>
+<p>Once connected, the App requests your mailboxes, folders, messages, and attachments from your Worker and displays them. When you compose, reply, or forward a message, that content is sent to your Worker to be delivered. This traffic goes directly from your device to the Worker URL you configured — it does not pass through, or get logged by, any server I operate.</p>
+<h3>2.3 Data stored on your device</h3>
+<p>To work offline and load quickly, the App keeps a local cache on your device:</p>
+<ul>
+  <li><strong>Credentials</strong> (Worker URL, Client ID, Client Secret) are stored using platform-level secure storage (Android Keystore-backed storage / iOS Keychain).</li>
+  <li><strong>Email metadata and content</strong> — subjects, senders, recipients, dates, read/starred status, message snippets, and mailbox/folder lists — is cached in a local database on your device so the App can work offline.</li>
+  <li><strong>Drafts you write</strong> are stored locally, in full, until they are sent or discarded.</li>
+  <li><strong>Attachments</strong> you open or download are cached as files in the App's storage area on your device.</li>
+</ul>
+<p>This local database is <strong>not separately encrypted beyond your device's own disk encryption</strong> (standard on modern Android and iOS). Anyone with access to an unlocked, unencrypted, or compromised device could potentially access this cache. Uninstalling the App removes this local data.</p>
+<h3>2.4 What I do <em>not</em> collect</h3>
+<p>The App does not include analytics, crash reporting, advertising, or tracking SDKs of any kind. I do not collect your name, email address, device identifiers, location, contacts, camera/photo access, or usage statistics. The App does not use push notifications. The App does not send your email content to any AI/language-model service — despite the name, the current mobile App has no AI features.</p>
+<h2>3. Third parties</h2>
+<p>The only third party involved is the Cloudflare Worker backend <strong>you</strong> deploy and configure, and whatever email provider you connect that Worker to. That backend is outside my control; its own data handling is governed by Cloudflare's terms and by however you've configured your Worker and mail provider, not by me. I recommend reviewing <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a> and the terms of whatever mail provider your Worker connects to.</p>
+<p>I do not share, sell, or have access to any data associated with your use of the App.</p>
+<h2>4. Data retention and deletion</h2>
+<ul>
+  <li><strong>Local device data</strong> (cache, drafts, attachments, stored credentials) is deleted when you uninstall the App, or can be cleared via your device's app-storage settings.</li>
+  <li><strong>Data on your Worker/mail provider</strong> is controlled entirely by you and is not something I can access, retain, or delete on your behalf. Manage or delete it through your Worker and mail provider directly.</li>
+</ul>
+<h2>5. Children's privacy</h2>
+<p>The App is not directed at children and requires deploying and configuring your own backend infrastructure, which is not something intended for use by children. I do not knowingly collect data from children.</p>
+<h2>6. Permissions</h2>
+<p>On Android, the App requests only the Internet permission, needed to reach the Worker URL you configure. On iOS, the App requests no special device permissions (camera, contacts, location, photos, etc.).</p>
+<h2>7. Your choices</h2>
+<p>Because I don't collect or hold your data, there is no account of yours for me to export or delete. You control your data by:</p>
+<ul>
+  <li>Choosing what Worker/backend to connect the App to.</li>
+  <li>Clearing the App's local cache or uninstalling it.</li>
+  <li>Managing data retention on your own Worker and mail provider.</li>
+</ul>
+<h2>8. Changes to this policy</h2>
+<p>If I materially change what the App accesses or how it behaves, I will update this policy and revise the effective date above.</p>
+<h2>9. Contact</h2>
+<p>Questions about this policy or the App can be sent to <strong>contact@sonicstarsolutions.com</strong>.</p>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/cvbutani/agentic-inbox-mobile">Source</a>
+      <a href="https://github.com/cvbutani/agentic-inbox-mobile/issues">Report an issue</a>
+    </div>
+    <p>Copyright &copy; 2026 Chirag Butani. Not affiliated with Cloudflare, Inc.</p>
+  </div>
+</footer>
+
+</body>
+</html>

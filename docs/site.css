@@ -1,0 +1,180 @@
+/* Palette lifted from the app's Material 3 tokens (sharedUI/.../theme/Color.kt) */
+:root {
+  --primary: #485F84;
+  --on-primary: #FFFFFF;
+  --primary-container: #D5E3FF;
+  --on-primary-container: #30476A;
+  --secondary: #2B6485;
+  --tertiary-container: #B9ECEE;
+  --on-tertiary-container: #1A4E50;
+  --bg: #F9F9F9;
+  --surface: #FFFFFF;
+  --surface-container: #EEEEEE;
+  --on-surface: #1A1C1C;
+  --on-surface-variant: #404941;
+  --outline: #717970;
+  --outline-variant: #C0C9BE;
+  --shadow: 0 1px 2px rgba(26, 28, 28, .06), 0 8px 24px rgba(26, 28, 28, .06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #B0C7F1;
+    --on-primary: #183153;
+    --primary-container: #30476A;
+    --on-primary-container: #D5E3FF;
+    --secondary: #98CDF2;
+    --tertiary-container: #1A4E50;
+    --on-tertiary-container: #B9ECEE;
+    --bg: #121414;
+    --surface: #1A1C1C;
+    --surface-container: #1E2020;
+    --on-surface: #E2E2E2;
+    --on-surface-variant: #C0C9BE;
+    --outline: #8A9389;
+    --outline-variant: #404941;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--on-surface);
+  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.5rem; }
+a { color: var(--primary); text-decoration-thickness: 1px; text-underline-offset: .15em; }
+a:hover { text-decoration-thickness: 2px; }
+
+/* ---- header ---- */
+.top {
+  border-bottom: 1px solid var(--outline-variant);
+  background: var(--surface);
+  position: sticky; top: 0; z-index: 10;
+}
+.top .wrap { display: flex; align-items: center; gap: .75rem; min-height: 60px; }
+.top img { width: 28px; height: 28px; border-radius: 7px; }
+.top strong { font-size: 1rem; letter-spacing: -.01em; }
+.top nav { margin-left: auto; display: flex; gap: 1.25rem; font-size: .92rem; }
+.top nav a { color: var(--on-surface-variant); text-decoration: none; }
+.top nav a:hover { color: var(--primary); text-decoration: underline; }
+
+/* ---- hero ---- */
+.hero { padding: 4.5rem 0 3.5rem; text-align: center; }
+.hero img.icon {
+  width: 104px; height: 104px; border-radius: 24px;
+  box-shadow: var(--shadow); margin-bottom: 1.75rem;
+}
+.hero h1 {
+  font-size: clamp(2.1rem, 6vw, 3.1rem); line-height: 1.1;
+  letter-spacing: -.025em; margin: 0 0 1rem; font-weight: 700;
+}
+.hero p.lede {
+  font-size: clamp(1.05rem, 2.4vw, 1.22rem); color: var(--on-surface-variant);
+  max-width: 34rem; margin: 0 auto 2.25rem;
+}
+.badges { display: flex; gap: .75rem; justify-content: center; align-items: center; flex-wrap: wrap; }
+.badges img { display: block; }
+.ghlink {
+  display: inline-flex; align-items: center; gap: .5rem;
+  margin-top: 1.75rem; font-size: .95rem; color: var(--on-surface-variant);
+  text-decoration: none; border: 1px solid var(--outline-variant);
+  padding: .6rem 1.1rem; border-radius: 999px; background: var(--surface);
+  min-height: 48px; box-sizing: border-box;
+}
+.ghlink:hover { border-color: var(--primary); color: var(--primary); }
+.ghlink svg { width: 18px; height: 18px; fill: currentColor; }
+
+/* ---- callout ---- */
+.callout {
+  background: var(--tertiary-container); color: var(--on-tertiary-container);
+  border-radius: 16px; padding: 1.5rem 1.75rem; margin: 1rem 0 4rem;
+}
+.callout h2 { margin: 0 0 .5rem; font-size: 1.1rem; letter-spacing: -.01em; }
+.callout p { margin: 0; font-size: .98rem; }
+.callout a { color: inherit; }
+
+/* ---- sections ---- */
+section { padding: 0 0 4rem; }
+section > h2 {
+  font-size: 1.55rem; letter-spacing: -.02em; margin: 0 0 .4rem; font-weight: 700;
+}
+section > p.sub { color: var(--on-surface-variant); margin: 0 0 2rem; font-size: 1rem; }
+
+.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.card {
+  background: var(--surface); border: 1px solid var(--outline-variant);
+  border-radius: 14px; padding: 1.35rem 1.4rem;
+}
+.card h3 { margin: 0 0 .4rem; font-size: 1rem; font-weight: 600; letter-spacing: -.01em; }
+.card p { margin: 0; font-size: .93rem; color: var(--on-surface-variant); line-height: 1.6; }
+
+/* ---- steps ---- */
+ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+ol.steps li {
+  counter-increment: s; position: relative;
+  padding: 0 0 1.6rem 3.5rem; /* 56px text edge, echoing the app's 72dp grid */
+}
+ol.steps li::before {
+  content: counter(s); position: absolute; left: 0; top: -1px;
+  width: 2.25rem; height: 2.25rem; border-radius: 50%;
+  background: var(--primary-container); color: var(--on-primary-container);
+  display: grid; place-items: center; font-size: .9rem; font-weight: 700;
+}
+ol.steps li:last-child { padding-bottom: 0; }
+ol.steps h3 { margin: .3rem 0 .3rem; font-size: 1.02rem; font-weight: 600; }
+ol.steps p { margin: 0; color: var(--on-surface-variant); font-size: .95rem; }
+code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: .87em; background: var(--surface-container);
+  padding: .15em .42em; border-radius: 5px;
+}
+
+/* ---- stack strip ---- */
+.stack { display: flex; flex-wrap: wrap; gap: .5rem; }
+.stack span {
+  font-size: .85rem; padding: .35rem .8rem; border-radius: 999px;
+  background: var(--surface-container); color: var(--on-surface-variant);
+}
+
+/* ---- footer ---- */
+footer {
+  border-top: 1px solid var(--outline-variant); padding: 2.5rem 0 3.5rem;
+  font-size: .88rem; color: var(--on-surface-variant);
+}
+footer p { margin: 0 0 .5rem; }
+footer .links { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+
+/* ---- prose (privacy page) ---- */
+.prose { padding: 3rem 0 4rem; max-width: 44rem; }
+.prose h1 { font-size: 2.1rem; letter-spacing: -.025em; margin: 0 0 .5rem; }
+.prose h2 {
+  font-size: 1.25rem; letter-spacing: -.015em; margin: 2.5rem 0 .75rem;
+  padding-top: 1.5rem; border-top: 1px solid var(--outline-variant);
+}
+.prose h3 { font-size: 1.02rem; margin: 1.75rem 0 .5rem; font-weight: 600; }
+.prose p, .prose li { color: var(--on-surface-variant); }
+.prose strong { color: var(--on-surface); font-weight: 600; }
+.prose ul { padding-left: 1.25rem; }
+.prose li { margin-bottom: .5rem; }
+.prose .effective {
+  display: inline-block; font-size: .88rem; padding: .3rem .75rem;
+  background: var(--surface-container); border-radius: 999px; margin-bottom: 1rem;
+}
+
+/* ---- narrow screens ---- */
+@media (max-width: 30rem) {
+  .wrap { padding: 0 1.15rem; }
+  .top nav { gap: .9rem; font-size: .88rem; }
+  /* In-page anchors are reachable by scrolling; keep only the two links that
+     leave the page so the header never overflows and forces a sideways scroll. */
+  .top nav a[href^="#"] { display: none; }
+  .hero { padding: 3rem 0 2.5rem; }
+  .callout { padding: 1.25rem 1.35rem; }
+  ol.steps li { padding-left: 3rem; }
+}

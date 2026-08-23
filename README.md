@@ -82,7 +82,7 @@ On first launch the app asks for your Worker URL, the Client ID, and the Client 
 
 ## License
 
-Copyright © 2026 Chirag Butani (Sonic Star Solutions). The source code is licensed under the
+Copyright © 2026 Chirag Butani. The source code is licensed under the
 [Apache License 2.0](LICENSE).
 
 **The "Agentic Inbox" name and the app icon are not covered by this license.** Forks and
