@@ -72,6 +72,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
+import com.sonicstarsolutions.agentic.inbox.util.InfiniteScrollUtils
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -110,7 +111,7 @@ fun SearchScreen(
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
             .distinctUntilChanged()
             .collect { lastVisible ->
-                if (lastVisible != null && lastVisible >= listState.layoutInfo.totalItemsCount - 3) {
+                if (InfiniteScrollUtils.shouldLoadMore(lastVisible, listState.layoutInfo.totalItemsCount)) {
                     viewModel.loadMore()
                 }
             }
