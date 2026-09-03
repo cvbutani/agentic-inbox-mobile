@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -69,6 +70,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -86,6 +88,8 @@ import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.folderIcon
 import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
+import com.sonicstarsolutions.agentic.inbox.util.InfiniteScrollUtils
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -111,6 +115,20 @@ fun InboxScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val visibleDrafts = if (state.showingDrafts) state.drafts else emptyList()
+    val listState = rememberLazyListState()
+
+    // Infinite scroll: fetch the next page when the last visible row closes in on the list end.
+    // totalItemsCount counts everything the LazyColumn renders — drafts, emails, and the trailing
+    // spinner item below — not just state.emails.size, matching how SearchScreen already does this.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .distinctUntilChanged()
+            .collect { lastVisible ->
+                if (InfiniteScrollUtils.shouldLoadMore(lastVisible, listState.layoutInfo.totalItemsCount)) {
+                    viewModel.loadMore()
+                }
+            }
+    }
 
     // A swipe-delete is staged, not sent — this Snackbar is the undo window made visible. The
     // window outlasts the Snackbar (see InboxViewModel.UNDO_WINDOW_MILLIS), so a tap on Undo as
@@ -417,6 +435,7 @@ fun InboxScreen(
                     }
 
                     else -> LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                         contentPadding = PaddingValues(0.dp),

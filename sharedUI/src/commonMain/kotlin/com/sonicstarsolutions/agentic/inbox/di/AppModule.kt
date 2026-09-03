@@ -18,6 +18,9 @@ private val coreModule = module {
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
 }
 
+// SCREENSHOT-ONLY: repositoryModule swapped for demoRepositoryModule (see DemoDataModule.kt) so
+// store screenshots show fictional example.com data instead of a real mailbox. Revert both this
+// line and DemoDataModule.kt before committing — `git checkout` this file and delete that one.
 val commonModules = listOf(
     coreModule,
     networkModule,
