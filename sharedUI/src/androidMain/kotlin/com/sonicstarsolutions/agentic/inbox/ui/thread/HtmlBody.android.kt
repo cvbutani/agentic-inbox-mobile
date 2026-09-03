@@ -35,7 +35,11 @@ actual fun HtmlBody(html: String, backgroundColor: Color, modifier: Modifier) {
         var lastHeight = 0
         repeat(MAX_MEASURE_ATTEMPTS) {
             delay(MEASURE_INTERVAL_MILLIS)
-            val measured = (view.contentHeight * view.scale).toInt()
+            // Before the view has real layout width, WebView reflows text into a single
+            // near-zero-width column, reporting a contentHeight of hundreds of thousands of
+            // px. Skip those readings rather than latching onto a bogus giant height.
+            if (view.width <= 0) return@repeat
+            val measured = (view.contentHeight * view.scale).toInt().coerceAtMost(MAX_HEIGHT_PX)
             if (measured > 0 && measured == lastHeight) {
                 stableFor++
                 if (stableFor >= STABLE_MEASUREMENTS_REQUIRED) {
@@ -94,3 +98,7 @@ private val PLACEHOLDER_HEIGHT = 120.dp
 private const val MEASURE_INTERVAL_MILLIS = 50L
 private const val MAX_MEASURE_ATTEMPTS = 60
 private const val STABLE_MEASUREMENTS_REQUIRED = 3
+
+// A generous ceiling for a rendered email body — no legitimate message needs a taller WebView,
+// and this keeps any future bogus measurement from exceeding what Compose's Constraints can hold.
+private const val MAX_HEIGHT_PX = 20_000
