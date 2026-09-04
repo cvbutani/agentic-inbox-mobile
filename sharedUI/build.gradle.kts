@@ -17,7 +17,7 @@ plugins {
 kotlin {
     android {
         namespace = "com.sonicstarsolutions.agentic.inbox.cmp"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 24
         androidResources.enable = true
         compilerOptions { jvmTarget = JvmTarget.JVM_17 }
