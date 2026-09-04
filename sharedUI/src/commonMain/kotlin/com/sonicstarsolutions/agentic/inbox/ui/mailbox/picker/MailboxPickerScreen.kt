@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -58,10 +60,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -203,6 +207,7 @@ fun MailboxPickerScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     MailboxPickerContent(
                         state = state,
+                        widthClass = widthClass,
                         onRefresh = viewModel::refresh,
                         onMailboxSelected = onMailboxSelected,
                         onDeleteRequested = { mailboxToDelete = it },
@@ -227,9 +232,11 @@ fun MailboxPickerScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MailboxPickerContent(
     state: MailboxPickerUiState,
+    widthClass: WindowWidthClass,
     onRefresh: () -> Unit,
     onMailboxSelected: (mailboxId: String, mailboxName: String) -> Unit,
     onDeleteRequested: (Mailbox) -> Unit,
@@ -279,6 +286,34 @@ private fun MailboxPickerContent(
             }
         }
 
+        // On a phone a single grouped column reads better than a grid — sticky domain headers
+        // give the list structure without asking the user to expand/collapse anything.
+        widthClass == WindowWidthClass.COMPACT -> PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = onRefresh,
+            modifier = modifier,
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                groupMailboxesByDomain(state.mailboxes).forEach { (domain, mailboxesInDomain) ->
+                    stickyHeader(key = domain) {
+                        DomainHeader(domain)
+                    }
+                    items(mailboxesInDomain, key = { it.id }) { mailbox ->
+                        MailboxCard(
+                            mailbox = mailbox,
+                            onClick = { onMailboxSelected(mailbox.id, mailbox.displayName) },
+                            onDelete = { onDeleteRequested(mailbox) },
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
+                }
+            }
+        }
+
         else -> PullToRefreshBox(
             isRefreshing = state.loading,
             onRefresh = onRefresh,
@@ -301,6 +336,32 @@ private fun MailboxPickerContent(
                 }
             }
         }
+    }
+}
+
+/** Mailboxes grouped by email domain, sorted alphabetically by domain — the grouping the
+ * sticky-header list on phones renders. Domains are compared case-insensitively since email
+ * domains aren't case-sensitive. */
+internal fun groupMailboxesByDomain(mailboxes: List<Mailbox>): List<Pair<String, List<Mailbox>>> =
+    mailboxes
+        .groupBy { it.email.substringAfter('@').lowercase() }
+        .toList()
+        .sortedBy { (domain, _) -> domain }
+
+@Composable
+private fun DomainHeader(domain: String, modifier: Modifier = Modifier) {
+    // Opaque, matching the surrounding Surface — a sticky header needs a solid background or
+    // the list scrolling underneath it shows through.
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Text(
+            text = domain,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
     }
 }
 
@@ -575,7 +636,20 @@ private fun CreateMailboxFields(
 ) {
     // The address is the field users came to fill — focus it as soon as the form appears.
     val addressFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { addressFocusRequester.requestFocus() }
+    LaunchedEffect(Unit) {
+        // Inside the ModalBottomSheet container (phones), this composes before the sheet's
+        // entrance animation has attached the field's node to the tree, so an immediate
+        // requestFocus() throws IllegalStateException — crashing the screen on every phone
+        // "New mailbox" tap. Retry across a few frames instead of assuming attachment is instant.
+        repeat(10) {
+            try {
+                addressFocusRequester.requestFocus()
+                return@LaunchedEffect
+            } catch (e: IllegalStateException) {
+                withFrameNanos { }
+            }
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
