@@ -13,7 +13,6 @@ androidx-nav3 = "1.1.1"
 materialIconsExtended = "1.7.3"
 nav3-browser = "1.1.0"
 kotlinx-serialization = "1.11.0"
-coil = "3.6.1"
 kotlinx-datetime = "0.8.0"
 androidx-core = "1.19.0"
 androidx-splashscreen = "1.2.0"
@@ -62,8 +61,6 @@ compose-nav3 = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", v
 material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 nav3-browser = { module = "com.github.terrakok:navigation3-browser", version.ref = "nav3-browser" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
-coil = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
-coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }

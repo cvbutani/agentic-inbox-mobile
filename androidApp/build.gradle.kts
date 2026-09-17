@@ -19,6 +19,17 @@ android {
         versionName = project.properties["versionName"] as? String ?: "1.0.0"
     }
 
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
+
     // Release signing is only configured when the CI keystore env vars are present,
     // so local debug builds keep working without a keystore.
     val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
