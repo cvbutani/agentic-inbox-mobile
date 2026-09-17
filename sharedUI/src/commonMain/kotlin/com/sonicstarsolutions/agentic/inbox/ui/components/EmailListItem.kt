@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -125,8 +126,9 @@ fun EmailListItem(
                         // The server doesn't guarantee the snippet is pre-stripped of HTML, and
                         // this Text() can't render markup, so always reduce it to plain text first.
                         email.snippet?.let { snippet ->
+                            val preview = remember(snippet) { HtmlTextExtractor.toPlainText(snippet) }
                             Text(
-                                text = HtmlTextExtractor.toPlainText(snippet),
+                                text = preview,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2,
