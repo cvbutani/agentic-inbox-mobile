@@ -5,9 +5,19 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
+data class FeatureFlagsDto(
+    /** Whether the AI email agent and auto-draft are active on this Worker instance. */
+    @SerialName("aiAgent") val aiAgent: Boolean = true,
+    /** Whether the MCP server endpoint is exposed. */
+    @SerialName("mcp") val mcp: Boolean = false,
+)
+
+@Serializable
 data class ConfigDto(
     @SerialName("domains") val domains: List<String> = emptyList(),
     @SerialName("emailAddresses") val emailAddresses: List<String> = emptyList(),
+    /** Feature flags from the Worker. Absent on legacy Workers — defaults are safe fallbacks. */
+    @SerialName("features") val features: FeatureFlagsDto = FeatureFlagsDto(),
 )
 
 @Serializable

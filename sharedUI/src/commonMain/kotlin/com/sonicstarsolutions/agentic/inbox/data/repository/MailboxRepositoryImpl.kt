@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.data.local.MailboxDao
 import com.sonicstarsolutions.agentic.inbox.data.local.MailboxEntity
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
@@ -39,6 +40,9 @@ class MailboxRepositoryImpl(
 
     override suspend fun getAllowedDomains(): Result<List<String>> =
         safeApiCall { api.getConfig().domains }
+
+    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> =
+        safeApiCall { api.getConfig().features }
 
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> =
         safeApiCall { api.getMailbox(mailboxId).toDomain() }

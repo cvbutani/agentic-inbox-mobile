@@ -8,6 +8,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
@@ -106,6 +107,7 @@ class FakeMailboxRepository(
     var createResult: (String, String) -> Result<Mailbox> =
         { email, name -> Result.success(Mailbox(id = email.substringBefore("@"), email = email, name = name)) },
     var allowedDomainsResult: Result<List<String>> = Result.success(emptyList()),
+    var serverFeaturesResult: Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto()),
 ) : MailboxRepository {
     data class CreateCall(val email: String, val name: String)
 
@@ -124,6 +126,8 @@ class FakeMailboxRepository(
     }
 
     override suspend fun getAllowedDomains(): Result<List<String>> = allowedDomainsResult
+
+    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> = serverFeaturesResult
 
     var getMailboxResult: (String) -> Result<Mailbox> =
         { id -> Result.success(Mailbox(id = id, email = "$id@example.dev", name = "Mailbox $id")) }
