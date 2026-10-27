@@ -9,6 +9,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -54,12 +55,21 @@ class MailboxRepositoryImpl(
     override suspend fun clearCache() = mailboxDao.deleteAll()
 }
 
-private fun MailboxDto.toDomain(): Mailbox = Mailbox(
-    id = id,
-    email = email,
-    name = name,
-    fromName = settings?.jsonObject?.get("fromName")?.jsonPrimitive?.contentOrNull,
-)
+private fun MailboxDto.toDomain(): Mailbox {
+    val settingsObj = settings?.jsonObject
+    val sigObj = settingsObj?.get("signature")?.jsonObject
+    val autoReplyObj = settingsObj?.get("autoReply")?.jsonObject
+    return Mailbox(
+        id = id,
+        email = email,
+        name = name,
+        fromName = settingsObj?.get("fromName")?.jsonPrimitive?.contentOrNull,
+        signatureEnabled = sigObj?.get("enabled")?.jsonPrimitive?.booleanOrNull ?: false,
+        signatureText = sigObj?.get("text")?.jsonPrimitive?.contentOrNull,
+        signatureHtml = sigObj?.get("html")?.jsonPrimitive?.contentOrNull,
+        autoReplyEnabled = autoReplyObj?.get("enabled")?.jsonPrimitive?.booleanOrNull ?: false,
+    )
+}
 
 private fun Mailbox.toEntity(): MailboxEntity = MailboxEntity(id = id, email = email, name = name, fromName = fromName)
 

@@ -58,4 +58,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 
 /** Room's KSP processor generates the `actual` implementation of this per target (Android/iOS) —
  * required boilerplate for Room's Kotlin Multiplatform constructor pattern. */
-expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase>
+@Suppress("NO_ACTUAL_FOR_EXPECT")
+expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
+    override fun initialize(): AppDatabase
+}

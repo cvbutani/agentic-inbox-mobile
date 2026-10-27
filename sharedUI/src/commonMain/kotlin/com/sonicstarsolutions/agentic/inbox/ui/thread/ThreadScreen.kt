@@ -475,6 +475,16 @@ private fun MessageCard(
 
                     // Line 3 (expanded only): the full date and time.
                     if (expanded) {
+                        if (!message.cc.isNullOrBlank()) {
+                            val ccText = EmailAddressUtils.displayName(message.cc, mailboxEmail)
+                            Text(
+                                text = "cc $ccText",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Text(
                             text = EmailTimeFormatter.formatAbsolute(message.date),
                             style = MaterialTheme.typography.labelSmall,

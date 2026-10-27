@@ -96,6 +96,7 @@ class ComposeViewModel(
 
     private var fromEmail: String = ""
     private var fromName: String = ""
+    private var signatureText: String? = null
     private var autosaveJob: Job? = null
 
     /** Set while loading an EDIT_DRAFT message — the id of the message *that draft* was replying
@@ -124,7 +125,11 @@ class ComposeViewModel(
             getMailbox(mailboxId).onSuccess { mailbox ->
                 fromEmail = mailbox.email
                 fromName = mailbox.displayName
-                _state.update { it.copy(fromAddress = mailbox.email) }
+                val fromDisplay = if (mailbox.fromName.isNullOrBlank()) mailbox.email else "${mailbox.fromName} <${mailbox.email}>"
+                _state.update { it.copy(fromAddress = fromDisplay) }
+                if (mailbox.signatureEnabled && !mailbox.signatureText.isNullOrBlank()) {
+                    signatureText = mailbox.signatureText
+                }
             }
             val resumed = draftId?.let { getDraftUseCase(it) }
             if (resumed != null) {
@@ -147,7 +152,8 @@ class ComposeViewModel(
 
     private suspend fun loadOriginalIfNeeded() {
         if (mode == ComposeMode.NEW || emailId == null) {
-            _state.update { it.copy(loading = false) }
+            val initialBody = if (!signatureText.isNullOrBlank()) "\n\n-- \n$signatureText" else ""
+            _state.update { it.copy(loading = false, body = it.body.ifEmpty { initialBody }) }
             return
         }
         getThread(mailboxId, emailId, threadId)
@@ -160,10 +166,10 @@ class ComposeViewModel(
                     _state.update { it.copy(loading = false) }
                 } else {
                     val fields = when (mode) {
-                        ComposeMode.REPLY -> ComposePrefill.forReply(original, replyAll = false, ownEmail = fromEmail)
-                        ComposeMode.REPLY_ALL -> ComposePrefill.forReply(original, replyAll = true, ownEmail = fromEmail)
-                        ComposeMode.FORWARD -> ComposePrefill.forForward(original)
-                        ComposeMode.NEW -> PrefilledFields(to = "", cc = "", subject = "", body = "")
+                        ComposeMode.REPLY -> ComposePrefill.forReply(original, replyAll = false, ownEmail = fromEmail, signature = signatureText)
+                        ComposeMode.REPLY_ALL -> ComposePrefill.forReply(original, replyAll = true, ownEmail = fromEmail, signature = signatureText)
+                        ComposeMode.FORWARD -> ComposePrefill.forForward(original, signature = signatureText)
+                        ComposeMode.NEW -> PrefilledFields(to = "", cc = "", subject = "", body = if (!signatureText.isNullOrBlank()) "\n\n-- \n$signatureText" else "")
                         ComposeMode.EDIT_DRAFT -> {
                             // Continuing an existing draft, not deriving a fresh reply/forward — its
                             // own current fields are the whole message, not a starting point to
