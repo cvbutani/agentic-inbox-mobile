@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUseCase
@@ -155,7 +156,13 @@ class ThreadViewModel(
     fun markSpam() {
         val targetId = targetMessageId() ?: return
         runAction {
-            markEmailSpam(mailboxId, targetId, spam = true).map { "Marked as spam" }
+            markEmailSpam(mailboxId, targetId, spam = true).map { outcome ->
+                when (outcome) {
+                    MarkSpamOutcome.MARKED -> "Marked as spam"
+                    // Be honest that this was a plain move — the server can't classify spam.
+                    MarkSpamOutcome.FALLBACK_MOVED -> "Spam classification isn't enabled on this server — moved to Trash"
+                }
+            }
         }
     }
 

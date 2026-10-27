@@ -5,6 +5,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.RewriteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
@@ -94,6 +96,8 @@ class ComposeEditDraftTest {
         getDraftUseCase = GetDraftUseCase(FakeDraftRepository()),
         deleteDraftUseCase = DeleteDraftUseCase(FakeDraftRepository()),
         externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+        rewriteDraftUseCase = RewriteDraftUseCase(FakeEmailRepository()),
+        getServerFeatures = GetServerFeaturesUseCase(FakeMailboxRepository()),
         mailboxId = "mb1",
         mode = ComposeMode.EDIT_DRAFT,
         emailId = draftMessageId,

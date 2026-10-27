@@ -3,12 +3,14 @@ package com.sonicstarsolutions.agentic.inbox.ui.thread
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkEmailSpamUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
@@ -87,6 +89,7 @@ class ThreadViewModelTest {
         getMailbox = GetMailboxUseCase(mailboxRepository),
         downloadAttachment = DownloadAttachmentUseCase(attachmentRepository),
         attachmentOpener = attachmentOpener,
+        markEmailSpam = MarkEmailSpamUseCase(emailRepository),
         mailboxId = "mb1",
         emailId = "e1",
         threadId = threadId,
@@ -589,6 +592,45 @@ class ThreadViewModelTest {
         gate.complete(Unit)
         advanceUntilIdle()
 
+        assertFalse(viewModel.state.value.actionInProgress)
+    }
+
+    // --- Mark as spam, including the graceful fallback for workers without /spam -------------
+
+    @Test
+    fun `markSpam on a spam-capable worker reports Marked as spam and navigates back`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1"))))
+        val emailRepository = FakeEmailRepository(markSpamResult = Result.success(MarkSpamOutcome.MARKED))
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.markSpam()
+
+        assertEquals(ThreadActionResult.Success("Marked as spam", shouldNavigateBack = true), viewModel.state.value.actionResult)
+    }
+
+    @Test
+    fun `markSpam explains the Trash fallback when the worker has no spam support`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1"))))
+        val emailRepository = FakeEmailRepository(markSpamResult = Result.success(MarkSpamOutcome.FALLBACK_MOVED))
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.markSpam()
+
+        assertEquals(
+            ThreadActionResult.Success("Spam classification isn't enabled on this server — moved to Trash", shouldNavigateBack = true),
+            viewModel.state.value.actionResult,
+        )
+    }
+
+    @Test
+    fun `markSpam failure reports the error and stays on the thread`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1"))))
+        val emailRepository = FakeEmailRepository(markSpamResult = Result.failure(RuntimeException("offline")))
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.markSpam()
+
+        assertEquals(ThreadActionResult.Failure("offline"), viewModel.state.value.actionResult)
         assertFalse(viewModel.state.value.actionInProgress)
     }
 }

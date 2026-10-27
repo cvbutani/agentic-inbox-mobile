@@ -5,6 +5,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.RewriteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
@@ -87,6 +89,8 @@ class ComposeDraftTest {
             // Stands in for the app-lifetime scope. Unconfined on the test's own scheduler, so
             // draft writes land eagerly and share the test's virtual clock.
             externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            rewriteDraftUseCase = RewriteDraftUseCase(FakeEmailRepository()),
+            getServerFeatures = GetServerFeaturesUseCase(FakeMailboxRepository()),
             mailboxId = "mb1",
             mode = mode,
             emailId = emailId,

@@ -21,6 +21,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
@@ -74,4 +75,5 @@ val useCaseModule = module {
     singleOf(::DeleteDraftUseCase)
     singleOf(::MarkEmailSpamUseCase)
     singleOf(::RewriteDraftUseCase)
+    singleOf(::GetServerFeaturesUseCase)
 }

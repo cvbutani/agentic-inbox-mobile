@@ -117,6 +117,14 @@ data class StatusResponseDto(
 )
 
 @Serializable
+data class SpamEmailResponseDto(
+    @SerialName("success") val success: Boolean = true,
+    @SerialName("emailId") val emailId: String? = null,
+    @SerialName("isSpam") val isSpam: Boolean? = null,
+    @SerialName("folderId") val folderId: String? = null,
+)
+
+@Serializable
 data class SpamEmailDto(
     @SerialName("spam") val spam: Boolean,
 )

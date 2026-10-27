@@ -137,15 +137,18 @@ fun ComposeScreen(
                     IconButton(onClick = pickFiles, enabled = !state.sending) {
                         Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
                     }
-                    // AI rewrite: only useful once there's something to rewrite.
-                    IconButton(
-                        onClick = viewModel::rewriteBody,
-                        enabled = !state.sending && !state.rewriting && state.body.isNotBlank(),
-                    ) {
-                        if (state.rewriting) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI rewrite")
+                    // AI rewrite: only offered when the Worker supports it, and only useful once
+                    // there's something to rewrite.
+                    if (state.aiRewriteAvailable) {
+                        IconButton(
+                            onClick = viewModel::rewriteBody,
+                            enabled = !state.sending && !state.rewriting && state.body.isNotBlank(),
+                        ) {
+                            if (state.rewriting) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = "AI rewrite")
+                            }
                         }
                     }
                     // Only offered once there's actually a draft to throw away.

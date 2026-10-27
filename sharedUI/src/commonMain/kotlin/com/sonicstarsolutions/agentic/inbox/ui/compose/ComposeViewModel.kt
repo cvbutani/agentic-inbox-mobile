@@ -5,12 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
+import com.sonicstarsolutions.agentic.inbox.domain.model.FeatureUnavailableException
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RewriteDraftUseCase
@@ -54,6 +56,10 @@ data class ComposeUiState(
     val body: String = "",
     val sending: Boolean = false,
     val rewriting: Boolean = false,
+    /** Whether to offer the AI rewrite action at all. False until the Worker's feature flags say
+     * so — a legacy Worker, one with AI disabled, or a failed lookup all leave it hidden — and
+     * flipped back off if the endpoint turns out to be missing (404/501). */
+    val aiRewriteAvailable: Boolean = false,
     val errorMessage: String? = null,
     val sent: Boolean = false,
     /** Files to send with this message. Not persisted with drafts (v1 limitation): a resumed
@@ -85,6 +91,7 @@ class ComposeViewModel(
      */
     private val externalScope: CoroutineScope,
     private val rewriteDraftUseCase: RewriteDraftUseCase,
+    private val getServerFeatures: GetServerFeaturesUseCase,
     private val mailboxId: String,
     private val mode: ComposeMode,
     private val emailId: String?,
@@ -124,6 +131,11 @@ class ComposeViewModel(
     }
 
     init {
+        viewModelScope.launch {
+            getServerFeatures().onSuccess { features ->
+                _state.update { it.copy(aiRewriteAvailable = features.aiRewriteAvailable) }
+            }
+        }
         viewModelScope.launch {
             getMailbox(mailboxId).onSuccess { mailbox ->
                 fromEmail = mailbox.email
@@ -332,7 +344,13 @@ class ComposeViewModel(
                 }
                 .onFailure { t ->
                     _state.update {
-                        it.copy(rewriting = false, errorMessage = t.message ?: "AI rewrite failed")
+                        it.copy(
+                            rewriting = false,
+                            // The body is never touched on failure. A missing endpoint also retires
+                            // the button so the user isn't offered something that can't work.
+                            aiRewriteAvailable = it.aiRewriteAvailable && t !is FeatureUnavailableException,
+                            errorMessage = t.message ?: "AI rewrite failed",
+                        )
                     }
                 }
         }

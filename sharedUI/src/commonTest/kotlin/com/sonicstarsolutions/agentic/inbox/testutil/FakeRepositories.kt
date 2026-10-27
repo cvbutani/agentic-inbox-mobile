@@ -5,6 +5,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
@@ -167,7 +168,7 @@ class FakeEmailRepository(
     var sendResult: Result<Unit> = Result.success(Unit),
     var replyResult: Result<Unit> = Result.success(Unit),
     var forwardResult: Result<Unit> = Result.success(Unit),
-    var markSpamResult: Result<Unit> = Result.success(Unit),
+    var markSpamResult: Result<MarkSpamOutcome> = Result.success(MarkSpamOutcome.MARKED),
     var rewriteResult: Result<String> = Result.success("rewritten"),
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
@@ -262,7 +263,7 @@ class FakeEmailRepository(
         return forwardResult
     }
 
-    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<Unit> = markSpamResult
+    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<MarkSpamOutcome> = markSpamResult
 
     override suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String> = rewriteResult
 

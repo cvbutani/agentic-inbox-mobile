@@ -10,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
+import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.repository.AttachmentRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
@@ -260,7 +261,7 @@ class DemoMailboxRepository : MailboxRepository {
     override suspend fun createMailbox(email: String, name: String): Result<Mailbox> =
         Result.success(mailbox.copy(email = email, name = name))
     override suspend fun getAllowedDomains(): Result<List<String>> = Result.success(listOf("example.com"))
-    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto())
+    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto(spamClassification = true, aiComposeRewrite = true))
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> = Result.success(mailbox)
     override suspend fun deleteMailbox(mailboxId: String): Result<Unit> = Result.success(Unit)
     override suspend fun clearCache() { /* nothing cached */ }
@@ -328,10 +329,10 @@ class DemoEmailRepository : EmailRepository {
     override suspend fun sendEmail(mailboxId: String, request: ComposeEmailRequest): Result<Unit> = Result.success(Unit)
     override suspend fun replyEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> = Result.success(Unit)
     override suspend fun forwardEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> = Result.success(Unit)
-    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<Unit> {
+    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<MarkSpamOutcome> {
         val targetFolder = if (spam) SystemFolders.SPAM else SystemFolders.INBOX
         messagesById[emailId]?.let { messagesById[emailId] = it.copy(folderId = targetFolder) }
-        return Result.success(Unit)
+        return Result.success(MarkSpamOutcome.MARKED)
     }
     override suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String> =
         Result.success("$text (Polished in $tone tone)")

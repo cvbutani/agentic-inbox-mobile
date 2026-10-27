@@ -10,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailResponseDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.StatusResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteRequestDto
@@ -94,7 +95,7 @@ interface AgenticInboxApi {
         @Path("mailboxId") mailboxId: String,
         @Path("emailId") emailId: String,
         @Body body: SpamEmailDto,
-    ): StatusResponseDto
+    ): SpamEmailResponseDto
 
     @POST("/api/v1/mailboxes/{mailboxId}/ai/compose-rewrite")
     suspend fun composeRewrite(

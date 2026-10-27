@@ -10,7 +10,18 @@ data class FeatureFlagsDto(
     @SerialName("aiAgent") val aiAgent: Boolean = true,
     /** Whether the MCP server endpoint is exposed. */
     @SerialName("mcp") val mcp: Boolean = false,
-)
+    /** Inbound spam classification runs on the Worker. */
+    @SerialName("spamClassification") val spamClassification: Boolean = false,
+    /** `POST …/ai/compose-rewrite` is served. Off by default so a legacy Worker hides the button. */
+    @SerialName("aiComposeRewrite") val aiComposeRewrite: Boolean = false,
+    @SerialName("signatures") val signatures: Boolean = true,
+    @SerialName("autoReply") val autoReply: Boolean = false,
+    @SerialName("agentAccess") val agentAccess: Boolean = false,
+) {
+    /** The rewrite button needs the endpoint *and* the AI agent switched on — with
+     * `ENABLE_AI_AGENT=false` all AI affordances go away together. */
+    val aiRewriteAvailable: Boolean get() = aiAgent && aiComposeRewrite
+}
 
 @Serializable
 data class ConfigDto(
