@@ -115,3 +115,20 @@ data class MoveEmailRequestDto(
 data class StatusResponseDto(
     @SerialName("status") val status: String,
 )
+
+@Serializable
+data class SpamEmailDto(
+    @SerialName("spam") val spam: Boolean,
+)
+
+@Serializable
+data class ComposeRewriteRequestDto(
+    @SerialName("text") val text: String,
+    @SerialName("tone") val tone: String = "fix",
+)
+
+@Serializable
+data class ComposeRewriteResponseDto(
+    @SerialName("rewritten") val rewritten: String = "",
+)
+

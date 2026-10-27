@@ -167,6 +167,8 @@ class FakeEmailRepository(
     var sendResult: Result<Unit> = Result.success(Unit),
     var replyResult: Result<Unit> = Result.success(Unit),
     var forwardResult: Result<Unit> = Result.success(Unit),
+    var markSpamResult: Result<Unit> = Result.success(Unit),
+    var rewriteResult: Result<String> = Result.success("rewritten"),
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
     data class SearchCall(val mailboxId: String, val query: SearchQuery, val page: Int, val limit: Int)
@@ -259,6 +261,10 @@ class FakeEmailRepository(
         sendGate?.await()
         return forwardResult
     }
+
+    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<Unit> = markSpamResult
+
+    override suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String> = rewriteResult
 
     var clearCacheCalled: Boolean = false
 

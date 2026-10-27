@@ -9,7 +9,9 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.OutboundAttachmentDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
-import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteRequestDto
+import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
@@ -73,6 +75,18 @@ class EmailRepositoryImpl(
 
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> =
         safeApiCall { api.moveEmail(mailboxId, emailId, MoveEmailRequestDto(folderId)) }.map {}
+
+    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<Unit> {
+        val result = safeApiCall { api.markEmailSpam(mailboxId, emailId, SpamEmailDto(spam = spam)) }.map {}
+        if (result.isSuccess) return result
+        // Graceful fallback for older workers without /spam endpoint:
+        // Move to TRASH if spam, or INBOX if unmarking spam
+        val fallbackFolder = if (spam) SystemFolders.TRASH else SystemFolders.INBOX
+        return moveEmail(mailboxId, emailId, fallbackFolder)
+    }
+
+    override suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String> =
+        safeApiCall { api.composeRewrite(mailboxId, ComposeRewriteRequestDto(text = text, tone = tone)).rewritten }
 
     override suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit> =
         safeApiCall { api.deleteEmail(mailboxId, emailId) }

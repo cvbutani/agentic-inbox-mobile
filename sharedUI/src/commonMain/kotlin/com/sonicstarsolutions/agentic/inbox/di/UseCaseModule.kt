@@ -16,6 +16,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.LoadCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkEmailSpamUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
@@ -32,6 +33,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.StageCredentialsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.RewriteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ValidateConnectionUseCase
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
@@ -70,4 +72,6 @@ val useCaseModule = module {
     singleOf(::GetDraftUseCase)
     singleOf(::ObserveDraftsUseCase)
     singleOf(::DeleteDraftUseCase)
+    singleOf(::MarkEmailSpamUseCase)
+    singleOf(::RewriteDraftUseCase)
 }

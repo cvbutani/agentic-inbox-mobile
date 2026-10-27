@@ -11,6 +11,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUse
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkEmailSpamUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
@@ -57,6 +58,7 @@ class ThreadViewModel(
     private val getMailbox: GetMailboxUseCase,
     private val downloadAttachment: DownloadAttachmentUseCase,
     private val attachmentOpener: AttachmentOpener,
+    private val markEmailSpam: MarkEmailSpamUseCase,
     private val mailboxId: String,
     private val emailId: String,
     private val threadId: String?,
@@ -143,6 +145,17 @@ class ThreadViewModel(
         val targetId = targetMessageId() ?: return
         runAction {
             deleteEmail(mailboxId, targetId).map { "Deleted" }
+        }
+    }
+
+    /**
+     * Marks the currently-expanded message as spam and navigates back — spam messages leave the
+     * inbox just like a delete/archive, so the success path matches those.
+     */
+    fun markSpam() {
+        val targetId = targetMessageId() ?: return
+        runAction {
+            markEmailSpam(mailboxId, targetId, spam = true).map { "Marked as spam" }
         }
     }
 

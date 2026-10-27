@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
@@ -135,6 +136,17 @@ fun ComposeScreen(
                     val pickFiles = rememberAttachmentPicker(onFilePicked = viewModel::addAttachment)
                     IconButton(onClick = pickFiles, enabled = !state.sending) {
                         Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
+                    }
+                    // AI rewrite: only useful once there's something to rewrite.
+                    IconButton(
+                        onClick = viewModel::rewriteBody,
+                        enabled = !state.sending && !state.rewriting && state.body.isNotBlank(),
+                    ) {
+                        if (state.rewriting) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI rewrite")
+                        }
                     }
                     // Only offered once there's actually a draft to throw away.
                     if (state.draftId != null) {

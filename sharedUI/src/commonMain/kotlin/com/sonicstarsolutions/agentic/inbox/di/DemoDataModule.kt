@@ -328,6 +328,13 @@ class DemoEmailRepository : EmailRepository {
     override suspend fun sendEmail(mailboxId: String, request: ComposeEmailRequest): Result<Unit> = Result.success(Unit)
     override suspend fun replyEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> = Result.success(Unit)
     override suspend fun forwardEmail(mailboxId: String, emailId: String, request: ComposeEmailRequest): Result<Unit> = Result.success(Unit)
+    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<Unit> {
+        val targetFolder = if (spam) SystemFolders.SPAM else SystemFolders.INBOX
+        messagesById[emailId]?.let { messagesById[emailId] = it.copy(folderId = targetFolder) }
+        return Result.success(Unit)
+    }
+    override suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String> =
+        Result.success("$text (Polished in $tone tone)")
     override suspend fun clearCache() { /* nothing cached */ }
 }
 

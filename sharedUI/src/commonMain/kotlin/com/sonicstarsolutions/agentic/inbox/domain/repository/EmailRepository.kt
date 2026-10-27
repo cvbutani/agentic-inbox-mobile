@@ -20,6 +20,8 @@ interface EmailRepository {
     ): Result<EmailPage>
 
     suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit>
+    suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<Unit>
+    suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String>
     suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit>
     suspend fun setRead(mailboxId: String, emailId: String, read: Boolean): Result<Unit>
     suspend fun setStarred(mailboxId: String, emailId: String, starred: Boolean): Result<Unit>

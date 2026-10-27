@@ -11,6 +11,9 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.StatusResponseDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteRequestDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
 import de.jensklingenberg.ktorfit.http.Body
 import de.jensklingenberg.ktorfit.http.DELETE
@@ -85,6 +88,19 @@ interface AgenticInboxApi {
         @Path("emailId") emailId: String,
         @Body body: MoveEmailRequestDto,
     ): StatusResponseDto
+
+    @POST("/api/v1/mailboxes/{mailboxId}/emails/{emailId}/spam")
+    suspend fun markEmailSpam(
+        @Path("mailboxId") mailboxId: String,
+        @Path("emailId") emailId: String,
+        @Body body: SpamEmailDto,
+    ): StatusResponseDto
+
+    @POST("/api/v1/mailboxes/{mailboxId}/ai/compose-rewrite")
+    suspend fun composeRewrite(
+        @Path("mailboxId") mailboxId: String,
+        @Body body: ComposeRewriteRequestDto,
+    ): ComposeRewriteResponseDto
 
     @GET("/api/v1/mailboxes/{mailboxId}/threads/{threadId}")
     suspend fun getThread(
