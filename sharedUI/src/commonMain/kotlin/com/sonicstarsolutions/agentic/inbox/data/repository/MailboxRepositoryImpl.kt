@@ -7,8 +7,12 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateMailboxDto
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -49,11 +53,26 @@ class MailboxRepositoryImpl(
         safeApiCall { api.getMailbox(mailboxId).toDomain() }
             .onSuccess { mailboxDao.upsertAll(listOf(it.toEntity())) }
 
+    override suspend fun getMailboxSettings(mailboxId: String): Result<MailboxSettings> =
+        safeApiCall { api.getMailbox(mailboxId).settings.asObject().toMailboxSettings() }
+
+    override suspend fun updateMailboxSettings(mailboxId: String, settings: MailboxSettings): Result<MailboxSettings> =
+        safeApiCall {
+            // The Worker replaces the whole settings object, so start from what it has now.
+            val current = api.getMailbox(mailboxId).settings.asObject()
+            val saved = api.updateMailbox(mailboxId, UpdateMailboxDto(mergeMailboxSettings(current, settings)))
+            // Keep the offline mirror's display name in step with the new fromName.
+            mailboxDao.upsertAll(listOf(saved.toDomain().toEntity()))
+            saved.settings.asObject().toMailboxSettings()
+        }
+
     override suspend fun deleteMailbox(mailboxId: String): Result<Unit> =
         safeApiCall { api.deleteMailbox(mailboxId) }
 
     override suspend fun clearCache() = mailboxDao.deleteAll()
 }
+
+private fun JsonElement?.asObject(): JsonObject? = this as? JsonObject
 
 private fun MailboxDto.toDomain(): Mailbox {
     val settingsObj = settings?.jsonObject

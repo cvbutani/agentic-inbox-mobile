@@ -49,6 +49,11 @@ data class CreateMailboxDto(
 )
 
 @Serializable
+data class UpdateMailboxDto(
+    @SerialName("settings") val settings: JsonElement,
+)
+
+@Serializable
 data class FolderDto(
     @SerialName("id") val id: String,
     @SerialName("name") val name: String,

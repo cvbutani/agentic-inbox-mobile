@@ -16,6 +16,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateMailboxDto
 import de.jensklingenberg.ktorfit.http.Body
 import de.jensklingenberg.ktorfit.http.DELETE
 import de.jensklingenberg.ktorfit.http.GET
@@ -47,6 +48,13 @@ interface AgenticInboxApi {
 
     @GET("/api/v1/mailboxes/{mailboxId}")
     suspend fun getMailbox(@Path("mailboxId") mailboxId: String): MailboxDto
+
+    // Replaces the mailbox's whole settings object — callers must send a read-modify-write merge.
+    @PUT("/api/v1/mailboxes/{mailboxId}")
+    suspend fun updateMailbox(
+        @Path("mailboxId") mailboxId: String,
+        @Body body: UpdateMailboxDto,
+    ): MailboxDto
 
     @DELETE("/api/v1/mailboxes/{mailboxId}")
     suspend fun deleteMailbox(@Path("mailboxId") mailboxId: String)

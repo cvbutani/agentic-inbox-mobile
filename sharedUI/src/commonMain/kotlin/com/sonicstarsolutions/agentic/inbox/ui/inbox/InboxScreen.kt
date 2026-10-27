@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -105,6 +106,7 @@ fun InboxScreen(
     onDraftSelected: (Draft) -> Unit = {},
     onComposeNew: () -> Unit = {},
     onSearch: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     /** The email currently open in the detail pane, when this list is one half of the two-pane
      * layout — highlights that row. Null in single-pane, where opening an email leaves the list. */
     openEmailId: String? = null,
@@ -272,6 +274,10 @@ fun InboxScreen(
                 onFolderSelected = { folder ->
                     viewModel.selectFolder(folder)
                     scope.launch { drawerState.close() }
+                },
+                onOpenSettings = {
+                    scope.launch { drawerState.close() }
+                    onOpenSettings()
                 },
                 onSwitchMailbox = {
                     scope.launch { drawerState.close() }
@@ -591,6 +597,7 @@ private fun FolderDrawerContent(
     selectedFolderId: String,
     onFolderSelected: (Folder) -> Unit,
     onSwitchMailbox: () -> Unit,
+    onOpenSettings: () -> Unit,
     onCreateFolder: () -> Unit,
     onRenameFolder: (Folder) -> Unit,
     onDeleteFolder: (Folder) -> Unit,
@@ -661,6 +668,14 @@ private fun FolderDrawerContent(
                 label = { Text("New folder") },
                 selected = false,
                 onClick = onCreateFolder,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                label = { Text("Settings") },
+                selected = false,
+                onClick = onOpenSettings,
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
         }

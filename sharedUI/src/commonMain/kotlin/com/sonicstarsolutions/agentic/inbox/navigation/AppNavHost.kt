@@ -12,6 +12,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeMode
 import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeScreen
 import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxListDetailScreen
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerScreen
+import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.MailboxSettingsScreen
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingScreen
 import com.sonicstarsolutions.agentic.inbox.ui.search.SearchScreen
 import com.sonicstarsolutions.agentic.inbox.ui.splash.SplashScreen
@@ -98,6 +99,7 @@ fun AppNavHost() {
                     onComposeNew = {
                         navigator.goTo(Compose(mailboxId = key.mailboxId, mode = ComposeMode.NEW.name))
                     },
+                    onOpenSettings = { navigator.goTo(MailboxSettings(mailboxId = key.mailboxId)) },
                     onSearch = {
                         navigator.goTo(Search(mailboxId = key.mailboxId))
                     },
@@ -107,6 +109,10 @@ fun AppNavHost() {
                         navigator.goTo(EmailThread(key.mailboxId, emailId, threadId))
                     },
                 )
+            }
+
+            entry<MailboxSettings> { key ->
+                MailboxSettingsScreen(mailboxId = key.mailboxId, onBack = { navigator.goBack() })
             }
 
             entry<Search> { key ->

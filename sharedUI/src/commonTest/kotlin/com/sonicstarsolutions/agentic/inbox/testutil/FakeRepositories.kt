@@ -7,6 +7,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
@@ -134,6 +135,27 @@ class FakeMailboxRepository(
         { id -> Result.success(Mailbox(id = id, email = "$id@example.dev", name = "Mailbox $id")) }
 
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> = getMailboxResult(mailboxId)
+
+    var settingsResult: Result<MailboxSettings> = Result.success(MailboxSettings())
+    var settingsLoads: Int = 0
+
+    override suspend fun getMailboxSettings(mailboxId: String): Result<MailboxSettings> {
+        settingsLoads++
+        return settingsResult
+    }
+
+    /** Defaults to echoing what was saved, like the real Worker. */
+    var updateSettingsResult: (MailboxSettings) -> Result<MailboxSettings> = { Result.success(it) }
+    val updateSettingsCalls = mutableListOf<MailboxSettings>()
+
+    /** Holds [updateMailboxSettings] in flight, like [createGate]. */
+    var updateSettingsGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun updateMailboxSettings(mailboxId: String, settings: MailboxSettings): Result<MailboxSettings> {
+        updateSettingsCalls += settings
+        updateSettingsGate?.await()
+        return updateSettingsResult(settings)
+    }
 
     var deleteResult: Result<Unit> = Result.success(Unit)
     val deleteCalls = mutableListOf<String>()

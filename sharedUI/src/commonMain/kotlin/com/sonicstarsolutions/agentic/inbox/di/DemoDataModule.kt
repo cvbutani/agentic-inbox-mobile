@@ -9,6 +9,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
@@ -264,6 +265,12 @@ class DemoMailboxRepository : MailboxRepository {
     override suspend fun getServerFeatures(): Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto(spamClassification = true, aiComposeRewrite = true))
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> = Result.success(mailbox)
     override suspend fun deleteMailbox(mailboxId: String): Result<Unit> = Result.success(Unit)
+    private var settings = MailboxSettings(fromName = "You")
+    override suspend fun getMailboxSettings(mailboxId: String): Result<MailboxSettings> = Result.success(settings)
+    override suspend fun updateMailboxSettings(mailboxId: String, settings: MailboxSettings): Result<MailboxSettings> {
+        this.settings = settings
+        return Result.success(settings)
+    }
     override suspend fun clearCache() { /* nothing cached */ }
 }
 

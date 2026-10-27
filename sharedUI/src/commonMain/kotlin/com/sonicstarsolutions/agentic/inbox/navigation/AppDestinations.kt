@@ -51,6 +51,11 @@ data class Compose(
 ) : AppDestination
 
 @Serializable
+data class MailboxSettings(
+    val mailboxId: String,
+) : AppDestination
+
+@Serializable
 data class Search(
     val mailboxId: String,
 ) : AppDestination
@@ -73,6 +78,7 @@ internal val appNavConfiguration = SavedStateConfiguration {
             subclass(EmailThread::class, EmailThread.serializer())
             subclass(Compose::class, Compose.serializer())
             subclass(Search::class, Search.serializer())
+            subclass(MailboxSettings::class, MailboxSettings.serializer())
         }
     }
 }
