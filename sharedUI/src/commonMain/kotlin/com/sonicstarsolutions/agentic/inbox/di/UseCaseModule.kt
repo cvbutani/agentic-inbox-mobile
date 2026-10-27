@@ -21,7 +21,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateAgentKeyUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxSettingsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ListAgentKeysUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.RevokeAgentKeyUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateMailboxSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
@@ -79,5 +82,8 @@ val useCaseModule = module {
     singleOf(::RewriteDraftUseCase)
     singleOf(::GetServerFeaturesUseCase)
     singleOf(::GetMailboxSettingsUseCase)
+    singleOf(::ListAgentKeysUseCase)
+    singleOf(::CreateAgentKeyUseCase)
+    singleOf(::RevokeAgentKeyUseCase)
     singleOf(::UpdateMailboxSettingsUseCase)
 }

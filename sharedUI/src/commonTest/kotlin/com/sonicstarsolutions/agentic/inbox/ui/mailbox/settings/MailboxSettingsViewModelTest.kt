@@ -113,6 +113,21 @@ class MailboxSettingsViewModelTest {
         assertFalse(viewModel.state.value.autoReplyAvailable)
     }
 
+    @Test
+    fun `agent access is offered only when the worker reports it`() = runTest {
+        val on = buildViewModel(repository(features = Result.success(FeatureFlagsDto(agentAccess = true))))
+        assertTrue(on.state.value.agentAccessAvailable)
+
+        val off = buildViewModel(repository(features = Result.success(FeatureFlagsDto(agentAccess = false))))
+        assertFalse(off.state.value.agentAccessAvailable)
+
+        val legacy = buildViewModel(repository(features = Result.success(FeatureFlagsDto())))
+        assertFalse(legacy.state.value.agentAccessAvailable)
+
+        val failed = buildViewModel(repository(features = Result.failure(RuntimeException("offline"))))
+        assertFalse(failed.state.value.agentAccessAvailable)
+    }
+
     // --- editing -----------------------------------------------------------------------------
 
     @Test

@@ -24,6 +24,8 @@ data class MailboxSettingsUiState(
      * mailbox settings, auto-reply sending is newer. */
     val signaturesAvailable: Boolean = true,
     val autoReplyAvailable: Boolean = false,
+    /** Off until the Worker says agent access is enabled — it is opt-in server-side. */
+    val agentAccessAvailable: Boolean = false,
     val saving: Boolean = false,
     /** One glanceable snackbar line — a save result, success or failure. */
     val message: String? = null,
@@ -47,7 +49,11 @@ class MailboxSettingsViewModel(
             // A failed lookup just keeps the legacy-Worker defaults above.
             getServerFeatures().onSuccess { features ->
                 _state.update {
-                    it.copy(signaturesAvailable = features.signatures, autoReplyAvailable = features.autoReply)
+                    it.copy(
+                        signaturesAvailable = features.signatures,
+                        autoReplyAvailable = features.autoReply,
+                        agentAccessAvailable = features.agentAccess,
+                    )
                 }
             }
         }

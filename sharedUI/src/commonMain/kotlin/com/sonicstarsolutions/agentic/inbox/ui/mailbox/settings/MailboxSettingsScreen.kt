@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,6 +58,7 @@ fun MailboxSettingsScreen(
     mailboxId: String,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
+    onOpenAgentAccess: () -> Unit = {},
     viewModel: MailboxSettingsViewModel = koinViewModel { parametersOf(mailboxId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -183,6 +186,35 @@ fun MailboxSettingsScreen(
                                 minLines = 3,
                             )
                         }
+                    }
+                }
+
+                if (state.agentAccessAvailable) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    SectionLabel("Agent access")
+                    // Opens its own screen: keys are created and revoked immediately, not saved
+                    // with the rest of these fields.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenAgentAccess)
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Manage agent keys", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = "Let automated agents read, draft or send for this mailbox with limited permissions.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

@@ -11,6 +11,7 @@ import androidx.navigation3.ui.NavDisplay
 import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeMode
 import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeScreen
 import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxListDetailScreen
+import com.sonicstarsolutions.agentic.inbox.ui.mailbox.agentaccess.AgentAccessScreen
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerScreen
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.MailboxSettingsScreen
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingScreen
@@ -112,7 +113,15 @@ fun AppNavHost() {
             }
 
             entry<MailboxSettings> { key ->
-                MailboxSettingsScreen(mailboxId = key.mailboxId, onBack = { navigator.goBack() })
+                MailboxSettingsScreen(
+                    mailboxId = key.mailboxId,
+                    onBack = { navigator.goBack() },
+                    onOpenAgentAccess = { navigator.goTo(AgentAccess(key.mailboxId)) },
+                )
+            }
+
+            entry<AgentAccess> { key ->
+                AgentAccessScreen(mailboxId = key.mailboxId, onBack = { navigator.goBack() })
             }
 
             entry<Search> { key ->

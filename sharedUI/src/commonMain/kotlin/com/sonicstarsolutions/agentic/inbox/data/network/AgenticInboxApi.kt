@@ -1,6 +1,9 @@
 package com.sonicstarsolutions.agentic.inbox.data.network
 
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.AgentKeyDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ConfigDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateAgentKeyDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreatedAgentKeyDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailFullDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailPageDto
@@ -55,6 +58,21 @@ interface AgenticInboxApi {
         @Path("mailboxId") mailboxId: String,
         @Body body: UpdateMailboxDto,
     ): MailboxDto
+
+    @GET("/api/v1/mailboxes/{mailboxId}/agent-keys")
+    suspend fun listAgentKeys(@Path("mailboxId") mailboxId: String): List<AgentKeyDto>
+
+    @POST("/api/v1/mailboxes/{mailboxId}/agent-keys")
+    suspend fun createAgentKey(
+        @Path("mailboxId") mailboxId: String,
+        @Body body: CreateAgentKeyDto,
+    ): CreatedAgentKeyDto
+
+    @DELETE("/api/v1/mailboxes/{mailboxId}/agent-keys/{keyId}")
+    suspend fun revokeAgentKey(
+        @Path("mailboxId") mailboxId: String,
+        @Path("keyId") keyId: String,
+    )
 
     @DELETE("/api/v1/mailboxes/{mailboxId}")
     suspend fun deleteMailbox(@Path("mailboxId") mailboxId: String)

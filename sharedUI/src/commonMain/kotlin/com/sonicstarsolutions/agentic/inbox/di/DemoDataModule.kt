@@ -8,7 +8,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.AgentKey
+import com.sonicstarsolutions.agentic.inbox.domain.model.CreatedAgentKey
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.NewAgentKey
+import com.sonicstarsolutions.agentic.inbox.domain.repository.AgentKeyRepository
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
@@ -262,7 +266,7 @@ class DemoMailboxRepository : MailboxRepository {
     override suspend fun createMailbox(email: String, name: String): Result<Mailbox> =
         Result.success(mailbox.copy(email = email, name = name))
     override suspend fun getAllowedDomains(): Result<List<String>> = Result.success(listOf("example.com"))
-    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto(spamClassification = true, aiComposeRewrite = true))
+    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto(spamClassification = true, aiComposeRewrite = true, agentAccess = true))
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> = Result.success(mailbox)
     override suspend fun deleteMailbox(mailboxId: String): Result<Unit> = Result.success(Unit)
     private var settings = MailboxSettings(fromName = "You")
@@ -383,4 +387,33 @@ val demoRepositoryModule = module {
     single<ThreadRepository> { DemoThreadRepository() }
     single<DraftRepository> { DemoDraftRepository() }
     single<AttachmentRepository> { DemoAttachmentRepository() }
+    single<AgentKeyRepository> { DemoAgentKeyRepository() }
+}
+
+/** In-memory keys for demo mode, behaving like the Worker (creating returns a one-time secret). */
+class DemoAgentKeyRepository : AgentKeyRepository {
+    private val keys = mutableListOf<AgentKey>()
+
+    override suspend fun listKeys(mailboxId: String): Result<List<AgentKey>> = Result.success(keys.toList())
+
+    override suspend fun createKey(mailboxId: String, newKey: NewAgentKey): Result<CreatedAgentKey> {
+        val id = "demo${keys.size.toString().padStart(12, '0')}"
+        val key = AgentKey(
+            id = id,
+            prefix = "agt_$id",
+            name = newKey.name,
+            scopes = newKey.scopes,
+            dailySendLimit = newKey.dailySendLimit,
+            createdAt = "2026-01-01T00:00:00.000Z",
+            revokedAt = null,
+        )
+        keys += key
+        return Result.success(CreatedAgentKey(key, secret = "agt_${id}_demo-secret-not-valid-anywhere"))
+    }
+
+    override suspend fun revokeKey(mailboxId: String, keyId: String): Result<Unit> {
+        val index = keys.indexOfFirst { it.id == keyId }
+        if (index >= 0) keys[index] = keys[index].copy(revokedAt = "2026-01-02T00:00:00.000Z")
+        return Result.success(Unit)
+    }
 }
