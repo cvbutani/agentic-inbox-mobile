@@ -17,20 +17,16 @@ private fun JsonObject?.obj(key: String): JsonObject? = this?.get(key) as? JsonO
  * values become defaults — a settings blob written by another client must never crash the screen. */
 internal fun JsonObject?.toMailboxSettings(): MailboxSettings {
     val signature = obj("signature")
-    val autoReply = obj("autoReply")
     return MailboxSettings(
         fromName = string("fromName").orEmpty(),
         signatureEnabled = signature.boolean("enabled") ?: false,
         signatureText = signature.string("text").orEmpty(),
-        autoReplyEnabled = autoReply.boolean("enabled") ?: false,
-        autoReplySubject = autoReply.string("subject").orEmpty(),
-        autoReplyMessage = autoReply.string("message").orEmpty(),
     )
 }
 
 /**
  * Applies [edited] on top of [existing]. The Worker's `PUT` replaces the whole settings blob, so
- * every key the app doesn't edit — at the top level *and* inside `signature` / `autoReply` — is
+ * every key the app doesn't edit — at the top level (aliases, auto-draft, agent prompt, …) *and* inside `signature` — is
  * carried over as is.
  *
  * The web client renders `signature.html` in preference to `signature.text`, so when the text
@@ -40,7 +36,6 @@ internal fun JsonObject?.toMailboxSettings(): MailboxSettings {
 internal fun mergeMailboxSettings(existing: JsonObject?, edited: MailboxSettings): JsonObject {
     val current = existing ?: JsonObject(emptyMap())
     val signature = current.obj("signature")
-    val autoReply = current.obj("autoReply")
 
     val textChanged = signature.string("text").orEmpty() != edited.signatureText
     val html = when {
@@ -53,17 +48,11 @@ internal fun mergeMailboxSettings(existing: JsonObject?, edited: MailboxSettings
         "text" to JsonPrimitive(edited.signatureText),
         "html" to JsonPrimitive(html),
     )
-    val mergedAutoReply = (autoReply ?: JsonObject(emptyMap())) + mapOf(
-        "enabled" to JsonPrimitive(edited.autoReplyEnabled),
-        "subject" to JsonPrimitive(edited.autoReplySubject),
-        "message" to JsonPrimitive(edited.autoReplyMessage),
-    )
 
     return JsonObject(
         current + mapOf(
             "fromName" to JsonPrimitive(edited.fromName),
             "signature" to mergedSignature,
-            "autoReply" to mergedAutoReply,
         ),
     )
 }

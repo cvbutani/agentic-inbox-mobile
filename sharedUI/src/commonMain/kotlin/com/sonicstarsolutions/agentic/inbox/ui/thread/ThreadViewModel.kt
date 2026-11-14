@@ -5,14 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
-import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DownloadAttachmentUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkEmailSpamUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendDraftEmailUseCase
@@ -59,7 +57,6 @@ class ThreadViewModel(
     private val getMailbox: GetMailboxUseCase,
     private val downloadAttachment: DownloadAttachmentUseCase,
     private val attachmentOpener: AttachmentOpener,
-    private val markEmailSpam: MarkEmailSpamUseCase,
     private val mailboxId: String,
     private val emailId: String,
     private val threadId: String?,
@@ -150,19 +147,14 @@ class ThreadViewModel(
     }
 
     /**
-     * Marks the currently-expanded message as spam and navigates back — spam messages leave the
-     * inbox just like a delete/archive, so the success path matches those.
+     * Moves the currently-expanded message to the Spam folder and navigates back — like an
+     * archive or delete, the message leaves the current folder. The server has no spam
+     * classification, so this is a plain folder move.
      */
     fun markSpam() {
         val targetId = targetMessageId() ?: return
         runAction {
-            markEmailSpam(mailboxId, targetId, spam = true).map { outcome ->
-                when (outcome) {
-                    MarkSpamOutcome.MARKED -> "Marked as spam"
-                    // Be honest that this was a plain move — the server can't classify spam.
-                    MarkSpamOutcome.FALLBACK_MOVED -> "Spam classification isn't enabled on this server — moved to Trash"
-                }
-            }
+            moveEmail(mailboxId, targetId, SystemFolders.SPAM).map { "Moved to Spam" }
         }
     }
 

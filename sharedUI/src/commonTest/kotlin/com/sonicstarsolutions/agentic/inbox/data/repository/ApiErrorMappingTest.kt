@@ -3,7 +3,6 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.ApiException
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
-import com.sonicstarsolutions.agentic.inbox.data.network.isEndpointUnavailable
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailDao
 import de.jensklingenberg.ktorfit.Ktorfit
 import io.ktor.client.HttpClient
@@ -181,19 +180,12 @@ class ApiErrorMappingTest {
     }
 
     @Test
-    fun `other statuses are left as raw Ktor exceptions for their existing handling`() = runTest {
+    fun `other statuses are left as raw Ktor exceptions`() = runTest {
         val serverError = failureFor(HttpStatusCode.InternalServerError, """{"error":"boom"}""")
         val notFound = failureFor(HttpStatusCode.NotFound, """{"error":"Not found"}""")
 
         assertTrue(serverError is ResponseException)
         assertTrue(notFound is ResponseException)
-        assertTrue(notFound.isEndpointUnavailable())
-    }
-
-    @Test
-    fun `a mapped 400 or 429 is not mistaken for a missing endpoint`() = runTest {
-        assertFalse(failureFor(HttpStatusCode.BadRequest, """{"error":"x"}""").isEndpointUnavailable())
-        assertFalse(failureFor(HttpStatusCode.TooManyRequests, "").isEndpointUnavailable())
     }
 
     @Test

@@ -1,9 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.data.network
 
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.AgentKeyDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ConfigDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateAgentKeyDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreatedAgentKeyDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailFullDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailPageDto
@@ -13,11 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailResponseDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.StatusResponseDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteRequestDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateMailboxDto
 import de.jensklingenberg.ktorfit.http.Body
@@ -29,7 +22,7 @@ import de.jensklingenberg.ktorfit.http.Path
 import de.jensklingenberg.ktorfit.http.Query
 
 /**
- * Ktorfit-generated API client for the `cloudflare/agentic-inbox` Worker (workers/index.ts).
+ * Ktorfit-generated API client for the agentic-inbox-public backend (workers/index.ts).
  * All endpoints are relative to the base URL configured in HttpClient.defaultRequest.
  *
  * Methods return plain (unwrapped) types and throw on failure — Ktorfit has no built-in Result<T>
@@ -58,21 +51,6 @@ interface AgenticInboxApi {
         @Path("mailboxId") mailboxId: String,
         @Body body: UpdateMailboxDto,
     ): MailboxDto
-
-    @GET("/api/v1/mailboxes/{mailboxId}/agent-keys")
-    suspend fun listAgentKeys(@Path("mailboxId") mailboxId: String): List<AgentKeyDto>
-
-    @POST("/api/v1/mailboxes/{mailboxId}/agent-keys")
-    suspend fun createAgentKey(
-        @Path("mailboxId") mailboxId: String,
-        @Body body: CreateAgentKeyDto,
-    ): CreatedAgentKeyDto
-
-    @DELETE("/api/v1/mailboxes/{mailboxId}/agent-keys/{keyId}")
-    suspend fun revokeAgentKey(
-        @Path("mailboxId") mailboxId: String,
-        @Path("keyId") keyId: String,
-    )
 
     @DELETE("/api/v1/mailboxes/{mailboxId}")
     suspend fun deleteMailbox(@Path("mailboxId") mailboxId: String)
@@ -115,19 +93,6 @@ interface AgenticInboxApi {
         @Path("emailId") emailId: String,
         @Body body: MoveEmailRequestDto,
     ): StatusResponseDto
-
-    @POST("/api/v1/mailboxes/{mailboxId}/emails/{emailId}/spam")
-    suspend fun markEmailSpam(
-        @Path("mailboxId") mailboxId: String,
-        @Path("emailId") emailId: String,
-        @Body body: SpamEmailDto,
-    ): SpamEmailResponseDto
-
-    @POST("/api/v1/mailboxes/{mailboxId}/ai/compose-rewrite")
-    suspend fun composeRewrite(
-        @Path("mailboxId") mailboxId: String,
-        @Body body: ComposeRewriteRequestDto,
-    ): ComposeRewriteResponseDto
 
     @GET("/api/v1/mailboxes/{mailboxId}/threads/{threadId}")
     suspend fun getThread(

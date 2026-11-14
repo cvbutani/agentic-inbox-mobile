@@ -1,10 +1,8 @@
 package com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings
 
 import com.sonicstarsolutions.agentic.inbox.data.network.ApiException
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxSettingsUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateMailboxSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
 import kotlinx.coroutines.CompletableDeferred
@@ -39,20 +37,15 @@ class MailboxSettingsViewModelTest {
         fromName = "Alice",
         signatureEnabled = true,
         signatureText = "Cheers",
-        autoReplyEnabled = false,
-        autoReplySubject = "Away",
-        autoReplyMessage = "Back Monday",
     )
 
     private fun repository(
         settings: Result<MailboxSettings> = Result.success(initial),
-        features: Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto(signatures = true, autoReply = true)),
-    ) = FakeMailboxRepository(serverFeaturesResult = features).apply { settingsResult = settings }
+    ) = FakeMailboxRepository().apply { settingsResult = settings }
 
     private fun buildViewModel(repository: FakeMailboxRepository = repository()) = MailboxSettingsViewModel(
         getSettings = GetMailboxSettingsUseCase(repository),
         updateSettings = UpdateMailboxSettingsUseCase(repository),
-        getServerFeatures = GetServerFeaturesUseCase(repository),
         mailboxId = "mb1",
     )
 
@@ -84,50 +77,6 @@ class MailboxSettingsViewModelTest {
         assertEquals(2, repository.settingsLoads)
     }
 
-    // --- feature gating ----------------------------------------------------------------------
-
-    @Test
-    fun `sections follow the worker's feature flags`() = runTest {
-        val on = buildViewModel(repository(features = Result.success(FeatureFlagsDto(signatures = true, autoReply = true))))
-        assertTrue(on.state.value.signaturesAvailable)
-        assertTrue(on.state.value.autoReplyAvailable)
-
-        val off = buildViewModel(repository(features = Result.success(FeatureFlagsDto(signatures = false, autoReply = false))))
-        assertFalse(off.state.value.signaturesAvailable)
-        assertFalse(off.state.value.autoReplyAvailable)
-    }
-
-    @Test
-    fun `a legacy worker keeps signatures but hides auto-reply`() = runTest {
-        val viewModel = buildViewModel(repository(features = Result.success(FeatureFlagsDto())))
-
-        assertTrue(viewModel.state.value.signaturesAvailable)
-        assertFalse(viewModel.state.value.autoReplyAvailable)
-    }
-
-    @Test
-    fun `a failed feature lookup falls back to the legacy defaults`() = runTest {
-        val viewModel = buildViewModel(repository(features = Result.failure(RuntimeException("offline"))))
-
-        assertTrue(viewModel.state.value.signaturesAvailable)
-        assertFalse(viewModel.state.value.autoReplyAvailable)
-    }
-
-    @Test
-    fun `agent access is offered only when the worker reports it`() = runTest {
-        val on = buildViewModel(repository(features = Result.success(FeatureFlagsDto(agentAccess = true))))
-        assertTrue(on.state.value.agentAccessAvailable)
-
-        val off = buildViewModel(repository(features = Result.success(FeatureFlagsDto(agentAccess = false))))
-        assertFalse(off.state.value.agentAccessAvailable)
-
-        val legacy = buildViewModel(repository(features = Result.success(FeatureFlagsDto())))
-        assertFalse(legacy.state.value.agentAccessAvailable)
-
-        val failed = buildViewModel(repository(features = Result.failure(RuntimeException("offline"))))
-        assertFalse(failed.state.value.agentAccessAvailable)
-    }
-
     // --- editing -----------------------------------------------------------------------------
 
     @Test
@@ -137,11 +86,8 @@ class MailboxSettingsViewModelTest {
         viewModel.onFromNameChanged("Alicia")
         viewModel.onSignatureEnabledChanged(false)
         viewModel.onSignatureTextChanged("Best")
-        viewModel.onAutoReplyEnabledChanged(true)
-        viewModel.onAutoReplySubjectChanged("Out")
-        viewModel.onAutoReplyMessageChanged("Gone")
 
-        assertEquals(MailboxSettings("Alicia", false, "Best", true, "Out", "Gone"), viewModel.state.value.form)
+        assertEquals(MailboxSettings("Alicia", false, "Best"), viewModel.state.value.form)
         assertTrue(viewModel.state.value.dirty)
     }
 
@@ -161,11 +107,11 @@ class MailboxSettingsViewModelTest {
     fun `save sends the edited settings, then reports success and goes clean`() = runTest {
         val repository = repository()
         val viewModel = buildViewModel(repository)
-        viewModel.onAutoReplyEnabledChanged(true)
+        viewModel.onSignatureTextChanged("Best")
 
         viewModel.save()
 
-        assertEquals(listOf(initial.copy(autoReplyEnabled = true)), repository.updateSettingsCalls)
+        assertEquals(listOf(initial.copy(signatureText = "Best")), repository.updateSettingsCalls)
         val state = viewModel.state.value
         assertFalse(state.saving)
         assertFalse(state.dirty)

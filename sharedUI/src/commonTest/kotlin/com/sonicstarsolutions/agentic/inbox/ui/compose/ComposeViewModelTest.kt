@@ -3,11 +3,7 @@ package com.sonicstarsolutions.agentic.inbox.ui.compose
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
-import com.sonicstarsolutions.agentic.inbox.domain.model.FeatureUnavailableException
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.RewriteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
@@ -92,8 +88,6 @@ class ComposeViewModelTest {
         getDraftUseCase = GetDraftUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
         externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
-        rewriteDraftUseCase = RewriteDraftUseCase(emailRepository),
-        getServerFeatures = GetServerFeaturesUseCase(mailboxRepository),
         mailboxId = "mb1",
         mode = mode,
         emailId = emailId,
@@ -280,94 +274,6 @@ class ComposeViewModelTest {
         advanceUntilIdle()
 
         assertFalse(viewModel.state.value.sending)
-    }
-
-    // --- AI rewrite gating (server feature flags + 404/501 fallback) ---------------------------
-
-    private fun mailboxRepositoryWith(features: Result<FeatureFlagsDto>) = FakeMailboxRepository(serverFeaturesResult = features).apply {
-        getMailboxResult = { Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me")) }
-    }
-
-    @Test
-    fun `AI rewrite is hidden against a legacy worker that reports no features`() = runTest {
-        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = mailboxRepositoryWith(Result.success(FeatureFlagsDto())))
-
-        assertFalse(viewModel.state.value.aiRewriteAvailable)
-    }
-
-    @Test
-    fun `AI rewrite is offered when the worker reports the agent and rewrite flags`() = runTest {
-        val features = FeatureFlagsDto(aiAgent = true, aiComposeRewrite = true)
-        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = mailboxRepositoryWith(Result.success(features)))
-
-        assertTrue(viewModel.state.value.aiRewriteAvailable)
-    }
-
-    @Test
-    fun `AI rewrite is hidden when the AI agent is disabled on the worker`() = runTest {
-        val features = FeatureFlagsDto(aiAgent = false, aiComposeRewrite = true)
-        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = mailboxRepositoryWith(Result.success(features)))
-
-        assertFalse(viewModel.state.value.aiRewriteAvailable)
-    }
-
-    @Test
-    fun `AI rewrite stays hidden when the feature lookup itself fails`() = runTest {
-        val viewModel = buildViewModel(
-            ComposeMode.NEW,
-            mailboxRepository = mailboxRepositoryWith(Result.failure(RuntimeException("offline"))),
-        )
-
-        assertFalse(viewModel.state.value.aiRewriteAvailable)
-    }
-
-    @Test
-    fun `rewriteBody replaces the body with the rewritten text`() = runTest {
-        val emailRepository = FakeEmailRepository(rewriteResult = Result.success("Polished"))
-        val viewModel = buildViewModel(ComposeMode.NEW, emailRepository = emailRepository)
-        viewModel.onBodyChanged("rough")
-
-        viewModel.rewriteBody()
-
-        assertEquals("Polished", viewModel.state.value.body)
-        assertFalse(viewModel.state.value.rewriting)
-    }
-
-    @Test
-    fun `a 404 or 501 on rewrite hides the button, explains why, and keeps the user's text`() = runTest {
-        val unavailable = FeatureUnavailableException("AI rewrite isn't available on this server")
-        val features = FeatureFlagsDto(aiAgent = true, aiComposeRewrite = true)
-        val viewModel = buildViewModel(
-            ComposeMode.NEW,
-            mailboxRepository = mailboxRepositoryWith(Result.success(features)),
-            emailRepository = FakeEmailRepository(rewriteResult = Result.failure(unavailable)),
-        )
-        viewModel.onBodyChanged("my original text")
-        assertTrue(viewModel.state.value.aiRewriteAvailable)
-
-        viewModel.rewriteBody()
-
-        assertEquals("my original text", viewModel.state.value.body)
-        assertFalse(viewModel.state.value.aiRewriteAvailable)
-        assertEquals("AI rewrite isn't available on this server", viewModel.state.value.errorMessage)
-        assertFalse(viewModel.state.value.rewriting)
-    }
-
-    @Test
-    fun `an ordinary rewrite failure keeps the button and the user's text`() = runTest {
-        val features = FeatureFlagsDto(aiAgent = true, aiComposeRewrite = true)
-        val viewModel = buildViewModel(
-            ComposeMode.NEW,
-            mailboxRepository = mailboxRepositoryWith(Result.success(features)),
-            emailRepository = FakeEmailRepository(rewriteResult = Result.failure(RuntimeException("boom"))),
-        )
-        viewModel.onBodyChanged("my original text")
-
-        viewModel.rewriteBody()
-
-        assertEquals("my original text", viewModel.state.value.body)
-        assertTrue(viewModel.state.value.aiRewriteAvailable)
-        assertEquals("boom", viewModel.state.value.errorMessage)
     }
 
     @Test

@@ -1,8 +1,8 @@
 # Agentic Inbox
 
-A native Android + iOS email client for the [`cloudflare/agentic-inbox`](https://github.com/cloudflare/agentic-inbox) Worker backend, built with Kotlin Multiplatform and Compose Multiplatform. One shared codebase renders the entire UI on both platforms; the backend is used as-is with no server changes.
+A native Android + iOS email client for the Agentic Inbox backend ([agentic-inbox-public](https://github.com/SonicStar-Solutions/agentic-inbox), a fork of [`cloudflare/agentic-inbox`](https://github.com/cloudflare/agentic-inbox)), built with Kotlin Multiplatform and Compose Multiplatform. One shared codebase renders the entire UI on both platforms; the backend is used as-is with no server changes.
 
-You point the app at your own Worker deployment — mail, credentials, and cache stay between your device and your Cloudflare account.
+You point the app at your own deployment — mail, credentials, and cache stay between your device and your Cloudflare account.
 
 <a href="https://apps.apple.com/us/app/agentic-inbox/id6793996922">
   <img alt="Download on the App Store" align="middle" width="150" height="50"
@@ -54,7 +54,7 @@ Each screen is a `Screen` composable backed by a `ViewModel` exposing a single `
 
 ### Prerequisites
 
-- A deployed [`agentic-inbox`](https://github.com/cloudflare/agentic-inbox) Cloudflare Worker
+- A deployed [agentic-inbox-public](https://github.com/SonicStar-Solutions/agentic-inbox) Cloudflare Worker (current `main`; the upstream Worker lacks features the app expects)
 - A Cloudflare Access **service token** (Client ID + Client Secret) for that Worker
 - JDK 17+, Android Studio (latest stable); Xcode for the iOS target (macOS only)
 

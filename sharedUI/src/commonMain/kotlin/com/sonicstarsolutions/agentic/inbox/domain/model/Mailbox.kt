@@ -11,7 +11,6 @@ data class Mailbox(
     val signatureEnabled: Boolean = false,
     val signatureText: String? = null,
     val signatureHtml: String? = null,
-    val autoReplyEnabled: Boolean = false,
 )
 
 /** What to show for this mailbox everywhere a human-facing name is needed — the configured

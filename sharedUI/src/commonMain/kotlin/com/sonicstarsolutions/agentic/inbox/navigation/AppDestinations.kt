@@ -56,11 +56,6 @@ data class MailboxSettings(
 ) : AppDestination
 
 @Serializable
-data class AgentAccess(
-    val mailboxId: String,
-) : AppDestination
-
-@Serializable
 data class Search(
     val mailboxId: String,
 ) : AppDestination
@@ -84,7 +79,6 @@ internal val appNavConfiguration = SavedStateConfiguration {
             subclass(Compose::class, Compose.serializer())
             subclass(Search::class, Search.serializer())
             subclass(MailboxSettings::class, MailboxSettings.serializer())
-            subclass(AgentAccess::class, AgentAccess.serializer())
         }
     }
 }

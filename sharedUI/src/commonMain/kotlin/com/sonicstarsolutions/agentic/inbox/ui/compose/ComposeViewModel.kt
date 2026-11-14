@@ -5,17 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
-import com.sonicstarsolutions.agentic.inbox.domain.model.FeatureUnavailableException
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.RewriteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
@@ -55,11 +52,6 @@ data class ComposeUiState(
     val subject: String = "",
     val body: String = "",
     val sending: Boolean = false,
-    val rewriting: Boolean = false,
-    /** Whether to offer the AI rewrite action at all. False until the Worker's feature flags say
-     * so — a legacy Worker, one with AI disabled, or a failed lookup all leave it hidden — and
-     * flipped back off if the endpoint turns out to be missing (404/501). */
-    val aiRewriteAvailable: Boolean = false,
     val errorMessage: String? = null,
     val sent: Boolean = false,
     /** Files to send with this message. Not persisted with drafts (v1 limitation): a resumed
@@ -90,8 +82,6 @@ class ComposeViewModel(
      * would be lost precisely in the case autosave exists to cover.
      */
     private val externalScope: CoroutineScope,
-    private val rewriteDraftUseCase: RewriteDraftUseCase,
-    private val getServerFeatures: GetServerFeaturesUseCase,
     private val mailboxId: String,
     private val mode: ComposeMode,
     private val emailId: String?,
@@ -131,11 +121,6 @@ class ComposeViewModel(
     }
 
     init {
-        viewModelScope.launch {
-            getServerFeatures().onSuccess { features ->
-                _state.update { it.copy(aiRewriteAvailable = features.aiRewriteAvailable) }
-            }
-        }
         viewModelScope.launch {
             getMailbox(mailboxId).onSuccess { mailbox ->
                 fromEmail = mailbox.email
@@ -325,36 +310,6 @@ class ComposeViewModel(
     }
 
     fun consumeError() = _state.update { it.copy(errorMessage = null) }
-
-    /**
-     * Asks the AI to rewrite the current body text and replaces it on success. While in flight
-     * the [ComposeUiState.rewriting] flag drives a progress indicator in the toolbar so the user
-     * knows something is happening without locking the entire form.
-     */
-    fun rewriteBody() {
-        val currentBody = _state.value.body
-        if (currentBody.isBlank() || _state.value.rewriting) return
-        _state.update { it.copy(rewriting = true, errorMessage = null) }
-        viewModelScope.launch {
-            rewriteDraftUseCase(mailboxId, currentBody)
-                .onSuccess { rewritten ->
-                    _state.update { it.copy(rewriting = false, body = rewritten) }
-                    dirty = true
-                    scheduleAutosave()
-                }
-                .onFailure { t ->
-                    _state.update {
-                        it.copy(
-                            rewriting = false,
-                            // The body is never touched on failure. A missing endpoint also retires
-                            // the button so the user isn't offered something that can't work.
-                            aiRewriteAvailable = it.aiRewriteAvailable && t !is FeatureUnavailableException,
-                            errorMessage = t.message ?: "AI rewrite failed",
-                        )
-                    }
-                }
-        }
-    }
 
     fun send() {
         val toList = EmailAddressUtils.parseAddressList(_state.value.to)

@@ -3,19 +3,13 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 import com.sonicstarsolutions.agentic.inbox.data.local.EmailDao
 import com.sonicstarsolutions.agentic.inbox.data.local.EmailEntity
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
-import com.sonicstarsolutions.agentic.inbox.data.network.isEndpointUnavailable
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
-import com.sonicstarsolutions.agentic.inbox.domain.model.FeatureUnavailableException
-import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailMetadataDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FromDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.OutboundAttachmentDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.SpamEmailDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.ComposeRewriteRequestDto
-import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
@@ -79,26 +73,6 @@ class EmailRepositoryImpl(
 
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> =
         safeApiCall { api.moveEmail(mailboxId, emailId, MoveEmailRequestDto(folderId)) }.map {}
-
-    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<MarkSpamOutcome> {
-        val result = safeApiCall { api.markEmailSpam(mailboxId, emailId, SpamEmailDto(spam = spam)) }
-        if (result.isSuccess) return Result.success(MarkSpamOutcome.MARKED)
-        // Only a missing endpoint (older Worker, or AI unavailable) triggers the fallback — any
-        // other failure (offline, 500) must surface, not silently relocate the user's email.
-        if (result.exceptionOrNull()?.isEndpointUnavailable() != true) {
-            return Result.failure(result.exceptionOrNull()!!)
-        }
-        // Move to TRASH if spam, or INBOX if unmarking spam
-        val fallbackFolder = if (spam) SystemFolders.TRASH else SystemFolders.INBOX
-        return moveEmail(mailboxId, emailId, fallbackFolder).map { MarkSpamOutcome.FALLBACK_MOVED }
-    }
-
-    override suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String> =
-        safeApiCall { api.composeRewrite(mailboxId, ComposeRewriteRequestDto(text = text, tone = tone)).rewritten }
-            .recoverCatching { t ->
-                if (t.isEndpointUnavailable()) throw FeatureUnavailableException("AI rewrite isn't available on this server")
-                throw t
-            }
 
     override suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit> =
         safeApiCall { api.deleteEmail(mailboxId, emailId) }

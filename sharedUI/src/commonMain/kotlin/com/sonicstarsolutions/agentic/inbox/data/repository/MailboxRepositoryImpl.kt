@@ -4,7 +4,6 @@ import com.sonicstarsolutions.agentic.inbox.data.local.MailboxDao
 import com.sonicstarsolutions.agentic.inbox.data.local.MailboxEntity
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateMailboxDto
@@ -46,9 +45,6 @@ class MailboxRepositoryImpl(
     override suspend fun getAllowedDomains(): Result<List<String>> =
         safeApiCall { api.getConfig().domains }
 
-    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> =
-        safeApiCall { api.getConfig().features }
-
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> =
         safeApiCall { api.getMailbox(mailboxId).toDomain() }
             .onSuccess { mailboxDao.upsertAll(listOf(it.toEntity())) }
@@ -77,7 +73,6 @@ private fun JsonElement?.asObject(): JsonObject? = this as? JsonObject
 private fun MailboxDto.toDomain(): Mailbox {
     val settingsObj = settings?.jsonObject
     val sigObj = settingsObj?.get("signature")?.jsonObject
-    val autoReplyObj = settingsObj?.get("autoReply")?.jsonObject
     return Mailbox(
         id = id,
         email = email,
@@ -86,7 +81,6 @@ private fun MailboxDto.toDomain(): Mailbox {
         signatureEnabled = sigObj?.get("enabled")?.jsonPrimitive?.booleanOrNull ?: false,
         signatureText = sigObj?.get("text")?.jsonPrimitive?.contentOrNull,
         signatureHtml = sigObj?.get("html")?.jsonPrimitive?.contentOrNull,
-        autoReplyEnabled = autoReplyObj?.get("enabled")?.jsonPrimitive?.booleanOrNull ?: false,
     )
 }
 

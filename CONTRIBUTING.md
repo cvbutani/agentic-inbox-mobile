@@ -5,7 +5,7 @@ keeps reviews fast.
 
 ## Setup
 
-You need a deployed [`agentic-inbox`](https://github.com/cloudflare/agentic-inbox) Worker and a
+You need a deployed [agentic-inbox-public](https://github.com/SonicStar-Solutions/agentic-inbox) Worker and a
 Cloudflare Access service token to run the app against real data (see the README). Building and
 testing need neither:
 

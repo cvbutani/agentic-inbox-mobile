@@ -36,9 +36,6 @@ class MailboxSettingsMappingTest {
                 fromName = "Alice",
                 signatureEnabled = true,
                 signatureText = "Cheers",
-                autoReplyEnabled = true,
-                autoReplySubject = "Away",
-                autoReplyMessage = "Back Monday",
             ),
             settings,
         )
@@ -82,13 +79,10 @@ class MailboxSettingsMappingTest {
                 fromName = "Alice",
                 signatureEnabled = true,
                 signatureText = "Cheers",
-                autoReplyEnabled = true,
-                autoReplySubject = "Away",
-                autoReplyMessage = "Back Monday",
             ),
         )
 
-        assertEquals(MailboxSettings("Alice", true, "Cheers", true, "Away", "Back Monday"), merged.toMailboxSettings())
+        assertEquals(MailboxSettings("Alice", true, "Cheers"), merged.toMailboxSettings())
     }
 
     @Test
@@ -96,7 +90,7 @@ class MailboxSettingsMappingTest {
         val merged = mergeMailboxSettings(null, MailboxSettings(fromName = "Alice"))
 
         assertEquals("Alice", merged["fromName"]!!.jsonPrimitive.content)
-        assertTrue("signature" in merged && "autoReply" in merged)
+        assertTrue("signature" in merged)
     }
 
     // --- signature html stays consistent with the text the web client prefers -------------------

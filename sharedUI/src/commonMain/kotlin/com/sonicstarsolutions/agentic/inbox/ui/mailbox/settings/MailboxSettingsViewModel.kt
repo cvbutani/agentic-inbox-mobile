@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxSettingsUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetServerFeaturesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateMailboxSettingsUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,12 +19,6 @@ data class MailboxSettingsUiState(
     val form: MailboxSettings = MailboxSettings(),
     /** What the server last had; [dirty] compares the form against it. */
     val saved: MailboxSettings = MailboxSettings(),
-    /** Defaults match a legacy Worker that reports no features: signatures were always part of
-     * mailbox settings, auto-reply sending is newer. */
-    val signaturesAvailable: Boolean = true,
-    val autoReplyAvailable: Boolean = false,
-    /** Off until the Worker says agent access is enabled — it is opt-in server-side. */
-    val agentAccessAvailable: Boolean = false,
     val saving: Boolean = false,
     /** One glanceable snackbar line — a save result, success or failure. */
     val message: String? = null,
@@ -36,7 +29,6 @@ data class MailboxSettingsUiState(
 class MailboxSettingsViewModel(
     private val getSettings: GetMailboxSettingsUseCase,
     private val updateSettings: UpdateMailboxSettingsUseCase,
-    private val getServerFeatures: GetServerFeaturesUseCase,
     private val mailboxId: String,
 ) : ViewModel() {
 
@@ -45,18 +37,6 @@ class MailboxSettingsViewModel(
 
     init {
         load()
-        viewModelScope.launch {
-            // A failed lookup just keeps the legacy-Worker defaults above.
-            getServerFeatures().onSuccess { features ->
-                _state.update {
-                    it.copy(
-                        signaturesAvailable = features.signatures,
-                        autoReplyAvailable = features.autoReply,
-                        agentAccessAvailable = features.agentAccess,
-                    )
-                }
-            }
-        }
     }
 
     fun retry() {
@@ -79,9 +59,6 @@ class MailboxSettingsViewModel(
     fun onFromNameChanged(value: String) = edit { it.copy(fromName = value) }
     fun onSignatureEnabledChanged(value: Boolean) = edit { it.copy(signatureEnabled = value) }
     fun onSignatureTextChanged(value: String) = edit { it.copy(signatureText = value) }
-    fun onAutoReplyEnabledChanged(value: Boolean) = edit { it.copy(autoReplyEnabled = value) }
-    fun onAutoReplySubjectChanged(value: String) = edit { it.copy(autoReplySubject = value) }
-    fun onAutoReplyMessageChanged(value: String) = edit { it.copy(autoReplyMessage = value) }
 
     private fun edit(change: (MailboxSettings) -> MailboxSettings) {
         _state.update { it.copy(form = change(it.form)) }

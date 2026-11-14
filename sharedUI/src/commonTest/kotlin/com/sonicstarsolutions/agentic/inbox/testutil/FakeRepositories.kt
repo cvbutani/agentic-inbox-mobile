@@ -5,12 +5,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
-import com.sonicstarsolutions.agentic.inbox.domain.model.MarkSpamOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
@@ -109,7 +107,6 @@ class FakeMailboxRepository(
     var createResult: (String, String) -> Result<Mailbox> =
         { email, name -> Result.success(Mailbox(id = email.substringBefore("@"), email = email, name = name)) },
     var allowedDomainsResult: Result<List<String>> = Result.success(emptyList()),
-    var serverFeaturesResult: Result<FeatureFlagsDto> = Result.success(FeatureFlagsDto()),
 ) : MailboxRepository {
     data class CreateCall(val email: String, val name: String)
 
@@ -128,8 +125,6 @@ class FakeMailboxRepository(
     }
 
     override suspend fun getAllowedDomains(): Result<List<String>> = allowedDomainsResult
-
-    override suspend fun getServerFeatures(): Result<FeatureFlagsDto> = serverFeaturesResult
 
     var getMailboxResult: (String) -> Result<Mailbox> =
         { id -> Result.success(Mailbox(id = id, email = "$id@example.dev", name = "Mailbox $id")) }
@@ -190,8 +185,6 @@ class FakeEmailRepository(
     var sendResult: Result<Unit> = Result.success(Unit),
     var replyResult: Result<Unit> = Result.success(Unit),
     var forwardResult: Result<Unit> = Result.success(Unit),
-    var markSpamResult: Result<MarkSpamOutcome> = Result.success(MarkSpamOutcome.MARKED),
-    var rewriteResult: Result<String> = Result.success("rewritten"),
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
     data class SearchCall(val mailboxId: String, val query: SearchQuery, val page: Int, val limit: Int)
@@ -284,10 +277,6 @@ class FakeEmailRepository(
         sendGate?.await()
         return forwardResult
     }
-
-    override suspend fun markSpam(mailboxId: String, emailId: String, spam: Boolean): Result<MarkSpamOutcome> = markSpamResult
-
-    override suspend fun rewriteDraft(mailboxId: String, text: String, tone: String): Result<String> = rewriteResult
 
     var clearCacheCalled: Boolean = false
 

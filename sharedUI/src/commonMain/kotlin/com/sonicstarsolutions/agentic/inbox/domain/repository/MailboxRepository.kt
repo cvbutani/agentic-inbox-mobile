@@ -1,6 +1,5 @@
 package com.sonicstarsolutions.agentic.inbox.domain.repository
 
-import com.sonicstarsolutions.agentic.inbox.data.network.dto.FeatureFlagsDto
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 
@@ -11,10 +10,6 @@ interface MailboxRepository {
 
     /** Domains new mailbox addresses may be created under, per the Worker's own config. */
     suspend fun getAllowedDomains(): Result<List<String>>
-
-    /** Feature flags reported by the Worker. Returns conservative defaults if the Worker
-     * is an older version that does not expose a `features` object. */
-    suspend fun getServerFeatures(): Result<FeatureFlagsDto>
 
     suspend fun getMailbox(mailboxId: String): Result<Mailbox>
 

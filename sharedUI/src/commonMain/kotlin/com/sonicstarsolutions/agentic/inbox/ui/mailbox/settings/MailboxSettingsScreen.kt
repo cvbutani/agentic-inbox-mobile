@@ -18,7 +18,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,7 +57,6 @@ fun MailboxSettingsScreen(
     mailboxId: String,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
-    onOpenAgentAccess: () -> Unit = {},
     viewModel: MailboxSettingsViewModel = koinViewModel { parametersOf(mailboxId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -131,91 +129,25 @@ fun MailboxSettingsScreen(
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                 )
 
-                if (state.signaturesAvailable) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    SectionLabel("Signature")
-                    SwitchRow(
-                        label = "Add a signature to new messages",
-                        checked = state.form.signatureEnabled,
-                        onCheckedChange = viewModel::onSignatureEnabledChanged,
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                SectionLabel("Signature")
+                SwitchRow(
+                    label = "Add a signature to new messages",
+                    checked = state.form.signatureEnabled,
+                    onCheckedChange = viewModel::onSignatureEnabledChanged,
+                )
+                AnimatedVisibility(
+                    visible = state.form.signatureEnabled,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    OutlinedTextField(
+                        value = state.form.signatureText,
+                        onValueChange = viewModel::onSignatureTextChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Signature") },
+                        minLines = 3,
                     )
-                    AnimatedVisibility(
-                        visible = state.form.signatureEnabled,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut(),
-                    ) {
-                        OutlinedTextField(
-                            value = state.form.signatureText,
-                            onValueChange = viewModel::onSignatureTextChanged,
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Signature") },
-                            minLines = 3,
-                        )
-                    }
-                }
-
-                if (state.autoReplyAvailable) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    SectionLabel("Auto-reply")
-                    SwitchRow(
-                        label = "Reply automatically",
-                        supporting = "Sent to the sender of each new message that isn't spam.",
-                        checked = state.form.autoReplyEnabled,
-                        onCheckedChange = viewModel::onAutoReplyEnabledChanged,
-                    )
-                    AnimatedVisibility(
-                        visible = state.form.autoReplyEnabled,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut(),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = state.form.autoReplySubject,
-                                onValueChange = viewModel::onAutoReplySubjectChanged,
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Subject") },
-                                supportingText = { Text("Leave blank to reply with “Re: …”") },
-                                singleLine = true,
-                            )
-                            OutlinedTextField(
-                                value = state.form.autoReplyMessage,
-                                onValueChange = viewModel::onAutoReplyMessageChanged,
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Message") },
-                                supportingText = { Text("Leave blank to send a short thank-you") },
-                                minLines = 3,
-                            )
-                        }
-                    }
-                }
-
-                if (state.agentAccessAvailable) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    SectionLabel("Agent access")
-                    // Opens its own screen: keys are created and revoked immediately, not saved
-                    // with the rest of these fields.
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onOpenAgentAccess)
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Manage agent keys", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                text = "Let automated agents read, draft or send for this mailbox with limited permissions.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
             }
         }
