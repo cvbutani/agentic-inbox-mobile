@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Agentic Inbox">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A4A76"/>
+      <stop offset="1" stop-color="#1D3557"/>
+    </linearGradient>
+    <linearGradient id="paper" gradientUnits="userSpaceOnUse" x1="0" y1="150" x2="0" y2="420">
+      <stop offset="0" stop-color="#FBFEF9"/>
+      <stop offset="1" stop-color="#E4F1E6"/>
+    </linearGradient>
+    <linearGradient id="dart" gradientUnits="userSpaceOnUse" x1="0" y1="-70" x2="0" y2="52">
+      <stop offset="0" stop-color="#F2545F"/>
+      <stop offset="1" stop-color="#E63946"/>
+    </linearGradient>
+
+    <!-- Cloud that is also the envelope: two uneven bumps on a rounded mail body -->
+    <g id="cloud">
+      <rect x="92" y="264" width="280" height="154" rx="46"/>
+      <circle cx="196" cy="236" r="80"/>
+      <circle cx="284" cy="268" r="50"/>
+    </g>
+
+    <!-- Envelope flap, cut out of the cloud so the tile shows through -->
+    <mask id="flap" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#fff"/>
+      <path d="M128 306 L232 382 L336 306" fill="none" stroke="#000" stroke-width="24"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+
+  <!-- Background: rounded app tile (palette seed 1D3557) -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Whole mark, centred and scaled to stay inside a circular icon mask -->
+  <g transform="translate(256 256) scale(.94) translate(-268 -260)">
+    <!-- Soft lift under the cloud -->
+    <use xlink:href="#cloud" href="#cloud" transform="translate(0 10)" fill="#0E1D33" opacity=".32"/>
+
+    <!-- Cloud envelope -->
+    <use xlink:href="#cloud" href="#cloud" fill="url(#paper)" mask="url(#flap)"/>
+
+    <!-- Dart: the agent sending mail, launched from the cloud -->
+    <g transform="translate(396 150) rotate(45)">
+      <path d="M0 -60 L50 42 L0 20 L-50 42 Z" fill="url(#dart)" stroke="url(#dart)" stroke-width="20" stroke-linejoin="round"/>
+      <g fill="none" stroke="#E63946" stroke-width="13" stroke-linecap="round">
+        <path d="M-26 70 V84"/>
+        <path d="M0 70 V94"/>
+        <path d="M26 70 V84"/>
+      </g>
+    </g>
+  </g>
+</svg>
