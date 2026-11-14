@@ -1,5 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.data.network.dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -85,12 +87,15 @@ data class FromDto(
     @SerialName("name") val name: String? = null,
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class OutboundAttachmentDto(
     @SerialName("content") val content: String, // base64 encoded
     @SerialName("filename") val filename: String,
     @SerialName("type") val type: String, // MIME type
-    @SerialName("disposition") val disposition: String = "attachment", // "attachment" | "inline"
+    // The server's schema requires this field, so it must be sent even when it equals the default
+    // (the client's Json has encodeDefaults = false).
+    @EncodeDefault @SerialName("disposition") val disposition: String = "attachment", // "attachment" | "inline"
     @SerialName("contentId") val contentId: String? = null,
 )
 

@@ -137,6 +137,50 @@ class ApiErrorMappingTest {
     }
 
     @Test
+    fun `a 502 from a rejected send carries the provider's message`() = runTest {
+        val failure = failureFor(
+            HttpStatusCode.BadGateway,
+            """{"error":"Failed to send email: email to nobody@example.org not allowed"}""",
+        )
+
+        assertTrue(failure is ApiException)
+        assertEquals(502, failure.status)
+        assertEquals("Failed to send email: email to nobody@example.org not allowed", failure.message)
+    }
+
+    @Test
+    fun `a 502 without the worker's JSON still gets a clean message`() = runTest {
+        val failure = failureFor(HttpStatusCode.BadGateway, "<html>Bad Gateway</html>")
+
+        assertTrue(failure is ApiException)
+        assertEquals("The server couldn't complete the request (502)", failure.message)
+    }
+
+    @Test
+    fun `a 409 conflict carries the server's message`() = runTest {
+        val failure = failureFor(HttpStatusCode.Conflict, """{"error":"Mailbox already exists"}""")
+
+        assertTrue(failure is ApiException)
+        assertEquals(409, failure.status)
+        assertEquals("Mailbox already exists", failure.message)
+    }
+
+    @Test
+    fun `a 403 with the server's JSON error is presentable but an HTML 403 is left raw`() = runTest {
+        val restricted = failureFor(
+            HttpStatusCode.Forbidden,
+            """{"error":"Mailbox creation is restricted to configured EMAIL_ADDRESSES"}""",
+        )
+        assertTrue(restricted is ApiException)
+        assertEquals(403, restricted.status)
+        assertEquals("Mailbox creation is restricted to configured EMAIL_ADDRESSES", restricted.message)
+
+        // A Cloudflare Access denial is HTML; its details must stay visible to the connection check.
+        val access = failureFor(HttpStatusCode.Forbidden, "<html>Access denied</html>")
+        assertTrue(access is ResponseException)
+    }
+
+    @Test
     fun `other statuses are left as raw Ktor exceptions for their existing handling`() = runTest {
         val serverError = failureFor(HttpStatusCode.InternalServerError, """{"error":"boom"}""")
         val notFound = failureFor(HttpStatusCode.NotFound, """{"error":"Not found"}""")

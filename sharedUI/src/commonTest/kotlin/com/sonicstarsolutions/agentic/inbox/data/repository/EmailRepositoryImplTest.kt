@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
+import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.data.local.EmailEntity
@@ -17,6 +18,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
 import io.ktor.http.contentType
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
@@ -323,6 +325,28 @@ class EmailRepositoryImplTest {
         val request = engine.requestHistory.single()
         assertEquals(HttpMethod.Post, request.method)
         assertEquals("/api/v1/mailboxes/mb1/emails", request.url.encodedPath)
+    }
+
+    @Test
+    fun `sendEmail always sends an explicit disposition for each attachment`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"e1","status":"sent"}""",
+                status = HttpStatusCode.Accepted,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+        val withFile = composeRequest().copy(
+            attachments = listOf(ComposeAttachment("a.txt", "text/plain", "hi".encodeToByteArray())),
+        )
+
+        repository.sendEmail(mailboxId = "mb1", request = withFile)
+
+        // The server's schema requires `disposition`; encodeDefaults = false would drop it when it
+        // equals its default, and the send would be rejected with a 400.
+        val body = (engine.requestHistory.single().body as TextContent).text
+        assertTrue(body.contains("\"disposition\":\"attachment\""), "body was $body")
     }
 
     @Test

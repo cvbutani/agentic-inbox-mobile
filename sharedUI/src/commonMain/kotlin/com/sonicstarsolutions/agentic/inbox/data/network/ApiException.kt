@@ -11,12 +11,13 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * A 400 (rejected request) or 429 (rate limited) from the Worker, with its structured error body
- * already digested. [message] is phrased for the user, so presentation code can show it as is.
+ * A 400 (rejected request), 409 (conflict), 429 (rate limited) or 502 (the mail provider rejected a
+ * send) from the server, or a 403 that carries the server's own JSON error, with its structured
+ * error body already digested. [message] is phrased for the user, so presentation code can show
+ * it as is.
  *
- * Only these two statuses are mapped: other statuses keep their raw Ktor exception because
- * callers inspect them (404/501 → [isEndpointUnavailable], Cloudflare Access redirects → the
- * connection check).
+ * Only these statuses are mapped: others keep their raw Ktor exception because callers inspect
+ * them (Cloudflare Access redirects and HTML 403 denials → the connection check).
  */
 class ApiException(
     val status: Int,
@@ -29,12 +30,14 @@ class ApiException(
 
 private val lenientJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
-/** Maps [t] to an [ApiException] when it's a 400/429 [ResponseException]; any other throwable is
- * returned as is. Reads the response body, hence suspending. */
+private val mappedStatuses = setOf(400, 403, 409, 429, 502)
+
+/** Maps [t] to an [ApiException] when it's a [ResponseException] with a mapped status; any other
+ * throwable is returned as is. Reads the response body, hence suspending. */
 suspend fun mapApiError(t: Throwable): Throwable {
     if (t !is ResponseException) return t
     val status = t.response.status.value
-    if (status != 400 && status != 429) return t
+    if (status !in mappedStatuses) return t
 
     // A body that can't be read or isn't the Worker's JSON just means "no details" — but a
     // cancellation mid-read must keep propagating.
@@ -59,6 +62,14 @@ suspend fun mapApiError(t: Throwable): Throwable {
             }
             ApiException(status, message, fieldErrors)
         }
+
+        // A 403 without the server's JSON error is a Cloudflare Access denial: keep it raw so the
+        // connection check can describe it.
+        403 -> if (serverMessage == null) t else ApiException(status, serverMessage)
+
+        409 -> ApiException(status, serverMessage ?: "The request conflicts with existing data (409)")
+
+        502 -> ApiException(status, serverMessage ?: "The server couldn't complete the request (502)")
 
         else -> {
             val retryAfter = t.response.headers[HttpHeaders.RetryAfter]?.trim()?.toIntOrNull()?.takeIf { it >= 0 }
