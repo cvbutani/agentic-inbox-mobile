@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
@@ -297,6 +298,104 @@ class EmailRepositoryImplTest {
         val result = repository.markThreadRead(mailboxId = "mb1", threadId = "t1")
 
         assertTrue(result.isFailure)
+    }
+
+    // --- bulk actions --------------------------------------------------------------------------
+
+    private val bulkOk = """{"count":2}"""
+
+    /** Answers each request with the next status (OK once the list runs out). */
+    private fun bulkEngine(vararg statuses: HttpStatusCode): MockEngine {
+        var call = 0
+        return MockEngine { _ ->
+            val status = statuses.getOrElse(call++) { HttpStatusCode.OK }
+            respond(
+                content = if (status == HttpStatusCode.OK) bulkOk else "",
+                status = status,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+    }
+
+    private fun bodyOf(request: io.ktor.client.request.HttpRequestData): String = (request.body as TextContent).text
+
+    @Test
+    fun `bulkUpdate sends one request with the action and every id`() = runTest {
+        val engine = bulkEngine()
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        val outcome = repository.bulkUpdate("mb1", BulkAction.READ, listOf("e1", "e2"))
+
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/api/v1/mailboxes/mb1/emails/bulk", request.url.encodedPath)
+        val body = bodyOf(request)
+        assertTrue(body.contains("\"action\":\"read\""), body)
+        assertTrue(body.contains("\"ids\":[\"e1\",\"e2\"]"), body)
+        assertEquals(setOf("e1", "e2"), outcome.succeeded)
+        assertTrue(outcome.failed.isEmpty())
+    }
+
+    @Test
+    fun `bulkUpdate names the destination folder for a move`() = runTest {
+        val engine = bulkEngine()
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        repository.bulkUpdate("mb1", BulkAction.MOVE, listOf("e1"), folderId = "archive")
+
+        val body = bodyOf(engine.requestHistory.single())
+        assertTrue(body.contains("\"action\":\"move\""), body)
+        assertTrue(body.contains("\"folderId\":\"archive\""), body)
+    }
+
+    @Test
+    fun `bulkUpdate maps each action to the server's action name`() = runTest {
+        val names = mapOf(
+            BulkAction.READ to "read", BulkAction.UNREAD to "unread", BulkAction.STAR to "star",
+            BulkAction.UNSTAR to "unstar", BulkAction.MOVE to "move", BulkAction.DELETE to "delete",
+        )
+        for ((action, name) in names) {
+            val engine = bulkEngine()
+            EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+                .bulkUpdate("mb1", action, listOf("e1"), folderId = "archive".takeIf { action == BulkAction.MOVE })
+
+            assertTrue(bodyOf(engine.requestHistory.single()).contains("\"action\":\"$name\""), "action $action")
+        }
+    }
+
+    @Test
+    fun `bulkUpdate splits more than 200 ids into separate requests`() = runTest {
+        val engine = bulkEngine()
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+        val ids = (1..450).map { "e$it" }
+
+        val outcome = repository.bulkUpdate("mb1", BulkAction.DELETE, ids)
+
+        assertEquals(3, engine.requestHistory.size)
+        assertEquals(ids.toSet(), outcome.succeeded)
+    }
+
+    @Test
+    fun `a failing chunk reports only its own ids as failed`() = runTest {
+        val engine = bulkEngine(HttpStatusCode.OK, HttpStatusCode.InternalServerError)
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+        val ids = (1..250).map { "e$it" }
+
+        val outcome = repository.bulkUpdate("mb1", BulkAction.DELETE, ids)
+
+        assertEquals(ids.take(200).toSet(), outcome.succeeded)
+        assertEquals(ids.drop(200).toSet(), outcome.failed)
+    }
+
+    @Test
+    fun `bulkUpdate with no ids makes no request`() = runTest {
+        val engine = bulkEngine()
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        val outcome = repository.bulkUpdate("mb1", BulkAction.READ, emptyList())
+
+        assertTrue(engine.requestHistory.isEmpty())
+        assertTrue(outcome.succeeded.isEmpty() && outcome.failed.isEmpty())
     }
 
     private fun composeRequest() = ComposeEmailRequest(

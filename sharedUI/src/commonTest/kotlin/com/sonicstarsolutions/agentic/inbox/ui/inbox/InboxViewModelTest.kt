@@ -1,11 +1,14 @@
 package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
@@ -14,7 +17,6 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
@@ -79,7 +81,7 @@ class InboxViewModelTest {
         setEmailStarredUseCase = SetEmailStarredUseCase(repository),
         moveEmailUseCase = MoveEmailUseCase(repository),
         deleteEmailUseCase = DeleteEmailUseCase(repository),
-        setEmailReadUseCase = SetEmailReadUseCase(repository),
+        bulkUpdateEmails = BulkUpdateEmailsUseCase(repository),
         observeDraftsUseCase = ObserveDraftsUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
         // Stands in for the app-lifetime scope; shares the test's virtual clock so the undo
@@ -773,24 +775,28 @@ class InboxViewModelTest {
         assertTrue(viewModel.state.value.selectedEmailIds.isEmpty())
     }
 
-    @Test
-    fun `batchArchive moves every selected email to Archive removes them and exits selection mode`() = runTest {
-        val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2"), summary("e3")), totalCount = 3)) },
-        )
+    private fun TestScope.twoSelected(repository: FakeEmailRepository): InboxViewModel {
         val viewModel = buildViewModel(repository)
         viewModel.enterSelectionMode("e1")
         viewModel.toggleSelection("e2")
+        return viewModel
+    }
+
+    private fun pageOf(vararg emails: EmailSummary) =
+        { _: String, _: String, _: Int, _: Int -> Result.success(EmailPage(emails.toList(), totalCount = emails.size)) }
+
+    @Test
+    fun `batchArchive moves the selection to Archive in one request removes them and exits selection mode`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1"), summary("e2"), summary("e3")))
+        val viewModel = twoSelected(repository)
 
         viewModel.batchArchive()
 
         assertEquals(
-            setOf(
-                FakeEmailRepository.MoveCall("mb1", "e1", SystemFolders.ARCHIVE),
-                FakeEmailRepository.MoveCall("mb1", "e2", SystemFolders.ARCHIVE),
-            ),
-            repository.moveCalls.toSet(),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.MOVE, setOf("e1", "e2"), SystemFolders.ARCHIVE)),
+            repository.bulkCalls,
         )
+        assertTrue(repository.moveCalls.isEmpty(), "per-email moves must not be used")
         assertEquals(listOf(summary("e3")), viewModel.state.value.emails)
         assertEquals(1, viewModel.state.value.totalCount)
         assertFalse(viewModel.state.value.selectionMode)
@@ -798,70 +804,80 @@ class InboxViewModelTest {
     }
 
     @Test
-    fun `batchArchive surfaces an error and keeps the emails when every call fails`() = runTest {
+    fun `batchArchive surfaces an error and keeps the emails when the request fails`() = runTest {
         val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
-            moveResult = Result.failure(RuntimeException("offline")),
+            handler = pageOf(summary("e1"), summary("e2")),
+            bulkHandler = { _, ids -> BulkOutcome(succeeded = emptySet(), failed = ids.toSet()) },
         )
-        val viewModel = buildViewModel(repository)
-        viewModel.enterSelectionMode("e1")
-        viewModel.toggleSelection("e2")
+        val viewModel = twoSelected(repository)
 
         viewModel.batchArchive()
 
         assertEquals(listOf(summary("e1"), summary("e2")), viewModel.state.value.emails)
         assertEquals(2, viewModel.state.value.totalCount)
-        assertTrue(viewModel.state.value.errorMessage != null)
+        assertEquals("Failed to update 2 email(s)", viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.selectionMode)
     }
 
     @Test
-    fun `batchDelete deletes every selected email removes them and exits selection mode`() = runTest {
+    fun `a partly failed batch removes only the emails that succeeded`() = runTest {
         val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
+            handler = pageOf(summary("e1"), summary("e2")),
+            bulkHandler = { _, _ -> BulkOutcome(succeeded = setOf("e1"), failed = setOf("e2")) },
         )
-        val viewModel = buildViewModel(repository)
-        viewModel.enterSelectionMode("e1")
-        viewModel.toggleSelection("e2")
+        val viewModel = twoSelected(repository)
+
+        viewModel.batchDelete()
+
+        assertEquals(listOf(summary("e2")), viewModel.state.value.emails)
+        assertEquals(1, viewModel.state.value.totalCount)
+        assertEquals("Failed to update 1 email(s)", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `batchDelete deletes the selection in one request removes them and exits selection mode`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1"), summary("e2")))
+        val viewModel = twoSelected(repository)
 
         viewModel.batchDelete()
 
         assertEquals(
-            setOf(FakeEmailRepository.DeleteCall("mb1", "e1"), FakeEmailRepository.DeleteCall("mb1", "e2")),
-            repository.deleteCalls.toSet(),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.DELETE, setOf("e1", "e2"), null)),
+            repository.bulkCalls,
         )
+        assertTrue(repository.deleteCalls.isEmpty(), "per-email deletes must not be used")
         assertTrue(viewModel.state.value.emails.isEmpty())
         assertEquals(0, viewModel.state.value.totalCount)
         assertFalse(viewModel.state.value.selectionMode)
     }
 
     @Test
-    fun `batchMarkAsRead marks every selected email read without removing them`() = runTest {
-        val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1").copy(read = false), summary("e2").copy(read = false)), totalCount = 2)) },
-        )
-        val viewModel = buildViewModel(repository)
-        viewModel.enterSelectionMode("e1")
-        viewModel.toggleSelection("e2")
+    fun `batchMarkAsRead marks the selection read in one request without removing them`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1").copy(read = false), summary("e2").copy(read = false)))
+        val viewModel = twoSelected(repository)
 
         viewModel.batchMarkAsRead()
 
+        assertEquals(
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.READ, setOf("e1", "e2"), null)),
+            repository.bulkCalls,
+        )
         assertTrue(viewModel.state.value.emails.all { it.read })
         assertEquals(2, viewModel.state.value.emails.size)
         assertFalse(viewModel.state.value.selectionMode)
     }
 
     @Test
-    fun `batchMarkAsUnread marks every selected email unread`() = runTest {
-        val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1").copy(read = true), summary("e2").copy(read = true)), totalCount = 2)) },
-        )
-        val viewModel = buildViewModel(repository)
-        viewModel.enterSelectionMode("e1")
-        viewModel.toggleSelection("e2")
+    fun `batchMarkAsUnread marks the selection unread in one request`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1").copy(read = true), summary("e2").copy(read = true)))
+        val viewModel = twoSelected(repository)
 
         viewModel.batchMarkAsUnread()
 
+        assertEquals(
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.UNREAD, setOf("e1", "e2"), null)),
+            repository.bulkCalls,
+        )
         assertTrue(viewModel.state.value.emails.none { it.read })
         assertFalse(viewModel.state.value.selectionMode)
     }

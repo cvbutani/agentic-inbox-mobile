@@ -89,3 +89,21 @@ Phase 0-1: about 2-3 days (Phase 1 includes the deletions). Phase 3 items 1, 3, 
 | `GET /config` | `{"domains":[…],"emailAddresses":[]}`, no `features`. |
 | `POST …/emails/bulk` | Zod 400 on `{}` (`action` required). |
 | Mailbox create with restricted `EMAIL_ADDRESSES` (403) | Not run (needs config); read from code only. |
+
+## Progress
+
+| Phase | Status | Commit |
+|---|---|---|
+| 0 Verify against public | done | docs: add public backend migration plan and phase 0 verification results |
+| 1 Fixes (disposition, 409/502/403) | done | fix(network): send attachment disposition and present 409/502/403 errors |
+| 1 Remove Worker-only code, spam becomes a move to Spam | done | refactor: target agentic-inbox-public and remove Worker-only features |
+| 3.1 Bulk endpoint | done | feat(inbox): apply batch actions with one bulk request |
+| 3.2 Labels | not started | |
+| 3.3 Aliases and From picker | not started | |
+| 3.4 Send later | not started | |
+| 3.5 Recipient autocomplete | not started | |
+| 3.6 Live updates | not started | |
+| 3.7 Search grouped by conversation, threaded list | not started | |
+
+Verified live against a local public instance: `POST …/emails/bulk` accepts Mobile's body, rejects more than 200 ids with a 400,
+returns 400 `Folder not found` for an unknown move target, and star/delete changed real messages.

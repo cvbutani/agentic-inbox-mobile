@@ -4,12 +4,15 @@ import com.sonicstarsolutions.agentic.inbox.data.local.EmailDao
 import com.sonicstarsolutions.agentic.inbox.data.local.EmailEntity
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.BulkRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailMetadataDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FromDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.OutboundAttachmentDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateEmailDto
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
@@ -73,6 +76,22 @@ class EmailRepositoryImpl(
 
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> =
         safeApiCall { api.moveEmail(mailboxId, emailId, MoveEmailRequestDto(folderId)) }.map {}
+
+    override suspend fun bulkUpdate(
+        mailboxId: String,
+        action: BulkAction,
+        emailIds: Collection<String>,
+        folderId: String?,
+    ): BulkOutcome {
+        val succeeded = mutableSetOf<String>()
+        val failed = mutableSetOf<String>()
+        for (chunk in emailIds.distinct().chunked(MAX_BULK_IDS)) {
+            val body = BulkRequestDto(action.serverName, chunk, folderId.takeIf { action == BulkAction.MOVE })
+            // A chunk is all-or-nothing on the server, so its ids succeed or fail together.
+            if (safeApiCall { api.bulkUpdate(mailboxId, body) }.isSuccess) succeeded += chunk else failed += chunk
+        }
+        return BulkOutcome(succeeded, failed)
+    }
 
     override suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit> =
         safeApiCall { api.deleteEmail(mailboxId, emailId) }
@@ -153,3 +172,16 @@ private fun EmailEntity.toDomain(): EmailSummary = EmailSummary(
     snippet = snippet,
     threadUnreadCount = threadUnreadCount,
 )
+
+/** The server rejects a bulk request with more ids than this. */
+private const val MAX_BULK_IDS = 200
+
+private val BulkAction.serverName: String
+    get() = when (this) {
+        BulkAction.READ -> "read"
+        BulkAction.UNREAD -> "unread"
+        BulkAction.STAR -> "star"
+        BulkAction.UNSTAR -> "unstar"
+        BulkAction.MOVE -> "move"
+        BulkAction.DELETE -> "delete"
+    }

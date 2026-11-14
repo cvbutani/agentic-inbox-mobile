@@ -1,5 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.di
 
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearLocalCacheUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
@@ -60,6 +61,7 @@ val useCaseModule = module {
     singleOf(::GetThreadUseCase)
     singleOf(::DownloadAttachmentUseCase)
     singleOf(::MoveEmailUseCase)
+    singleOf(::BulkUpdateEmailsUseCase)
     singleOf(::DeleteEmailUseCase)
     singleOf(::SetEmailReadUseCase)
     singleOf(::SetEmailStarredUseCase)

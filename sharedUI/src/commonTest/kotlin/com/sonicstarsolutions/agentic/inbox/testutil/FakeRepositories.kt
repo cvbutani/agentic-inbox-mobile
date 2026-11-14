@@ -1,5 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.testutil
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
@@ -185,11 +187,15 @@ class FakeEmailRepository(
     var sendResult: Result<Unit> = Result.success(Unit),
     var replyResult: Result<Unit> = Result.success(Unit),
     var forwardResult: Result<Unit> = Result.success(Unit),
+    /** Decides each [bulkUpdate] outcome; by default every id succeeds. */
+    var bulkHandler: (action: BulkAction, ids: Collection<String>) -> BulkOutcome =
+        { _, ids -> BulkOutcome(succeeded = ids.toSet(), failed = emptySet()) },
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
     data class SearchCall(val mailboxId: String, val query: SearchQuery, val page: Int, val limit: Int)
     data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
     data class DeleteCall(val mailboxId: String, val emailId: String)
+    data class BulkCall(val mailboxId: String, val action: BulkAction, val ids: Set<String>, val folderId: String?)
     data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
     data class SetStarredCall(val mailboxId: String, val emailId: String, val starred: Boolean)
     data class MarkThreadReadCall(val mailboxId: String, val threadId: String)
@@ -201,6 +207,7 @@ class FakeEmailRepository(
     val searchCalls = mutableListOf<SearchCall>()
     val moveCalls = mutableListOf<MoveCall>()
     val deleteCalls = mutableListOf<DeleteCall>()
+    val bulkCalls = mutableListOf<BulkCall>()
     val setReadCalls = mutableListOf<SetReadCall>()
     val setStarredCalls = mutableListOf<SetStarredCall>()
     val markThreadReadCalls = mutableListOf<MarkThreadReadCall>()
@@ -238,6 +245,16 @@ class FakeEmailRepository(
         moveCalls += MoveCall(mailboxId, emailId, folderId)
         moveGate?.await()
         return moveResult
+    }
+
+    override suspend fun bulkUpdate(
+        mailboxId: String,
+        action: BulkAction,
+        emailIds: Collection<String>,
+        folderId: String?,
+    ): BulkOutcome {
+        bulkCalls += BulkCall(mailboxId, action, emailIds.toSet(), folderId)
+        return bulkHandler(action, emailIds)
     }
 
     override suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit> {

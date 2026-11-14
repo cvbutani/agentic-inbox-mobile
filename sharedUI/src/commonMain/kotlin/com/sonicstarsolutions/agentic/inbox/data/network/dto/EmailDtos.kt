@@ -120,3 +120,16 @@ data class MoveEmailRequestDto(
 data class StatusResponseDto(
     @SerialName("status") val status: String,
 )
+
+/** Body of `POST …/emails/bulk`. The server accepts at most 200 ids per request. */
+@Serializable
+data class BulkRequestDto(
+    @SerialName("action") val action: String,
+    @SerialName("ids") val ids: List<String>,
+    @SerialName("folderId") val folderId: String? = null,
+)
+
+@Serializable
+data class BulkResponseDto(
+    @SerialName("count") val count: Int = 0,
+)

@@ -3,10 +3,13 @@ package com.sonicstarsolutions.agentic.inbox.ui.inbox
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CoroutineScope
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
@@ -16,7 +19,6 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -73,7 +75,7 @@ class InboxViewModel(
     private val setEmailStarredUseCase: SetEmailStarredUseCase,
     private val moveEmailUseCase: MoveEmailUseCase,
     private val deleteEmailUseCase: DeleteEmailUseCase,
-    private val setEmailReadUseCase: SetEmailReadUseCase,
+    private val bulkUpdateEmails: BulkUpdateEmailsUseCase,
     private val observeDraftsUseCase: ObserveDraftsUseCase,
     private val deleteDraftUseCase: DeleteDraftUseCase,
     /**
@@ -426,31 +428,29 @@ class InboxViewModel(
         _state.update { it.copy(selectionMode = false, selectedEmailIds = emptySet()) }
     }
 
-    fun batchArchive() = batchRemove { emailId -> moveEmailUseCase(mailboxId, emailId, SystemFolders.ARCHIVE) }
+    fun batchArchive() = batchRemove(BulkAction.MOVE, folderId = SystemFolders.ARCHIVE)
 
-    fun batchDelete() = batchRemove { emailId -> deleteEmailUseCase(mailboxId, emailId) }
+    fun batchDelete() = batchRemove(BulkAction.DELETE)
 
     fun batchMarkAsRead() = batchMarkRead(true)
 
     fun batchMarkAsUnread() = batchMarkRead(false)
 
-    /** Runs [action] for every selected email, drops the ones that succeeded from the list, and
-     * always exits selection mode — used for archive/delete where the row leaves the list either
-     * way once the operation has been attempted. */
-    private fun batchRemove(action: suspend (String) -> Result<Unit>) {
+    /** Applies [action] to the whole selection in one bulk request, drops the emails that were
+     * updated from the list, and always exits selection mode — used for archive/delete where the
+     * row leaves the list either way once the operation has been attempted. */
+    private fun batchRemove(action: BulkAction, folderId: String? = null) {
         val ids = _state.value.selectedEmailIds
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            val results = ids.associateWith { action(it) }
-            val succeededIds = results.filterValues { it.isSuccess }.keys
-            val failedCount = results.size - succeededIds.size
+            val outcome = bulkUpdateEmails(mailboxId, action, ids, folderId)
             _state.update { current ->
                 current.copy(
-                    emails = current.emails.filterNot { it.id in succeededIds },
-                    totalCount = (current.totalCount - succeededIds.size).coerceAtLeast(0),
+                    emails = current.emails.filterNot { it.id in outcome.succeeded },
+                    totalCount = (current.totalCount - outcome.succeeded.size).coerceAtLeast(0),
                     selectionMode = false,
                     selectedEmailIds = emptySet(),
-                    errorMessage = if (failedCount > 0) "Failed to update $failedCount email(s)" else null,
+                    errorMessage = failureMessage(outcome),
                 )
             }
         }
@@ -460,17 +460,18 @@ class InboxViewModel(
         val ids = _state.value.selectedEmailIds
         if (ids.isEmpty()) return
         viewModelScope.launch {
-            val results = ids.associateWith { setEmailReadUseCase(mailboxId, it, read) }
-            val succeededIds = results.filterValues { it.isSuccess }.keys
-            val failedCount = results.size - succeededIds.size
+            val outcome = bulkUpdateEmails(mailboxId, if (read) BulkAction.READ else BulkAction.UNREAD, ids)
             _state.update { current ->
                 current.copy(
-                    emails = current.emails.map { if (it.id in succeededIds) it.copy(read = read) else it },
+                    emails = current.emails.map { if (it.id in outcome.succeeded) it.copy(read = read) else it },
                     selectionMode = false,
                     selectedEmailIds = emptySet(),
-                    errorMessage = if (failedCount > 0) "Failed to update $failedCount email(s)" else null,
+                    errorMessage = failureMessage(outcome),
                 )
             }
         }
     }
+
+    private fun failureMessage(outcome: BulkOutcome): String? =
+        outcome.failed.size.takeIf { it > 0 }?.let { "Failed to update $it email(s)" }
 }

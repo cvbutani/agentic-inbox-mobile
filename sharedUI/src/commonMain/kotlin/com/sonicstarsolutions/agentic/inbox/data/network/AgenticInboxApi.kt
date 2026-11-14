@@ -1,5 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.data.network
 
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.BulkRequestDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.BulkResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ConfigDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailFullDto
@@ -86,6 +88,12 @@ interface AgenticInboxApi {
         @Path("mailboxId") mailboxId: String,
         @Path("emailId") emailId: String,
     )
+
+    @POST("/api/v1/mailboxes/{mailboxId}/emails/bulk")
+    suspend fun bulkUpdate(
+        @Path("mailboxId") mailboxId: String,
+        @Body body: BulkRequestDto,
+    ): BulkResponseDto
 
     @POST("/api/v1/mailboxes/{mailboxId}/emails/{emailId}/move")
     suspend fun moveEmail(

@@ -1,5 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.di
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
@@ -308,6 +310,25 @@ class DemoEmailRepository : EmailRepository {
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> {
         messagesById[emailId]?.let { messagesById[emailId] = it.copy(folderId = folderId) }
         return Result.success(Unit)
+    }
+
+    override suspend fun bulkUpdate(
+        mailboxId: String,
+        action: BulkAction,
+        emailIds: Collection<String>,
+        folderId: String?,
+    ): BulkOutcome {
+        for (id in emailIds) {
+            when (action) {
+                BulkAction.READ -> setRead(mailboxId, id, true)
+                BulkAction.UNREAD -> setRead(mailboxId, id, false)
+                BulkAction.STAR -> setStarred(mailboxId, id, true)
+                BulkAction.UNSTAR -> setStarred(mailboxId, id, false)
+                BulkAction.MOVE -> moveEmail(mailboxId, id, folderId ?: SystemFolders.INBOX)
+                BulkAction.DELETE -> deleteEmail(mailboxId, id)
+            }
+        }
+        return BulkOutcome(succeeded = emailIds.toSet(), failed = emptySet())
     }
 
     override suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit> {
