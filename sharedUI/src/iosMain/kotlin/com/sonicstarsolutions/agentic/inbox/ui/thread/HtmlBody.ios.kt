@@ -22,8 +22,6 @@ import platform.UIKit.UIApplication
 import platform.UIKit.UIColor
 import platform.WebKit.WKNavigationAction
 import platform.WebKit.WKNavigationActionPolicy
-import platform.WebKit.WKNavigationActionPolicyAllow
-import platform.WebKit.WKNavigationActionPolicyCancel
 import platform.WebKit.WKNavigationDelegateProtocol
 import platform.WebKit.WKNavigationTypeLinkActivated
 import platform.WebKit.WKWebView
@@ -124,14 +122,14 @@ private class ExternalLinkNavigationDelegate : NSObject(), WKNavigationDelegateP
         decisionHandler: (WKNavigationActionPolicy) -> Unit,
     ) {
         if (decidePolicyForNavigationAction.navigationType != WKNavigationTypeLinkActivated) {
-            decisionHandler(WKNavigationActionPolicyAllow)
+            decisionHandler(WKNavigationActionPolicy.WKNavigationActionPolicyAllow)
             return
         }
         val url = decidePolicyForNavigationAction.request.URL
         if (url != null && ExternalLinkPolicy.opensExternally(url.absoluteString.orEmpty())) {
             UIApplication.sharedApplication.openURL(url, options = emptyMap<Any?, Any>(), completionHandler = null)
         }
-        decisionHandler(WKNavigationActionPolicyCancel)
+        decisionHandler(WKNavigationActionPolicy.WKNavigationActionPolicyCancel)
     }
 }
 
