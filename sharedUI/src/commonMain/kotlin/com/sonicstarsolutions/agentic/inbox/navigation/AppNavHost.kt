@@ -132,9 +132,10 @@ fun AppNavHost() {
             entry<Search> { key ->
                 SearchScreen(
                     mailboxId = key.mailboxId,
+                    domain = key.domain,
                     onBack = { navigator.goBack() },
                     onEmailSelected = { email ->
-                        navigator.goTo(EmailThread(key.mailboxId, email.id, email.threadId))
+                        navigator.goTo(EmailThread(email.mailboxId.ifBlank { key.mailboxId }, email.id, email.threadId))
                     },
                 )
             }

@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchDomainEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import kotlinx.coroutines.CompletableDeferred
@@ -50,11 +51,13 @@ class SearchViewModelTest {
         snippet = null,
     )
 
-    private fun buildViewModel(repository: FakeEmailRepository = FakeEmailRepository()): SearchViewModel =
+    private fun buildViewModel(repository: FakeEmailRepository = FakeEmailRepository(), domain: String? = null): SearchViewModel =
         SearchViewModel(
             searchEmails = SearchEmailsUseCase(repository),
+            searchDomainEmails = SearchDomainEmailsUseCase(repository),
             setEmailStarred = SetEmailStarredUseCase(repository),
-            mailboxId = "mb1",
+            mailboxId = if (domain == null) "mb1" else "",
+            domain = domain,
         )
 
     @Test
@@ -492,5 +495,87 @@ class SearchViewModelTest {
 
         assertFalse(viewModel.state.value.results.single().starred)
         assertEquals("offline", viewModel.state.value.errorMessage)
+    }
+
+    // --- domain-wide search --------------------------------------------------------------------
+
+    private fun domainRow(id: String, mailbox: String) = EmailSummary(
+        id = id, subject = "Subject $id", sender = "x@y.dev", recipient = mailbox, date = "2026-07-10T10:00:00Z",
+        read = false, starred = false, threadId = null, folderId = "inbox", snippet = null, mailboxId = mailbox,
+    )
+
+    @Test
+    fun `domain search asks the domain endpoint with the query and no cursor`() = runTest {
+        val repository = FakeEmailRepository(
+            domainSearchHandler = { _, _, _, _ -> Result.success(EmailPage(listOf(domainRow("a1", "a@example.com")), 1)) },
+        )
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        viewModel.onQueryChanged("invoice")
+        viewModel.search()
+        advanceUntilIdle()
+
+        val call = repository.domainSearchCalls.single()
+        assertEquals("example.com", call.domain)
+        assertEquals("invoice", call.query.query)
+        assertEquals(null, call.cursor)
+        assertTrue(repository.searchCalls.isEmpty())
+        assertEquals(listOf("a@example.com"), viewModel.state.value.results.map { it.mailboxId })
+    }
+
+    @Test
+    fun `domain search pages by the cursor it was given and stops without one`() = runTest {
+        val repository = FakeEmailRepository(
+            domainSearchHandler = { _, _, cursor, _ ->
+                when (cursor) {
+                    null -> Result.success(EmailPage(listOf(domainRow("a1", "a@example.com")), 2, "C1"))
+                    else -> Result.success(EmailPage(listOf(domainRow("b1", "b@example.com")), 2, null))
+                }
+            },
+        )
+        val viewModel = buildViewModel(repository, domain = "example.com")
+        viewModel.onQueryChanged("x")
+        viewModel.search()
+        advanceUntilIdle()
+
+        viewModel.loadMore()
+        advanceUntilIdle()
+
+        assertEquals("C1", repository.domainSearchCalls.last().cursor)
+        assertEquals(listOf("a1", "b1"), viewModel.state.value.results.map { it.id })
+
+        viewModel.loadMore()
+        advanceUntilIdle()
+        assertEquals(2, repository.domainSearchCalls.size)
+    }
+
+    @Test
+    fun `domain search keeps rows that share an id across mailboxes`() = runTest {
+        val repository = FakeEmailRepository(
+            domainSearchHandler = { _, _, cursor, _ ->
+                if (cursor == null) Result.success(EmailPage(listOf(domainRow("e1", "a@example.com")), 2, "C1"))
+                else Result.success(EmailPage(listOf(domainRow("e1", "b@example.com")), 2, null))
+            },
+        )
+        val viewModel = buildViewModel(repository, domain = "example.com")
+        viewModel.onQueryChanged("x")
+        viewModel.search()
+        advanceUntilIdle()
+
+        viewModel.loadMore()
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.state.value.results.size)
+    }
+
+    @Test
+    fun `starring a domain search result goes to that row's own mailbox`() = runTest {
+        val repository = FakeEmailRepository()
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        viewModel.toggleStarred(domainRow("b1", "b@example.com"))
+        advanceUntilIdle()
+
+        assertEquals("b@example.com", repository.setStarredCalls.single().mailboxId)
     }
 }

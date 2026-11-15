@@ -41,7 +41,7 @@ val viewModelModule = module {
         )
     }
     viewModel { (mailboxId: String) -> ScheduledViewModel(get(), get(), get(), mailboxId) }
-    viewModel { (mailboxId: String) ->
-        SearchViewModel(get(), get(), mailboxId)
+    viewModel { (mailboxId: String, domain: String?) ->
+        SearchViewModel(get(), get(), get(), mailboxId, domain)
     }
 }
