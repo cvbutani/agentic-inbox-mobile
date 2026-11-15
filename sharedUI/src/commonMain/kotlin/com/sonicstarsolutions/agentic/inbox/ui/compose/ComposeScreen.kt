@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -31,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,6 +62,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,7 +72,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
+import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
+import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
+import com.sonicstarsolutions.agentic.inbox.ui.components.TopBarWithBand
 import com.sonicstarsolutions.agentic.inbox.util.formatFileSize
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -146,61 +155,81 @@ fun ComposeScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = { Text(titleFor(mode)) },
-                navigationIcon = {
-                    IconButton(onClick = onCancel) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel")
-                    }
-                },
-                actions = {
-                    val pickFiles = rememberAttachmentPicker(onFilePicked = viewModel::addAttachment)
-                    IconButton(onClick = pickFiles, enabled = !state.sending) {
-                        Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
-                    }
-                    IconButton(onClick = viewModel::send, enabled = !state.sending) {
-                        if (state.sending) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+            // The airmail band slides under the bar while the message is on its way out.
+            TopBarWithBand(bandActive = state.sending) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = titleFor(mode),
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onCancel) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel")
                         }
-                    }
-                    // Two icons plus an overflow: the design system caps an app bar at three.
-                    var showMenu by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                    },
+                    actions = {
+                        val pickFiles = rememberAttachmentPicker(onFilePicked = viewModel::addAttachment)
+                        IconButton(onClick = pickFiles, enabled = !state.sending) {
+                            Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
                         }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                                text = { Text("Send later…") },
-                                enabled = !state.sending,
-                                onClick = { showMenu = false; showSendLater = true },
-                            )
-                            // Only offered once there's actually a draft to throw away.
-                            if (state.draftId != null) {
+                        // Send is the screen's labeled floating action, so the bar keeps Attach
+                        // and an overflow.
+                        var showMenu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                            }
+                            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                 DropdownMenuItem(
-                                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
-                                    text = { Text("Discard draft") },
+                                    leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                                    text = { Text("Send later…") },
                                     enabled = !state.sending,
-                                    onClick = { showMenu = false; showDiscardDialog = true },
+                                    onClick = { showMenu = false; showSendLater = true },
                                 )
+                                // Only offered once there's actually a draft to throw away.
+                                if (state.draftId != null) {
+                                    DropdownMenuItem(
+                                        leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
+                                        text = { Text("Discard draft") },
+                                        enabled = !state.sending,
+                                        onClick = { showMenu = false; showDiscardDialog = true },
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-            )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                )
+            }
+        },
+        floatingActionButton = {
+            if (!state.loading) {
+                SendButton(
+                    sending = state.sending,
+                    onClick = viewModel::send,
+                    // Rides above the keyboard instead of hiding behind it.
+                    modifier = Modifier.imePadding(),
+                )
+            }
         },
     ) { paddingValues ->
         if (state.loading) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
+            // Skeleton rows on the 72dp grid, not a centered spinner: the screen looks like
+            // itself while the reply or draft is prefilled.
+            Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                repeat(3) {
+                    SkeletonEmailRow()
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = ListRowDimens.textEdge),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
+            }
         } else {
             val focusManager = LocalFocusManager.current
             val toFocusRequester = remember { FocusRequester() }
@@ -219,7 +248,13 @@ fun ComposeScreen(
             // Capped and centered on wide windows — full-bleed single-line fields on a tablet
             // read as a stretched phone layout, not a composer.
             Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    // The scaffold already pads for the system bars; only the keyboard's extra
+                    // height is added, so the body shrinks to the space above it.
+                    .consumeWindowInsets(paddingValues)
+                    .imePadding(),
                 contentAlignment = Alignment.TopCenter,
             ) {
             // Borderless rows split by hairline dividers — the mail-composer convention.
@@ -324,7 +359,8 @@ fun ComposeScreen(
                     onValueChange = viewModel::onBodyChanged,
                     placeholder = { Text("Compose email") },
                     colors = borderlessFieldColors(),
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    // Stops above the Send button, so its last line is never underneath it.
+                    modifier = Modifier.fillMaxWidth().weight(1f).padding(bottom = SEND_BUTTON_CLEARANCE),
                 )
             }
             }
@@ -385,6 +421,43 @@ private fun borderlessFieldColors() = TextFieldDefaults.colors(
 
 /** Fields stay readable up to roughly this width; past it a composer is just stretched. */
 private val FORM_MAX_WIDTH = 720.dp
+
+/** The Send button's 56dp height plus its 16dp margin: the body field keeps this much clear. */
+private val SEND_BUTTON_CLEARANCE = 72.dp
+
+/**
+ * The composer's one primary action, labeled. While sending it stays put but stops responding and
+ * swaps its icon for a small progress indicator, so a second tap can't send twice.
+ */
+@Composable
+private fun SendButton(
+    sending: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ExtendedFloatingActionButton(
+        onClick = { if (!sending) onClick() },
+        modifier = modifier.semantics { if (sending) disabled() },
+        containerColor = if (sending) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.primaryContainer
+        },
+        contentColor = if (sending) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        },
+        icon = {
+            if (sending) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+            }
+        },
+        text = { Text("Send") },
+    )
+}
 
 private fun titleFor(mode: ComposeMode): String = when (mode) {
     ComposeMode.NEW -> "New message"
