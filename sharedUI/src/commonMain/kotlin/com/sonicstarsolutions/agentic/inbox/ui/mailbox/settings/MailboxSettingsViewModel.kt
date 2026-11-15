@@ -19,6 +19,8 @@ data class MailboxSettingsUiState(
     val form: MailboxSettings = MailboxSettings(),
     /** What the server last had; [dirty] compares the form against it. */
     val saved: MailboxSettings = MailboxSettings(),
+    /** Why the last alias entered was refused; cleared by the next accepted alias. */
+    val aliasError: String? = null,
     val saving: Boolean = false,
     /** One glanceable snackbar line — a save result, success or failure. */
     val message: String? = null,
@@ -60,6 +62,27 @@ class MailboxSettingsViewModel(
     fun onSignatureEnabledChanged(value: Boolean) = edit { it.copy(signatureEnabled = value) }
     fun onSignatureTextChanged(value: String) = edit { it.copy(signatureText = value) }
 
+    fun onAliasRemoved(alias: String) = edit { it.copy(aliases = it.aliases.filterNot { a -> a == alias }) }
+
+    /** Adds [raw] to the aliases after the checks the server would make anyway, so the user
+     * learns why on the spot rather than after saving. Domain rules stay with the server. */
+    fun onAliasAdded(raw: String) {
+        val alias = raw.trim().lowercase()
+        val current = _state.value.form.aliases
+        val problem = when {
+            !looksLikeEmail(alias) -> "“${raw.trim()}” isn't a valid email address."
+            alias == mailboxId.lowercase() -> "An alias can't be the mailbox's own address."
+            alias in current -> "$alias is already an alias."
+            current.size >= MAX_ALIASES -> "A mailbox can have at most $MAX_ALIASES aliases."
+            else -> null
+        }
+        if (problem != null) {
+            _state.update { it.copy(aliasError = problem) }
+            return
+        }
+        _state.update { it.copy(form = it.form.copy(aliases = current + alias), aliasError = null) }
+    }
+
     private fun edit(change: (MailboxSettings) -> MailboxSettings) {
         _state.update { it.copy(form = change(it.form)) }
     }
@@ -85,3 +108,13 @@ class MailboxSettingsViewModel(
         _state.update { it.copy(message = null) }
     }
 }
+
+/** What the server accepts, in spirit: something@domain.tld with no spaces. */
+private fun looksLikeEmail(value: String): Boolean {
+    val at = value.indexOf('@')
+    if (at <= 0 || at != value.lastIndexOf('@') || value.any { it.isWhitespace() }) return false
+    val domain = value.substring(at + 1)
+    return '.' in domain && !domain.startsWith('.') && !domain.endsWith('.')
+}
+
+private const val MAX_ALIASES = 20

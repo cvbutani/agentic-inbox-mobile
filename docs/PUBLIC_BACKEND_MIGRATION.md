@@ -99,7 +99,7 @@ Phase 0-1: about 2-3 days (Phase 1 includes the deletions). Phase 3 items 1, 3, 
 | 1 Remove Worker-only code, spam becomes a move to Spam | done | refactor: target agentic-inbox-public and remove Worker-only features |
 | 3.1 Bulk endpoint | done | feat(inbox): apply batch actions with one bulk request |
 | 3.2 Labels | done | feat(labels): create, edit, filter and apply labels |
-| 3.3 Aliases and From picker | not started | |
+| 3.3 Aliases and From picker | done | feat(aliases): manage aliases and send from them |
 | 3.4 Send later | not started | |
 | 3.5 Recipient autocomplete | not started | |
 | 3.6 Live updates | not started | |

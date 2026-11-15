@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
@@ -124,5 +125,40 @@ class MailboxSettingsMappingTest {
         val merged = mergeMailboxSettings(existing, MailboxSettings(signatureEnabled = true, signatureText = ""))
 
         assertEquals("", merged["signature"]!!.jsonObject["html"]!!.jsonPrimitive.content)
+    }
+
+    // --- aliases ---------------------------------------------------------------------------
+
+    @Test
+    fun `aliases are read from the settings and anything that is not text is skipped`() {
+        val settings = obj("""{"aliases":["sales@example.dev",5,null,"help@example.dev"]}""").toMailboxSettings()
+
+        assertEquals(listOf("sales@example.dev", "help@example.dev"), settings.aliases)
+    }
+
+    @Test
+    fun `a wrongly typed aliases value reads as none`() {
+        assertEquals(emptyList(), obj("""{"aliases":"sales@example.dev"}""").toMailboxSettings().aliases)
+    }
+
+    @Test
+    fun `merge writes the aliases as a list and keeps the other keys`() {
+        val merged = mergeMailboxSettings(
+            obj("""{"fromName":"Old","autoDraft":{"enabled":false}}"""),
+            MailboxSettings(fromName = "Old", aliases = listOf("sales@example.dev", "help@example.dev")),
+        )
+
+        assertEquals(
+            listOf("sales@example.dev", "help@example.dev"),
+            merged["aliases"]!!.jsonArray.map { it.jsonPrimitive.content },
+        )
+        assertEquals(false, merged["autoDraft"]!!.jsonObject["enabled"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun `removing every alias writes an empty list so the server drops them`() {
+        val merged = mergeMailboxSettings(obj("""{"aliases":["sales@example.dev"]}"""), MailboxSettings(aliases = emptyList()))
+
+        assertEquals(0, merged["aliases"]!!.jsonArray.size)
     }
 }

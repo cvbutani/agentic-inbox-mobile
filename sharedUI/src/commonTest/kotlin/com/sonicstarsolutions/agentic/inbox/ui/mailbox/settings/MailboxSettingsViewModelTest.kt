@@ -43,10 +43,13 @@ class MailboxSettingsViewModelTest {
         settings: Result<MailboxSettings> = Result.success(initial),
     ) = FakeMailboxRepository().apply { settingsResult = settings }
 
-    private fun buildViewModel(repository: FakeMailboxRepository = repository()) = MailboxSettingsViewModel(
+    private fun buildViewModel(
+        repository: FakeMailboxRepository = repository(),
+        mailboxId: String = "mb1",
+    ) = MailboxSettingsViewModel(
         getSettings = GetMailboxSettingsUseCase(repository),
         updateSettings = UpdateMailboxSettingsUseCase(repository),
-        mailboxId = "mb1",
+        mailboxId = mailboxId,
     )
 
     // --- loading ---------------------------------------------------------------------------
@@ -181,5 +184,92 @@ class MailboxSettingsViewModelTest {
         viewModel.consumeMessage()
 
         assertNull(viewModel.state.value.message)
+    }
+
+    // --- aliases ---------------------------------------------------------------------------
+
+    @Test
+    fun `adding an alias normalises it, lists it and marks the form dirty`() = runTest {
+        val viewModel = buildViewModel()
+
+        viewModel.onAliasAdded("  Sales@Example.DEV ")
+
+        assertEquals(listOf("sales@example.dev"), viewModel.state.value.form.aliases)
+        assertNull(viewModel.state.value.aliasError)
+        assertTrue(viewModel.state.value.dirty)
+    }
+
+    @Test
+    fun `an alias that is not an email address is refused with a reason`() = runTest {
+        val viewModel = buildViewModel()
+
+        viewModel.onAliasAdded("not an email")
+
+        assertTrue(viewModel.state.value.form.aliases.isEmpty())
+        assertEquals("“not an email” isn't a valid email address.", viewModel.state.value.aliasError)
+        assertFalse(viewModel.state.value.dirty)
+    }
+
+    @Test
+    fun `an alias already in the list is refused`() = runTest {
+        val viewModel = buildViewModel()
+        viewModel.onAliasAdded("sales@example.dev")
+
+        viewModel.onAliasAdded("SALES@example.dev")
+
+        assertEquals(listOf("sales@example.dev"), viewModel.state.value.form.aliases)
+        assertEquals("sales@example.dev is already an alias.", viewModel.state.value.aliasError)
+    }
+
+    @Test
+    fun `the mailbox's own address cannot be its alias`() = runTest {
+        val viewModel = buildViewModel(mailboxId = "me@example.dev")
+
+        viewModel.onAliasAdded("Me@Example.dev")
+
+        assertTrue(viewModel.state.value.form.aliases.isEmpty())
+        assertEquals("An alias can't be the mailbox's own address.", viewModel.state.value.aliasError)
+    }
+
+    @Test
+    fun `no more than twenty aliases are accepted`() = runTest {
+        val viewModel = buildViewModel()
+        repeat(20) { viewModel.onAliasAdded("a$it@example.dev") }
+
+        viewModel.onAliasAdded("one-too-many@example.dev")
+
+        assertEquals(20, viewModel.state.value.form.aliases.size)
+        assertEquals("A mailbox can have at most 20 aliases.", viewModel.state.value.aliasError)
+    }
+
+    @Test
+    fun `a good alias clears an earlier error`() = runTest {
+        val viewModel = buildViewModel()
+        viewModel.onAliasAdded("nope")
+
+        viewModel.onAliasAdded("sales@example.dev")
+
+        assertNull(viewModel.state.value.aliasError)
+    }
+
+    @Test
+    fun `removing an alias takes it out of the form`() = runTest {
+        val viewModel = buildViewModel(repository(Result.success(initial.copy(aliases = listOf("a@example.dev", "b@example.dev")))))
+
+        viewModel.onAliasRemoved("a@example.dev")
+
+        assertEquals(listOf("b@example.dev"), viewModel.state.value.form.aliases)
+        assertTrue(viewModel.state.value.dirty)
+    }
+
+    @Test
+    fun `saving sends the aliases`() = runTest {
+        val repository = repository()
+        val viewModel = buildViewModel(repository)
+        viewModel.onAliasAdded("sales@example.dev")
+
+        viewModel.save()
+
+        assertEquals(listOf("sales@example.dev"), repository.updateSettingsCalls.single().aliases)
     }
 }

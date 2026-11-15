@@ -46,6 +46,10 @@ data class ComposeUiState(
     /** The sending mailbox's address, for the composer's read-only From row — in a
      * multi-mailbox app the sender identity shouldn't be a mystery. */
     val fromAddress: String = "",
+    /** The addresses the message may be sent from — the mailbox, then its aliases. Empty until
+     * the mailbox loads; the picker is only offered when there is more than one. */
+    val fromOptions: List<String> = emptyList(),
+    val selectedFrom: String = "",
     val to: String = "",
     val cc: String = "",
     val bcc: String = "",
@@ -96,6 +100,8 @@ class ComposeViewModel(
 
     private var fromEmail: String = ""
     private var fromName: String = ""
+    private var aliases: List<String> = emptyList()
+    private var mailboxFromDisplay: String = ""
     private var signatureText: String? = null
     private var autosaveJob: Job? = null
 
@@ -125,8 +131,16 @@ class ComposeViewModel(
             getMailbox(mailboxId).onSuccess { mailbox ->
                 fromEmail = mailbox.email
                 fromName = mailbox.displayName
+                aliases = mailbox.aliases
                 val fromDisplay = if (mailbox.fromName.isNullOrBlank()) mailbox.email else "${mailbox.fromName} <${mailbox.email}>"
-                _state.update { it.copy(fromAddress = fromDisplay) }
+                mailboxFromDisplay = fromDisplay
+                _state.update {
+                    it.copy(
+                        fromAddress = fromDisplay,
+                        fromOptions = ComposeFrom.choices(mailbox.email, aliases),
+                        selectedFrom = mailbox.email,
+                    )
+                }
                 if (mailbox.signatureEnabled && !mailbox.signatureText.isNullOrBlank()) {
                     signatureText = mailbox.signatureText
                 }
@@ -165,9 +179,16 @@ class ComposeViewModel(
                 if (original == null) {
                     _state.update { it.copy(loading = false) }
                 } else {
+                    if (mode == ComposeMode.REPLY || mode == ComposeMode.REPLY_ALL || mode == ComposeMode.FORWARD) {
+                        // Answer from the address the sender actually wrote to.
+                        val addressedTo = EmailAddressUtils.parseAddressList(original.recipient) +
+                            EmailAddressUtils.parseAddressList(original.cc.orEmpty())
+                        val from = ComposeFrom.defaultFor(fromEmail, aliases, addressedTo)
+                        _state.update { it.copy(selectedFrom = from, fromAddress = fromDisplayFor(from)) }
+                    }
                     val fields = when (mode) {
-                        ComposeMode.REPLY -> ComposePrefill.forReply(original, replyAll = false, ownEmail = fromEmail, signature = signatureText)
-                        ComposeMode.REPLY_ALL -> ComposePrefill.forReply(original, replyAll = true, ownEmail = fromEmail, signature = signatureText)
+                        ComposeMode.REPLY -> ComposePrefill.forReply(original, replyAll = false, ownEmail = fromEmail, aliases = aliases, signature = signatureText)
+                        ComposeMode.REPLY_ALL -> ComposePrefill.forReply(original, replyAll = true, ownEmail = fromEmail, aliases = aliases, signature = signatureText)
                         ComposeMode.FORWARD -> ComposePrefill.forForward(original, signature = signatureText)
                         ComposeMode.NEW -> PrefilledFields(to = "", cc = "", subject = "", body = if (!signatureText.isNullOrBlank()) "\n\n-- \n$signatureText" else "")
                         ComposeMode.EDIT_DRAFT -> {
@@ -237,6 +258,16 @@ class ComposeViewModel(
     fun onCcChanged(value: String) = edit { it.copy(cc = value) }
     fun onBccChanged(value: String) = edit { it.copy(bcc = value) }
     fun onSubjectChanged(value: String) = edit { it.copy(subject = value) }
+
+    /** Picks which of the mailbox's addresses to send from; an address that isn't one of them is ignored. */
+    fun onFromSelected(address: String) {
+        val choice = _state.value.fromOptions.firstOrNull { it.equals(address, ignoreCase = true) } ?: return
+        _state.update { it.copy(selectedFrom = choice, fromAddress = fromDisplayFor(choice)) }
+    }
+
+    /** The mailbox shows with its display name; an alias shows as just the address. */
+    private fun fromDisplayFor(address: String): String =
+if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else address
     fun onBodyChanged(value: String) = edit { it.copy(body = value) }
 
     private fun edit(update: (ComposeUiState) -> ComposeUiState) {
@@ -323,7 +354,7 @@ class ComposeViewModel(
         _state.update { it.copy(sending = true, errorMessage = null) }
         viewModelScope.launch {
             val request = ComposeEmailRequest(
-                fromEmail = fromEmail,
+                fromEmail = _state.value.selectedFrom.ifBlank { fromEmail },
                 fromName = fromName,
                 to = toList,
                 cc = EmailAddressUtils.parseAddressList(_state.value.cc),

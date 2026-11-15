@@ -11,4 +11,6 @@ data class MailboxSettings(
     val fromName: String = "",
     val signatureEnabled: Boolean = false,
     val signatureText: String = "",
+    /** Extra addresses the mailbox receives mail at and can send from, lowercase. */
+    val aliases: List<String> = emptyList(),
 )

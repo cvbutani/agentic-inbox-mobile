@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.data.repository
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -13,6 +14,12 @@ private fun JsonObject?.boolean(key: String): Boolean? = (this?.get(key) as? Jso
 
 private fun JsonObject?.obj(key: String): JsonObject? = this?.get(key) as? JsonObject
 
+/** The text entries of an array value; anything else in it, or a non-array, is ignored. */
+internal fun JsonObject?.stringList(key: String): List<String> =
+    (this?.get(key) as? JsonArray)
+        ?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull }
+        .orEmpty()
+
 /** Reads the editable fields out of a mailbox's free-form settings. Missing or wrongly typed
  * values become defaults — a settings blob written by another client must never crash the screen. */
 internal fun JsonObject?.toMailboxSettings(): MailboxSettings {
@@ -21,6 +28,7 @@ internal fun JsonObject?.toMailboxSettings(): MailboxSettings {
         fromName = string("fromName").orEmpty(),
         signatureEnabled = signature.boolean("enabled") ?: false,
         signatureText = signature.string("text").orEmpty(),
+        aliases = stringList("aliases"),
     )
 }
 
@@ -53,6 +61,7 @@ internal fun mergeMailboxSettings(existing: JsonObject?, edited: MailboxSettings
         current + mapOf(
             "fromName" to JsonPrimitive(edited.fromName),
             "signature" to mergedSignature,
+            "aliases" to JsonArray(edited.aliases.map(::JsonPrimitive)),
         ),
     )
 }

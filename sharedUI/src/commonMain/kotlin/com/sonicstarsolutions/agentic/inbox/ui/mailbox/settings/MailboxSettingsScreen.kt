@@ -18,6 +18,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,7 +40,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -149,6 +156,16 @@ fun MailboxSettingsScreen(
                         minLines = 3,
                     )
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                AliasesSection(
+                    aliases = state.form.aliases,
+                    error = state.aliasError,
+                    onAdd = viewModel::onAliasAdded,
+                    onRemove = viewModel::onAliasRemoved,
+                    // True once the entry was accepted, so the field can empty itself.
+                    wasAccepted = { viewModel.state.value.aliasError == null },
+                )
             }
         }
     }
@@ -192,5 +209,63 @@ private fun SwitchRow(
         }
         // The Row handles the click; the Switch is purely a visual of that state.
         Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+/**
+ * Extra addresses the mailbox answers to and can send from. Entries are added and removed in the
+ * form like every other field; Save writes them. Each row's remove button keeps the 48dp floor.
+ */
+@Composable
+private fun AliasesSection(
+    aliases: List<String>,
+    error: String?,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    wasAccepted: () -> Boolean,
+) {
+    var entry by rememberSaveable { mutableStateOf("") }
+    val submit = {
+        onAdd(entry)
+        if (wasAccepted()) entry = ""
+    }
+
+    SectionLabel("Aliases")
+    Text(
+        text = "Other addresses on your domains that deliver to this mailbox. You can send from them too.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    aliases.forEach { alias ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = alias,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { onRemove(alias) }) {
+                Icon(Icons.Default.Close, contentDescription = "Remove $alias", modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = entry,
+            onValueChange = { entry = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Add an address") },
+            singleLine = true,
+            isError = error != null,
+            supportingText = error?.let { { Text(it) } },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
+        )
+        TextButton(onClick = submit, enabled = entry.isNotBlank(), modifier = Modifier.padding(top = 8.dp)) { Text("Add") }
     }
 }

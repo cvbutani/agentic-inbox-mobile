@@ -286,4 +286,74 @@ class ComposeViewModelTest {
 
         assertNull(viewModel.state.value.errorMessage)
     }
+
+    // --- aliases and the From picker -------------------------------------------------------
+
+    private fun aliasMailboxRepository() = FakeMailboxRepository().apply {
+        getMailboxResult = {
+            Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me", aliases = listOf("sales@example.dev")))
+        }
+    }
+
+    @Test
+    fun `a mailbox with aliases offers them as From choices, the mailbox first`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = aliasMailboxRepository())
+
+        assertEquals(listOf("me@example.dev", "sales@example.dev"), viewModel.state.value.fromOptions)
+        assertEquals("me@example.dev", viewModel.state.value.selectedFrom)
+    }
+
+    @Test
+    fun `a mailbox without aliases offers no choice`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW)
+
+        assertTrue(viewModel.state.value.fromOptions.size <= 1)
+        assertEquals("me@example.dev", viewModel.state.value.selectedFrom)
+    }
+
+    @Test
+    fun `choosing an alias sends from it`() = runTest {
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = aliasMailboxRepository(), emailRepository = emailRepository)
+        viewModel.onToChanged("alice@example.dev")
+        viewModel.onSubjectChanged("Hi")
+        viewModel.onBodyChanged("Hello")
+
+        viewModel.onFromSelected("sales@example.dev")
+        viewModel.send()
+
+        assertEquals("sales@example.dev", emailRepository.sendCalls.single().request.fromEmail)
+        assertEquals("sales@example.dev", viewModel.state.value.selectedFrom)
+    }
+
+    @Test
+    fun `an address that is not one of the choices is ignored`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = aliasMailboxRepository())
+
+        viewModel.onFromSelected("stranger@example.org")
+
+        assertEquals("me@example.dev", viewModel.state.value.selectedFrom)
+    }
+
+    @Test
+    fun `replying to mail sent to an alias defaults to that alias`() = runTest {
+        val viewModel = buildViewModel(
+            ComposeMode.REPLY,
+            emailId = "e1",
+            threadId = "t1",
+            mailboxRepository = aliasMailboxRepository(),
+            threadRepository = FakeThreadRepository(
+                result = Result.success(listOf(original(sender = "Alice <alice@example.dev>", recipient = "sales@example.dev"))),
+            ),
+        )
+
+        assertEquals("sales@example.dev", viewModel.state.value.selectedFrom)
+    }
+
+    @Test
+    fun `composing a new message defaults to the mailbox even when it has aliases`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = aliasMailboxRepository())
+
+        assertEquals("me@example.dev", viewModel.state.value.selectedFrom)
+    }
 }

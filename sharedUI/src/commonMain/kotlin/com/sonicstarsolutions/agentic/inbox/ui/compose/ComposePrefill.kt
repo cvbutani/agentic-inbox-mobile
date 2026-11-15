@@ -20,13 +20,16 @@ object ComposePrefill {
         original: EmailDetail,
         replyAll: Boolean,
         ownEmail: String,
+        /** The mailbox's other addresses: they count as "me" just like [ownEmail]. */
+        aliases: List<String> = emptyList(),
         signature: String? = null,
     ): PrefilledFields {
         val senderAddress = EmailAddressUtils.extractAddress(original.sender)
         // If the mailbox itself sent this message (e.g. it's the most recent message in the
         // thread, waiting on a reply), "Reply" should address it back to the original
         // recipient(s), not to the mailbox's own address.
-        val sentByMailbox = senderAddress.equals(ownEmail, ignoreCase = true)
+        val ownAddresses = (listOf(ownEmail) + aliases).map { it.lowercase() }.toSet()
+        val sentByMailbox = senderAddress.lowercase() in ownAddresses
         val toAddresses = if (sentByMailbox) {
             EmailAddressUtils.parseAddressList(original.recipient).ifEmpty { listOf(senderAddress) }
         } else {
@@ -37,7 +40,7 @@ object ComposePrefill {
             val allParties = EmailAddressUtils.parseAddressList(original.recipient) +
                 EmailAddressUtils.parseAddressList(original.cc.orEmpty()) +
                 listOf(senderAddress)
-            val excluded = (toAddresses.map { it.lowercase() } + ownEmail.lowercase()).toSet()
+            val excluded = toAddresses.map { it.lowercase() }.toSet() + ownAddresses
             allParties.filterNot { it.lowercase() in excluded }.distinct()
         } else {
             emptyList()

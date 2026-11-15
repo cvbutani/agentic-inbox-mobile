@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.ui.compose
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,11 +17,15 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -194,25 +199,13 @@ fun ComposeScreen(
                 }
 
                 if (state.fromAddress.isNotBlank()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            text = "From",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = state.fromAddress,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    FromRow(
+                        fromAddress = state.fromAddress,
+                        options = state.fromOptions,
+                        selected = state.selectedFrom,
+                        enabled = !state.sending,
+                        onSelected = viewModel::onFromSelected,
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
 
@@ -352,4 +345,68 @@ private fun titleFor(mode: ComposeMode): String = when (mode) {
     ComposeMode.REPLY_ALL -> "Reply all"
     ComposeMode.FORWARD -> "Forward"
     ComposeMode.EDIT_DRAFT -> "Edit draft"
+}
+
+/**
+ * The read-only "From" row — or, when the mailbox has aliases, a row that opens a menu of the
+ * addresses the message can go out from. The row is the whole tap target (48dp+), so the small
+ * chevron never has to be hit on its own.
+ */
+@Composable
+private fun FromRow(
+    fromAddress: String,
+    options: List<String>,
+    selected: String,
+    enabled: Boolean,
+    onSelected: (String) -> Unit,
+) {
+    val canChoose = options.size > 1
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (canChoose && enabled) Modifier.clickable { expanded = true } else Modifier)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "From",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = fromAddress,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (canChoose) {
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "Choose sender address",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { address ->
+                DropdownMenuItem(
+                    text = { Text(address) },
+                    trailingIcon = {
+                        if (address.equals(selected, ignoreCase = true)) {
+                            Icon(Icons.Default.Check, contentDescription = "Selected")
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(address)
+                    },
+                )
+            }
+        }
+    }
 }
