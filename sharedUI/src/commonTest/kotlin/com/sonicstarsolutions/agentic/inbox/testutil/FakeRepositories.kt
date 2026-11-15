@@ -8,6 +8,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
@@ -17,9 +19,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsReposit
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import kotlinx.coroutines.CompletableDeferred
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
@@ -395,5 +399,44 @@ class FakeLabelRepository(
     override suspend fun deleteLabel(mailboxId: String, labelId: String): Result<Unit> {
         deleteCalls += labelId
         return deleteResult
+    }
+}
+
+class FakeScheduleRepository(
+    var scheduleResult: Result<Unit> = Result.success(Unit),
+    var scheduledResult: Result<List<ScheduledEmail>> = Result.success(emptyList()),
+    var cancelResult: Result<Unit> = Result.success(Unit),
+) : ScheduleRepository {
+    data class ScheduleCall(
+        val mailboxId: String,
+        val request: ComposeEmailRequest,
+        val kind: ScheduleKind,
+        val originalEmailId: String?,
+        val sendAt: Instant,
+    )
+
+    val scheduleCalls = mutableListOf<ScheduleCall>()
+    val cancelCalls = mutableListOf<String>()
+    var getScheduledCalls = 0
+
+    override suspend fun schedule(
+        mailboxId: String,
+        request: ComposeEmailRequest,
+        kind: ScheduleKind,
+        originalEmailId: String?,
+        sendAt: Instant,
+    ): Result<Unit> {
+        scheduleCalls += ScheduleCall(mailboxId, request, kind, originalEmailId, sendAt)
+        return scheduleResult
+    }
+
+    override suspend fun getScheduled(mailboxId: String): Result<List<ScheduledEmail>> {
+        getScheduledCalls++
+        return scheduledResult
+    }
+
+    override suspend fun cancel(mailboxId: String, scheduledId: String): Result<Unit> {
+        cancelCalls += scheduledId
+        return cancelResult
     }
 }

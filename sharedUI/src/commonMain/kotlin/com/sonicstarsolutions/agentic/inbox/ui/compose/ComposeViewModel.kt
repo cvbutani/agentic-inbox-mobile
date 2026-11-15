@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
@@ -17,7 +19,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
+import com.sonicstarsolutions.agentic.inbox.util.SendLater
 import kotlinx.coroutines.CoroutineScope
+import kotlin.time.Instant
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,6 +78,7 @@ class ComposeViewModel(
     private val sendEmailUseCase: SendEmailUseCase,
     private val replyEmailUseCase: ReplyEmailUseCase,
     private val forwardEmailUseCase: ForwardEmailUseCase,
+    private val scheduleEmailUseCase: ScheduleEmailUseCase,
     /** Server-side cleanup after an EDIT_DRAFT send — distinct from [deleteDraftUseCase], which
      * only ever touches this app's own local Room-backed drafts. */
     private val deleteEmailUseCase: DeleteEmailUseCase,
@@ -343,26 +348,11 @@ if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else addres
     fun consumeError() = _state.update { it.copy(errorMessage = null) }
 
     fun send() {
-        val toList = EmailAddressUtils.parseAddressList(_state.value.to)
-        if (toList.isEmpty()) {
-            _state.update { it.copy(errorMessage = "At least one recipient is required.") }
-            return
-        }
+        val toList = recipientsOrError() ?: return
         if (_state.value.sending) return
-        autosaveJob?.cancel()
-        autosaveJob = null
-        _state.update { it.copy(sending = true, errorMessage = null) }
+        beginSending()
         viewModelScope.launch {
-            val request = ComposeEmailRequest(
-                fromEmail = _state.value.selectedFrom.ifBlank { fromEmail },
-                fromName = fromName,
-                to = toList,
-                cc = EmailAddressUtils.parseAddressList(_state.value.cc),
-                bcc = EmailAddressUtils.parseAddressList(_state.value.bcc),
-                subject = _state.value.subject.trim(),
-                body = _state.value.body,
-                attachments = _state.value.attachments,
-            )
+            val request = buildRequest(toList)
             val result = when (mode) {
                 ComposeMode.NEW -> sendEmailUseCase(mailboxId, request)
                 ComposeMode.REPLY, ComposeMode.REPLY_ALL -> replyEmailUseCase(mailboxId, emailId!!, request)
@@ -374,21 +364,81 @@ if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else addres
                     ?.let { originalEmailId -> replyEmailUseCase(mailboxId, originalEmailId, request) }
                     ?: sendEmailUseCase(mailboxId, request)
             }
-            result
-                .onSuccess {
-                    // The message is out; its draft has served its purpose. A send that failed
-                    // keeps the draft, so nothing the user wrote is lost.
-                    _state.value.draftId?.let { deleteDraftUseCase(it) }
-                    // EDIT_DRAFT's draft is a real row on the server (emailId is its id), separate
-                    // from the local-only one above — best-effort, same reasoning as
-                    // SendDraftEmailUseCase: the send already succeeded, so a cleanup failure here
-                    // must not be reported as this send having failed.
-                    if (mode == ComposeMode.EDIT_DRAFT) emailId?.let { deleteEmailUseCase(mailboxId, it) }
-                    _state.update { it.copy(sending = false, sent = true, draftId = null) }
-                }
-                .onFailure { t ->
-                    _state.update { it.copy(sending = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to send") }
-                }
+            finishSending(result, failureFallback = "Failed to send")
         }
+    }
+
+    /**
+     * Queues the message to go out at [sendAt] instead of now. The server holds it and sends it
+     * even if this device is off, so on success the composer closes exactly as it does after a
+     * send. Attachments aren't supported by scheduled sends yet, so they are refused up front.
+     */
+    fun scheduleSend(sendAt: Instant, now: Instant = Clock.System.now()) {
+        val toList = recipientsOrError() ?: return
+        if (_state.value.sending) return
+        if (_state.value.attachments.isNotEmpty()) {
+            _state.update { it.copy(errorMessage = "Scheduled messages can't have attachments yet. Remove them, or send now.") }
+            return
+        }
+        SendLater.problemWith(sendAt, now)?.let { problem ->
+            _state.update { it.copy(errorMessage = problem.message) }
+            return
+        }
+        beginSending()
+        viewModelScope.launch {
+            val request = buildRequest(toList)
+            // The same rule as send(): an edited reply-draft is a reply, anything else a compose.
+            val (kind, originalId) = when (mode) {
+                ComposeMode.REPLY, ComposeMode.REPLY_ALL -> ScheduleKind.REPLY to emailId
+                ComposeMode.EDIT_DRAFT -> editDraftInReplyTo?.let { ScheduleKind.REPLY to it } ?: (ScheduleKind.COMPOSE to null)
+                ComposeMode.NEW, ComposeMode.FORWARD -> ScheduleKind.COMPOSE to null
+            }
+            finishSending(scheduleEmailUseCase(mailboxId, request, kind, originalId, sendAt), failureFallback = "Failed to schedule")
+        }
+    }
+
+    /** The parsed To list, or null after flagging that there isn't one. */
+    private fun recipientsOrError(): List<String>? {
+        val toList = EmailAddressUtils.parseAddressList(_state.value.to)
+        if (toList.isEmpty()) {
+            _state.update { it.copy(errorMessage = "At least one recipient is required.") }
+            return null
+        }
+        return toList
+    }
+
+    private fun beginSending() {
+        autosaveJob?.cancel()
+        autosaveJob = null
+        _state.update { it.copy(sending = true, errorMessage = null) }
+    }
+
+    private fun buildRequest(toList: List<String>) = ComposeEmailRequest(
+        fromEmail = _state.value.selectedFrom.ifBlank { fromEmail },
+        fromName = fromName,
+        to = toList,
+        cc = EmailAddressUtils.parseAddressList(_state.value.cc),
+        bcc = EmailAddressUtils.parseAddressList(_state.value.bcc),
+        subject = _state.value.subject.trim(),
+        body = _state.value.body,
+        attachments = _state.value.attachments,
+    )
+
+    private suspend fun finishSending(result: Result<Unit>, failureFallback: String) {
+        result
+            .onSuccess {
+                // The message is out (or queued); its draft has served its purpose. A send that
+                // failed keeps the draft, so nothing the user wrote is lost.
+                _state.value.draftId?.let { deleteDraftUseCase(it) }
+                // EDIT_DRAFT's draft is a real row on the server (emailId is its id), separate
+                // from the local-only one above — best-effort, same reasoning as
+                // SendDraftEmailUseCase: the send already succeeded, so a cleanup failure here
+                // must not be reported as this send having failed.
+                if (mode == ComposeMode.EDIT_DRAFT) emailId?.let { deleteEmailUseCase(mailboxId, it) }
+                _state.update { it.copy(sending = false, sent = true, draftId = null) }
+            }
+            .onFailure { t ->
+                _state.update { it.copy(sending = false, errorMessage = t.message ?: t::class.simpleName ?: failureFallback) }
+            }
     }
 }

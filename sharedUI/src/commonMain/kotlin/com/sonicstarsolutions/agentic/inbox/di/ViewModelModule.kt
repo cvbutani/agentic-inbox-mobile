@@ -6,6 +6,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.MailboxSettingsViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingViewModel
+import com.sonicstarsolutions.agentic.inbox.ui.scheduled.ScheduledViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.search.SearchViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.splash.SplashViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.thread.ThreadViewModel
@@ -31,10 +32,11 @@ val viewModelModule = module {
     }
     viewModel { (mailboxId: String, mode: ComposeMode, emailId: String?, threadId: String?, draftId: String?) ->
         ComposeViewModel(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
             mailboxId, mode, emailId, threadId, draftId,
         )
     }
+    viewModel { (mailboxId: String) -> ScheduledViewModel(get(), get(), mailboxId) }
     viewModel { (mailboxId: String) ->
         SearchViewModel(get(), get(), mailboxId)
     }

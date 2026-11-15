@@ -21,6 +21,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.DraftRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledStatus
+import kotlin.time.Instant
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
@@ -399,6 +404,7 @@ val demoRepositoryModule = module {
     single<EmailRepository> { DemoEmailRepository() }
     single<FolderRepository> { DemoFolderRepository() }
     single<LabelRepository> { DemoLabelRepository() }
+    single<ScheduleRepository> { DemoScheduleRepository() }
     single<ThreadRepository> { DemoThreadRepository() }
     single<DraftRepository> { DemoDraftRepository() }
     single<AttachmentRepository> { DemoAttachmentRepository() }
@@ -428,6 +434,37 @@ class DemoLabelRepository : LabelRepository {
 
     override suspend fun deleteLabel(mailboxId: String, labelId: String): Result<Unit> {
         labels.removeAll { it.id == labelId }
+        return Result.success(Unit)
+    }
+}
+
+/** In-memory scheduled sends for demo mode. */
+class DemoScheduleRepository : ScheduleRepository {
+    private val queue = mutableListOf<ScheduledEmail>()
+
+    override suspend fun schedule(
+        mailboxId: String,
+        request: ComposeEmailRequest,
+        kind: ScheduleKind,
+        originalEmailId: String?,
+        sendAt: Instant,
+    ): Result<Unit> {
+        queue += ScheduledEmail(
+            id = "demo-scheduled-${queue.size}",
+            kind = kind,
+            sendAt = sendAt.toString(),
+            status = ScheduledStatus.PENDING,
+            error = null,
+            to = request.to.joinToString(", "),
+            subject = request.subject,
+        )
+        return Result.success(Unit)
+    }
+
+    override suspend fun getScheduled(mailboxId: String): Result<List<ScheduledEmail>> = Result.success(queue.sortedBy { it.sendAt })
+
+    override suspend fun cancel(mailboxId: String, scheduledId: String): Result<Unit> {
+        queue.removeAll { it.id == scheduledId }
         return Result.success(Unit)
     }
 }

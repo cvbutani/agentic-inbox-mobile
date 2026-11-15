@@ -11,6 +11,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
@@ -80,6 +82,7 @@ class ComposeEditDraftTest {
         draftMessageId: String = "d1",
         threadRepository: FakeThreadRepository,
         emailRepository: FakeEmailRepository = FakeEmailRepository(),
+        scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
         mailboxRepository: FakeMailboxRepository = FakeMailboxRepository().apply {
             getMailboxResult = { Result.success(Mailbox(id = "mb1", email = "me@example.dev", name = "Me")) }
         },
@@ -89,6 +92,7 @@ class ComposeEditDraftTest {
         sendEmailUseCase = SendEmailUseCase(emailRepository),
         replyEmailUseCase = ReplyEmailUseCase(emailRepository),
         forwardEmailUseCase = ForwardEmailUseCase(emailRepository),
+        scheduleEmailUseCase = ScheduleEmailUseCase(scheduleRepository),
         deleteEmailUseCase = DeleteEmailUseCase(emailRepository),
         saveDraftUseCase = SaveDraftUseCase(FakeDraftRepository()),
         getDraftUseCase = GetDraftUseCase(FakeDraftRepository()),

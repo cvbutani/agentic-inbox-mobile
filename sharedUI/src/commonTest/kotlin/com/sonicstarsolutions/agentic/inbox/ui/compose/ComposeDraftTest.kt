@@ -11,6 +11,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
@@ -69,6 +71,7 @@ class ComposeDraftTest {
         draftId: String? = null,
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
         emailRepository: FakeEmailRepository = FakeEmailRepository(),
+        scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
         newDraftId: () -> String = { "draft-1" },
     ): ComposeViewModel {
         val mailboxRepository = FakeMailboxRepository().apply {
@@ -80,6 +83,7 @@ class ComposeDraftTest {
             sendEmailUseCase = SendEmailUseCase(emailRepository),
             replyEmailUseCase = ReplyEmailUseCase(emailRepository),
             forwardEmailUseCase = ForwardEmailUseCase(emailRepository),
+            scheduleEmailUseCase = ScheduleEmailUseCase(scheduleRepository),
             deleteEmailUseCase = DeleteEmailUseCase(emailRepository),
             saveDraftUseCase = SaveDraftUseCase(draftRepository),
             getDraftUseCase = GetDraftUseCase(draftRepository),
@@ -335,6 +339,38 @@ class ComposeDraftTest {
         advanceUntilIdle()
 
         assertTrue(drafts.deleteCalls.isEmpty(), "a draft must survive a send that failed")
+        assertEquals("offline", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `scheduling deletes the draft once the server has the message`() = runTest {
+        val existing = Draft(id = "d9", mailboxId = "mb1", to = "bob@example.dev", body = "text", mode = ComposeMode.NEW.name, updatedAt = 5L)
+        val drafts = FakeDraftRepository(initial = listOf(existing))
+        val viewModel = buildViewModel(draftId = "d9", draftRepository = drafts)
+        advanceUntilIdle()
+
+        viewModel.scheduleSend(kotlin.time.Instant.parse("2026-11-19T08:00:00Z"), kotlin.time.Instant.parse("2026-11-18T09:00:00Z"))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.sent)
+        assertEquals(listOf("d9"), drafts.deleteCalls)
+    }
+
+    @Test
+    fun `a refused schedule keeps the draft`() = runTest {
+        val existing = Draft(id = "d9", mailboxId = "mb1", to = "bob@example.dev", body = "text", mode = ComposeMode.NEW.name, updatedAt = 5L)
+        val drafts = FakeDraftRepository(initial = listOf(existing))
+        val viewModel = buildViewModel(
+            draftId = "d9",
+            draftRepository = drafts,
+            scheduleRepository = FakeScheduleRepository(scheduleResult = Result.failure(RuntimeException("offline"))),
+        )
+        advanceUntilIdle()
+
+        viewModel.scheduleSend(kotlin.time.Instant.parse("2026-11-19T08:00:00Z"), kotlin.time.Instant.parse("2026-11-18T09:00:00Z"))
+        advanceUntilIdle()
+
+        assertTrue(drafts.deleteCalls.isEmpty())
         assertEquals("offline", viewModel.state.value.errorMessage)
     }
 }

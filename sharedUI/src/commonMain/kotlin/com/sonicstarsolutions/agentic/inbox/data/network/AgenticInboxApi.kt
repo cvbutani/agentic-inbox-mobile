@@ -14,6 +14,9 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.LabelUpdateDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.LabelsResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.ScheduleRequestDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.ScheduleResponseDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.ScheduledListDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.StatusResponseDto
@@ -122,6 +125,21 @@ interface AgenticInboxApi {
     suspend fun deleteEmail(
         @Path("mailboxId") mailboxId: String,
         @Path("emailId") emailId: String,
+    )
+
+    @POST("/api/v1/mailboxes/{mailboxId}/emails/schedule")
+    suspend fun scheduleEmail(
+        @Path("mailboxId") mailboxId: String,
+        @Body body: ScheduleRequestDto,
+    ): ScheduleResponseDto
+
+    @GET("/api/v1/mailboxes/{mailboxId}/scheduled")
+    suspend fun getScheduled(@Path("mailboxId") mailboxId: String): ScheduledListDto
+
+    @DELETE("/api/v1/mailboxes/{mailboxId}/scheduled/{scheduledId}")
+    suspend fun cancelScheduled(
+        @Path("mailboxId") mailboxId: String,
+        @Path("scheduledId") scheduledId: String,
     )
 
     @POST("/api/v1/mailboxes/{mailboxId}/emails/bulk")

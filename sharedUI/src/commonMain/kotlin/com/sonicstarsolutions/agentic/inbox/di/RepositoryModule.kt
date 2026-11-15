@@ -8,6 +8,7 @@ import com.sonicstarsolutions.agentic.inbox.data.repository.DraftRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.EmailRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.FolderRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.LabelRepositoryImpl
+import com.sonicstarsolutions.agentic.inbox.data.repository.ScheduleRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.MailboxRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.data.repository.ThreadRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.domain.repository.AttachmentRepository
@@ -17,6 +18,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.DraftRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import eu.anifantakis.lib.ksafe.KSafe
@@ -34,6 +36,7 @@ val repositoryModule = module {
     single<EmailRepository> { EmailRepositoryImpl(get(), get()) }
     single<FolderRepository> { FolderRepositoryImpl(get(), get()) }
     single<LabelRepository> { LabelRepositoryImpl(get()) }
+    single<ScheduleRepository> { ScheduleRepositoryImpl(get()) }
     single<ThreadRepository> { ThreadRepositoryImpl(get()) }
     single<DraftRepository> { DraftRepositoryImpl(get()) }
     single<ConnectionRepository> { ConnectionRepositoryImpl(get()) }

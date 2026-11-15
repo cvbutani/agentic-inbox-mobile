@@ -30,7 +30,7 @@ class ApiException(
 
 private val lenientJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
-private val mappedStatuses = setOf(400, 403, 409, 429, 502)
+private val mappedStatuses = setOf(400, 403, 404, 409, 429, 502)
 
 /** Maps [t] to an [ApiException] when it's a [ResponseException] with a mapped status; any other
  * throwable is returned as is. Reads the response body, hence suspending. */
@@ -53,19 +53,21 @@ suspend fun mapApiError(t: Throwable): Throwable {
     return when (status) {
         400 -> {
             val fieldErrors = body?.fieldErrors().orEmpty()
+            // Cross-field rules (e.g. "no attachments when scheduling") arrive as form-level errors.
+            val details = body?.formErrors().orEmpty() +
+                fieldErrors.entries.map { (field, errors) -> "$field: ${errors.joinToString(", ")}" }
             val message = when {
                 serverMessage == null -> "The server rejected the request (400)"
-                fieldErrors.isEmpty() -> serverMessage
-                else -> serverMessage + " — " + fieldErrors.entries.joinToString("; ") { (field, errors) ->
-                    "$field: ${errors.joinToString(", ")}"
-                }
+                details.isEmpty() -> serverMessage
+                else -> serverMessage + " — " + details.joinToString("; ")
             }
             ApiException(status, message, fieldErrors)
         }
 
-        // A 403 without the server's JSON error is a Cloudflare Access denial: keep it raw so the
+        // A 403 or 404 without the server's JSON error is a Cloudflare Access denial or a wrong URL
+        // (an HTML page): keep it raw so the
         // connection check can describe it.
-        403 -> if (serverMessage == null) t else ApiException(status, serverMessage)
+        403, 404 -> if (serverMessage == null) t else ApiException(status, serverMessage)
 
         409 -> ApiException(status, serverMessage ?: "The request conflicts with existing data (409)")
 
@@ -90,3 +92,9 @@ private fun JsonObject.fieldErrors(): Map<String, List<String>> {
         if (messages.isEmpty()) null else field to messages
     }.toMap()
 }
+
+/** Zod's `error.flatten()` form-level messages: `{"details":{"formErrors":["msg", ...]}}`. */
+private fun JsonObject.formErrors(): List<String> =
+    ((get("details") as? JsonObject)?.get("formErrors") as? JsonArray)
+        ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+        .orEmpty()

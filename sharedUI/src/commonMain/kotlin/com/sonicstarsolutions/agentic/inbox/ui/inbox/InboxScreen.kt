@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
@@ -109,6 +110,7 @@ fun InboxScreen(
     onComposeNew: () -> Unit = {},
     onSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenScheduled: () -> Unit = {},
     /** The email currently open in the detail pane, when this list is one half of the two-pane
      * layout — highlights that row. Null in single-pane, where opening an email leaves the list. */
     openEmailId: String? = null,
@@ -345,6 +347,10 @@ fun InboxScreen(
                 onOpenSettings = {
                     scope.launch { drawerState.close() }
                     onOpenSettings()
+                },
+                onOpenScheduled = {
+                    scope.launch { drawerState.close() }
+                    onOpenScheduled()
                 },
                 onSwitchMailbox = {
                     scope.launch { drawerState.close() }
@@ -678,6 +684,7 @@ private fun FolderDrawerContent(
     onFolderSelected: (Folder) -> Unit,
     onSwitchMailbox: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenScheduled: () -> Unit,
     onCreateFolder: () -> Unit,
     onRenameFolder: (Folder) -> Unit,
     onDeleteFolder: (Folder) -> Unit,
@@ -763,6 +770,14 @@ private fun FolderDrawerContent(
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            NavigationDrawerItem(
+                icon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                label = { Text("Scheduled") },
+                selected = false,
+                onClick = onOpenScheduled,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
 
             NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Settings, contentDescription = null) },

@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -80,6 +82,16 @@ fun ComposeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showCcBcc by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
+    var showSendLater by remember { mutableStateOf(false) }
+    if (showSendLater) {
+        SendLaterDialog(
+            onDismiss = { showSendLater = false },
+            onPick = { at ->
+                showSendLater = false
+                viewModel.scheduleSend(at)
+            },
+        )
+    }
 
     // Reveal Cc/Bcc automatically if Reply All prefilled either of them — hiding fields that
     // already have recipients in them would be confusing, not tidy.
@@ -141,17 +153,35 @@ fun ComposeScreen(
                     IconButton(onClick = pickFiles, enabled = !state.sending) {
                         Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
                     }
-                    // Only offered once there's actually a draft to throw away.
-                    if (state.draftId != null) {
-                        IconButton(onClick = { showDiscardDialog = true }, enabled = !state.sending) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "Discard draft")
-                        }
-                    }
                     IconButton(onClick = viewModel::send, enabled = !state.sending) {
                         if (state.sending) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                        }
+                    }
+                    // Two icons plus an overflow: the design system caps an app bar at three.
+                    var showMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                                text = { Text("Send later…") },
+                                enabled = !state.sending,
+                                onClick = { showMenu = false; showSendLater = true },
+                            )
+                            // Only offered once there's actually a draft to throw away.
+                            if (state.draftId != null) {
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
+                                    text = { Text("Discard draft") },
+                                    enabled = !state.sending,
+                                    onClick = { showMenu = false; showDiscardDialog = true },
+                                )
+                            }
                         }
                     }
                 },

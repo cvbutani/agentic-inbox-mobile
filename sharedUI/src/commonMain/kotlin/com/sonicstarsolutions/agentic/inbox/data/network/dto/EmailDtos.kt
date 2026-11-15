@@ -135,3 +135,35 @@ data class BulkRequestDto(
 data class BulkResponseDto(
     @SerialName("count") val count: Int = 0,
 )
+
+/** Body of `POST …/emails/schedule`: the whole email plus when to send it. */
+@Serializable
+data class ScheduleRequestDto(
+    @SerialName("kind") val kind: String,
+    @SerialName("originalEmailId") val originalEmailId: String? = null,
+    @SerialName("send_at") val sendAt: String,
+    @SerialName("email") val email: SendEmailRequestDto,
+)
+
+@Serializable
+data class ScheduleResponseDto(
+    @SerialName("id") val id: String = "",
+    @SerialName("status") val status: String = "",
+    @SerialName("send_at") val sendAt: String = "",
+)
+
+@Serializable
+data class ScheduledEmailDto(
+    @SerialName("id") val id: String,
+    @SerialName("kind") val kind: String = "compose",
+    @SerialName("send_at") val sendAt: String,
+    @SerialName("status") val status: String = "pending",
+    @SerialName("error") val error: String? = null,
+    @SerialName("to") val to: String = "",
+    @SerialName("subject") val subject: String = "",
+)
+
+@Serializable
+data class ScheduledListDto(
+    @SerialName("scheduled") val scheduled: List<ScheduledEmailDto> = emptyList(),
+)

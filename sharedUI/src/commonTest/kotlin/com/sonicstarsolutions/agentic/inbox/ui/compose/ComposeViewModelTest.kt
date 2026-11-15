@@ -2,6 +2,7 @@ package com.sonicstarsolutions.agentic.inbox.ui.compose
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
@@ -10,6 +11,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
@@ -76,6 +79,7 @@ class ComposeViewModelTest {
         },
         threadRepository: FakeThreadRepository = FakeThreadRepository(result = Result.success(listOf(original()))),
         emailRepository: FakeEmailRepository = FakeEmailRepository(),
+        scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
     ): ComposeViewModel = ComposeViewModel(
         getMailbox = GetMailboxUseCase(mailboxRepository),
@@ -83,6 +87,7 @@ class ComposeViewModelTest {
         sendEmailUseCase = SendEmailUseCase(emailRepository),
         replyEmailUseCase = ReplyEmailUseCase(emailRepository),
         forwardEmailUseCase = ForwardEmailUseCase(emailRepository),
+        scheduleEmailUseCase = ScheduleEmailUseCase(scheduleRepository),
         deleteEmailUseCase = DeleteEmailUseCase(emailRepository),
         saveDraftUseCase = SaveDraftUseCase(draftRepository),
         getDraftUseCase = GetDraftUseCase(draftRepository),
@@ -355,5 +360,120 @@ class ComposeViewModelTest {
         val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = aliasMailboxRepository())
 
         assertEquals("me@example.dev", viewModel.state.value.selectedFrom)
+    }
+
+    // --- send later ------------------------------------------------------------------------
+
+    private val now = kotlin.time.Instant.parse("2026-11-18T09:00:00Z")
+    private val tomorrowMorning = kotlin.time.Instant.parse("2026-11-19T08:00:00Z")
+
+    private fun TestScope.readyToSend(
+        mode: ComposeMode = ComposeMode.NEW,
+        emailId: String? = null,
+        scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
+        draftRepository: FakeDraftRepository = FakeDraftRepository(),
+    ): ComposeViewModel {
+        val viewModel = buildViewModel(
+            mode,
+            emailId = emailId,
+            threadId = emailId?.let { "t1" },
+            scheduleRepository = scheduleRepository,
+            draftRepository = draftRepository,
+        )
+        if (mode == ComposeMode.NEW) viewModel.onToChanged("alice@example.dev")
+        viewModel.onSubjectChanged("Plans")
+        viewModel.onBodyChanged("See you then")
+        return viewModel
+    }
+
+    @Test
+    fun `scheduling a new message queues a compose for the chosen time`() = runTest {
+        val schedule = FakeScheduleRepository()
+        val viewModel = readyToSend(scheduleRepository = schedule)
+
+        viewModel.scheduleSend(tomorrowMorning, now)
+
+        val call = schedule.scheduleCalls.single()
+        assertEquals(ScheduleKind.COMPOSE, call.kind)
+        assertNull(call.originalEmailId)
+        assertEquals(tomorrowMorning, call.sendAt)
+        assertEquals(listOf("alice@example.dev"), call.request.to)
+        assertEquals("Plans", call.request.subject)
+        assertEquals("me@example.dev", call.request.fromEmail)
+        assertTrue(viewModel.state.value.sent)
+    }
+
+    @Test
+    fun `scheduling a reply names the message being answered`() = runTest {
+        val schedule = FakeScheduleRepository()
+        val viewModel = readyToSend(ComposeMode.REPLY, emailId = "e1", scheduleRepository = schedule)
+
+        viewModel.scheduleSend(tomorrowMorning, now)
+
+        val call = schedule.scheduleCalls.single()
+        assertEquals(ScheduleKind.REPLY, call.kind)
+        assertEquals("e1", call.originalEmailId)
+    }
+
+    @Test
+    fun `scheduling a forward is a plain compose`() = runTest {
+        val schedule = FakeScheduleRepository()
+        val viewModel = readyToSend(ComposeMode.FORWARD, emailId = "e1", scheduleRepository = schedule)
+        viewModel.onToChanged("carol@example.dev")
+
+        viewModel.scheduleSend(tomorrowMorning, now)
+
+        assertEquals(ScheduleKind.COMPOSE, schedule.scheduleCalls.single().kind)
+        assertNull(schedule.scheduleCalls.single().originalEmailId)
+    }
+
+    @Test
+    fun `scheduling needs a recipient`() = runTest {
+        val schedule = FakeScheduleRepository()
+        val viewModel = buildViewModel(ComposeMode.NEW, scheduleRepository = schedule)
+
+        viewModel.scheduleSend(tomorrowMorning, now)
+
+        assertTrue(schedule.scheduleCalls.isEmpty())
+        assertEquals("At least one recipient is required.", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `a message with attachments cannot be scheduled`() = runTest {
+        val schedule = FakeScheduleRepository()
+        val viewModel = readyToSend(scheduleRepository = schedule)
+        viewModel.addAttachment("a.txt", "text/plain", "hi".encodeToByteArray())
+
+        viewModel.scheduleSend(tomorrowMorning, now)
+
+        assertTrue(schedule.scheduleCalls.isEmpty())
+        assertEquals("Scheduled messages can't have attachments yet. Remove them, or send now.", viewModel.state.value.errorMessage)
+        assertFalse(viewModel.state.value.sent)
+    }
+
+    @Test
+    fun `a time that is too soon or too far is refused before any request`() = runTest {
+        val schedule = FakeScheduleRepository()
+        val viewModel = readyToSend(scheduleRepository = schedule)
+
+        viewModel.scheduleSend(now, now)
+        assertEquals("Pick a time at least a couple of minutes from now.", viewModel.state.value.errorMessage)
+
+        viewModel.scheduleSend(kotlin.time.Instant.parse("2027-06-01T09:00:00Z"), now)
+        assertEquals("Pick a time within the next 90 days.", viewModel.state.value.errorMessage)
+
+        assertTrue(schedule.scheduleCalls.isEmpty())
+    }
+
+    @Test
+    fun `a refused schedule keeps the composer open with the server's reason`() = runTest {
+        val schedule = FakeScheduleRepository(scheduleResult = Result.failure(RuntimeException("Scheduled messages cannot have attachments yet")))
+        val viewModel = readyToSend(scheduleRepository = schedule)
+
+        viewModel.scheduleSend(tomorrowMorning, now)
+
+        assertEquals("Scheduled messages cannot have attachments yet", viewModel.state.value.errorMessage)
+        assertFalse(viewModel.state.value.sent)
+        assertFalse(viewModel.state.value.sending)
     }
 }

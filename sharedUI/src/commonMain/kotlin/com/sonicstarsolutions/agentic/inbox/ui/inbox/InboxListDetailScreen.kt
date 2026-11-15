@@ -55,6 +55,7 @@ fun InboxListDetailScreen(
     onComposeNew: () -> Unit = {},
     onSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenScheduled: () -> Unit = {},
     onReply: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
     onReplyAll: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
     onForward: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
@@ -95,6 +96,7 @@ fun InboxListDetailScreen(
                 onComposeNew = onComposeNew,
                 onSearch = onSearch,
                 onOpenSettings = onOpenSettings,
+                onOpenScheduled = onOpenScheduled,
                 viewModel = viewModel,
             )
             return@BoxWithConstraints
@@ -114,6 +116,7 @@ fun InboxListDetailScreen(
                 onComposeNew = onComposeNew,
                 onSearch = onSearch,
                 onOpenSettings = onOpenSettings,
+                onOpenScheduled = onOpenScheduled,
                 openEmailId = openEmailId,
                 viewModel = viewModel,
             )

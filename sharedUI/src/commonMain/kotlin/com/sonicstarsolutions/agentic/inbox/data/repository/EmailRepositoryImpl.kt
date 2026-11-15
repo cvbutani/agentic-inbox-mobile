@@ -134,7 +134,7 @@ class EmailRepositoryImpl(
 }
 
 @OptIn(ExperimentalEncodingApi::class)
-private fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequestDto(
+internal fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequestDto(
     to = to,
     cc = cc.ifEmpty { null },
     bcc = bcc.ifEmpty { null },

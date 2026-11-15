@@ -69,6 +69,16 @@ class ApiErrorMappingTest {
     }
 
     @Test
+    fun `a 400 with form-level errors includes them in the message`() = runTest {
+        val body = """{"error":"Invalid request body","details":{"formErrors":["Scheduled messages cannot have attachments yet"],"fieldErrors":{}}}"""
+
+        val failure = failureFor(HttpStatusCode.BadRequest, body)
+
+        assertTrue(failure is ApiException)
+        assertEquals("Invalid request body — Scheduled messages cannot have attachments yet", failure.message)
+    }
+
+    @Test
     fun `a 400 with only an error string uses that string as the message`() = runTest {
         val failure = failureFor(HttpStatusCode.BadRequest, """{"error":"Folder not found"}""")
 
@@ -156,6 +166,15 @@ class ApiErrorMappingTest {
     }
 
     @Test
+    fun `a 404 with the server's JSON error is presentable`() = runTest {
+        val failure = failureFor(HttpStatusCode.NotFound, """{"error":"Folder not found"}""")
+
+        assertTrue(failure is ApiException)
+        assertEquals(404, failure.status)
+        assertEquals("Folder not found", failure.message)
+    }
+
+    @Test
     fun `a 409 conflict carries the server's message`() = runTest {
         val failure = failureFor(HttpStatusCode.Conflict, """{"error":"Mailbox already exists"}""")
 
@@ -182,7 +201,7 @@ class ApiErrorMappingTest {
     @Test
     fun `other statuses are left as raw Ktor exceptions`() = runTest {
         val serverError = failureFor(HttpStatusCode.InternalServerError, """{"error":"boom"}""")
-        val notFound = failureFor(HttpStatusCode.NotFound, """{"error":"Not found"}""")
+        val notFound = failureFor(HttpStatusCode.NotFound, "<html>Not Found</html>")
 
         assertTrue(serverError is ResponseException)
         assertTrue(notFound is ResponseException)
