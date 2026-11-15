@@ -36,12 +36,15 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -68,7 +71,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -80,18 +82,22 @@ import com.sonicstarsolutions.agentic.inbox.theme.airmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.ui.components.DayHeader
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import com.sonicstarsolutions.agentic.inbox.ui.components.folderIcon
 import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
+import com.sonicstarsolutions.agentic.inbox.util.EmailDayGrouper
 import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlDocumentBuilder
 import com.sonicstarsolutions.agentic.inbox.util.EmailHtmlSanitizer
 import com.sonicstarsolutions.agentic.inbox.util.formatFileSize
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,6 +142,17 @@ fun ThreadScreen(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMoveSheet by remember { mutableStateOf(false) }
+
+    // Messages arrive oldest first, so the groups read top to bottom in time order.
+    val timeZone = remember { TimeZone.currentSystemDefault() }
+    val dayGroups = remember(state.messages) {
+        EmailDayGrouper.group(
+            items = state.messages,
+            instantOf = { EmailDayGrouper.instantOrEpoch(it.date) },
+            now = Clock.System.now(),
+            zone = timeZone,
+        )
+    }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -195,21 +212,32 @@ fun ThreadScreen(
                         IconButton(onClick = { showDeleteDialog = true }, enabled = !state.actionInProgress) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }
-                        IconButton(onClick = { showMoveSheet = true },
-                            enabled = !state.actionInProgress && state.folders.isNotEmpty(),
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Move to folder")
-                        }
-                        IconButton(
-                            onClick = viewModel::markSpam,
-                            enabled = !state.actionInProgress,
-                        ) {
-                            Icon(Icons.Default.Report, contentDescription = "Mark as spam")
+                        // Archive, Delete, overflow: Move and Spam are rarer, so their labels
+                        // do the explaining instead of two more bare icons.
+                        var showOverflow by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { showOverflow = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                            }
+                            DropdownMenu(expanded = showOverflow, onDismissRequest = { showOverflow = false }) {
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null) },
+                                    text = { Text("Move to folder") },
+                                    enabled = !state.actionInProgress && state.folders.isNotEmpty(),
+                                    onClick = { showOverflow = false; showMoveSheet = true },
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.Report, contentDescription = null) },
+                                    text = { Text("Mark as spam") },
+                                    enabled = !state.actionInProgress,
+                                    onClick = { showOverflow = false; viewModel.markSpam() },
+                                )
+                            }
                         }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    containerColor = MaterialTheme.colorScheme.surface,
                 ),
             )
         },
@@ -268,32 +296,41 @@ fun ThreadScreen(
                     item(key = "subject") {
                         Text(
                             text = subject,
-                            style = MaterialTheme.typography.headlineSmall,
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
                 }
 
-                items(state.messages, key = { it.id }) { message ->
-                    MessageCard(
-                        modifier = Modifier.padding(horizontal = 16.dp).animateItem(),
-                        message = message,
-                        expanded = message.id == state.expandedMessageId,
-                        imagesAllowed = state.imagesAllowedFor.contains(message.id),
-                        actionInProgress = state.actionInProgress,
-                        mailboxEmail = state.mailboxEmail,
-                        downloadingAttachmentIds = state.downloadingAttachmentIds,
-                        onToggleExpanded = { viewModel.toggleExpanded(message.id) },
-                        onAllowImages = { viewModel.allowImages(message.id) },
-                        onToggleStarred = { viewModel.toggleStarred(message.id) },
-                        onToggleRead = { viewModel.toggleReadState(message.id) },
-                        onReply = { onReply(message.id) },
-                        onReplyAll = { onReplyAll(message.id) },
-                        onForward = { onForward(message.id) },
-                        onOpenAttachment = { viewModel.openAttachment(message.id, it) },
-                        onShareAttachment = { viewModel.shareAttachment(message.id, it) },
-                    )
+                dayGroups.forEach { group ->
+                    // A thread that spans several days gets a static day header per day; one that
+                    // stays inside a single day needs none.
+                    if (dayGroups.size > 1) {
+                        item(key = "day-${group.date}", contentType = "day-header") {
+                            DayHeader(group = group, unreadCount = 0)
+                        }
+                    }
+                    items(group.items, key = { it.id }) { message ->
+                        MessageCard(
+                            modifier = Modifier.padding(horizontal = 16.dp).animateItem(),
+                            message = message,
+                            expanded = message.id == state.expandedMessageId,
+                            imagesAllowed = state.imagesAllowedFor.contains(message.id),
+                            actionInProgress = state.actionInProgress,
+                            mailboxEmail = state.mailboxEmail,
+                            downloadingAttachmentIds = state.downloadingAttachmentIds,
+                            onToggleExpanded = { viewModel.toggleExpanded(message.id) },
+                            onAllowImages = { viewModel.allowImages(message.id) },
+                            onToggleStarred = { viewModel.toggleStarred(message.id) },
+                            onToggleRead = { viewModel.toggleReadState(message.id) },
+                            onReply = { onReply(message.id) },
+                            onReplyAll = { onReplyAll(message.id) },
+                            onForward = { onForward(message.id) },
+                            onOpenAttachment = { viewModel.openAttachment(message.id, it) },
+                            onShareAttachment = { viewModel.shareAttachment(message.id, it) },
+                        )
+                    }
                 }
             }
         }
@@ -427,7 +464,7 @@ private fun MessageCard(
                     ) {
                         Text(
                             text = fromText,
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
@@ -657,13 +694,14 @@ private fun MessageCard(
 @Composable
 private fun DraftLabel() {
     Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
+        // Amber, not red: a draft is waiting, not wrong.
+        color = MaterialTheme.colorScheme.tertiaryContainer,
         shape = RoundedCornerShape(4.dp),
     ) {
         Text(
             text = "Draft",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         )
     }
@@ -682,12 +720,13 @@ private fun AttachmentChip(
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .combinedClickable(onClick = onOpen, onLongClick = onShare),
     ) {
+        // The shape lives on the Surface, which clips its content (and the ripple) to it; the
+        // click sits inside so no separate clip modifier is needed.
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier
+                .combinedClickable(onClick = onOpen, onLongClick = onShare)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
