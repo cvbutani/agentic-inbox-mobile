@@ -52,4 +52,15 @@ class MailboxDomainGroupingTest {
     fun `empty list produces no groups`() {
         assertEquals(emptyList(), groupMailboxesByDomain(emptyList()))
     }
+
+    @Test
+    fun `a domain with two or more mailboxes offers All inboxes`() {
+        assertEquals(true, offersAllInboxes(listOf(mailbox("a@work.com"), mailbox("b@work.com"))))
+    }
+
+    @Test
+    fun `a domain with a single mailbox does not, since it would only repeat that mailbox`() {
+        assertEquals(false, offersAllInboxes(listOf(mailbox("a@work.com"))))
+        assertEquals(false, offersAllInboxes(emptyList()))
+    }
 }

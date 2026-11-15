@@ -1,7 +1,10 @@
 package com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -87,6 +90,7 @@ private val CONTENT_MAX_WIDTH = 720.dp
 fun MailboxPickerScreen(
     onMailboxSelected: (mailboxId: String, mailboxName: String) -> Unit,
     onSignedOut: () -> Unit,
+    onAllInboxesSelected: (domain: String) -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(0.dp),
     viewModel: MailboxPickerViewModel = koinViewModel(),
 ) {
@@ -207,6 +211,7 @@ fun MailboxPickerScreen(
                         widthClass = widthClass,
                         onRefresh = viewModel::refresh,
                         onMailboxSelected = onMailboxSelected,
+                        onAllInboxesSelected = onAllInboxesSelected,
                         onDeleteRequested = { mailboxToDelete = it },
                         onCreateRequested = { showCreateDialog = true },
                         modifier = Modifier
@@ -235,6 +240,7 @@ private fun MailboxPickerContent(
     widthClass: WindowWidthClass,
     onRefresh: () -> Unit,
     onMailboxSelected: (mailboxId: String, mailboxName: String) -> Unit,
+    onAllInboxesSelected: (domain: String) -> Unit,
     onDeleteRequested: (Mailbox) -> Unit,
     onCreateRequested: () -> Unit,
     modifier: Modifier = Modifier,
@@ -294,6 +300,16 @@ private fun MailboxPickerContent(
                     stickyHeader(key = domain) {
                         DomainHeader(domain)
                     }
+                    if (offersAllInboxes(mailboxesInDomain)) {
+                        item(key = "all-$domain") {
+                            AllInboxesRow(
+                                domain = domain,
+                                mailboxCount = mailboxesInDomain.size,
+                                onClick = { onAllInboxesSelected(domain) },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
                     items(mailboxesInDomain, key = { it.id }) { mailbox ->
                         MailboxRow(
                             mailbox = mailbox,
@@ -316,6 +332,58 @@ internal fun groupMailboxesByDomain(mailboxes: List<Mailbox>): List<Pair<String,
         .groupBy { it.email.substringAfter('@').lowercase() }
         .toList()
         .sortedBy { (domain, _) -> domain }
+
+/** Whether a domain's mailboxes get an "All inboxes" entry: with a single mailbox it would only
+ * repeat that mailbox's own inbox. */
+internal fun offersAllInboxes(mailboxesInDomain: List<Mailbox>): Boolean = mailboxesInDomain.size >= 2
+
+/** The merged inbox of a whole domain, first in its group, on the same 72dp grid as a mailbox. */
+@Composable
+private fun AllInboxesRow(
+    domain: String,
+    mailboxCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Open all inboxes for $domain", onClick = onClick)
+                .padding(horizontal = ListRowDimens.horizontalPadding, vertical = ListRowDimens.verticalPadding),
+            horizontalArrangement = Arrangement.spacedBy(ListRowDimens.contentGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(ListRowDimens.avatarSize)
+                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Rounded.Inbox,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(ListRowDimens.lineGap),
+            ) {
+                Text("All inboxes", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "$mailboxCount mailboxes on $domain",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        HorizontalDivider(
+            modifier = Modifier.padding(start = ListRowDimens.textEdge),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
+}
 
 /** A domain's group title, on the 16dp edge. Opaque: a sticky header needs a solid background or
  * the rows scrolling underneath it show through. */

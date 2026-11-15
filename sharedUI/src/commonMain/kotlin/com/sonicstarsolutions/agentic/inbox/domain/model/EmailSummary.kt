@@ -26,3 +26,10 @@ data class EmailSummary(
 
 /** True when this row is a whole conversation (several messages), not a single message. */
 val EmailSummary.isConversation: Boolean get() = threadCount > 1 && !threadId.isNullOrBlank()
+
+/** The part of the mailbox address before the @ — enough to tell which of a domain's mailboxes a
+ * row lives in when they are listed together. Blank when the row has no mailbox of its own. */
+val EmailSummary.mailboxShortName: String get() = mailboxId.substringBefore('@')
+
+/** A key unique across a domain's mailboxes: two of them can each hold a message with the same id. */
+val EmailSummary.listKey: String get() = if (mailboxId.isBlank()) id else "$mailboxId/$id"

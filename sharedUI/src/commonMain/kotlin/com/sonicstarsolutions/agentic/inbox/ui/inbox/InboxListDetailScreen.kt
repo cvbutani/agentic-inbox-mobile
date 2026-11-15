@@ -49,6 +49,8 @@ fun InboxListDetailScreen(
     mailboxId: String,
     mailboxName: String,
     modifier: Modifier = Modifier,
+    /** Non-null for the merged "All inboxes" view of a domain. */
+    domain: String? = null,
     onSwitchMailbox: () -> Unit = {},
     onEmailSelected: (EmailSummary) -> Unit = {},
     onDraftSelected: (Draft) -> Unit = {},
@@ -56,14 +58,14 @@ fun InboxListDetailScreen(
     onSearch: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onOpenScheduled: () -> Unit = {},
-    onReply: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
-    onReplyAll: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
-    onForward: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
-    onEditDraft: (draftMessageId: String, threadId: String?) -> Unit = { _, _ -> },
+    onReply: (mailboxId: String, emailId: String, threadId: String?) -> Unit = { _, _, _ -> },
+    onReplyAll: (mailboxId: String, emailId: String, threadId: String?) -> Unit = { _, _, _ -> },
+    onForward: (mailboxId: String, emailId: String, threadId: String?) -> Unit = { _, _, _ -> },
+    onEditDraft: (mailboxId: String, draftMessageId: String, threadId: String?) -> Unit = { _, _, _ -> },
     /** Fired when the window narrows out of the split while an email is open in the detail
      * pane — the host should push it as a full-screen thread so it doesn't silently vanish. */
-    onOpenEmailFullScreen: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
-    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName, null) },
+    onOpenEmailFullScreen: (mailboxId: String, emailId: String, threadId: String?) -> Unit = { _, _, _ -> },
+    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName, domain) },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // Below EXPANDED a split would leave both panes too narrow to read, so phones and
@@ -73,6 +75,8 @@ fun InboxListDetailScreen(
 
         var openEmailId by rememberSaveable { mutableStateOf<String?>(null) }
         var openThreadId by rememberSaveable { mutableStateOf<String?>(null) }
+        // In the domain-wide view the open email can be in any of the domain's mailboxes.
+        var openMailboxId by rememberSaveable { mutableStateOf<String?>(null) }
 
         // Rotating out of the split with a conversation open used to just hide it; hand it to
         // the back stack instead so the user keeps what they were reading.
@@ -80,9 +84,11 @@ fun InboxListDetailScreen(
             if (!twoPane) {
                 val emailId = openEmailId ?: return@LaunchedEffect
                 val threadId = openThreadId
+                val openMailbox = openMailboxId ?: mailboxId
                 openEmailId = null
                 openThreadId = null
-                onOpenEmailFullScreen(emailId, threadId)
+                openMailboxId = null
+                onOpenEmailFullScreen(openMailbox, emailId, threadId)
             }
         }
 
@@ -111,6 +117,7 @@ fun InboxListDetailScreen(
                 onEmailSelected = { email ->
                     openEmailId = email.id
                     openThreadId = email.threadId
+                    openMailboxId = email.mailboxId.ifBlank { mailboxId }
                 },
                 onDraftSelected = onDraftSelected,
                 onComposeNew = onComposeNew,
@@ -132,8 +139,9 @@ fun InboxListDetailScreen(
                     // koinViewModel key so it gets that email's ThreadViewModel rather than
                     // reusing the previous one from this same ViewModelStoreOwner.
                     key(emailId) {
+                        val threadMailboxId = openMailboxId ?: mailboxId
                         ThreadScreen(
-                            mailboxId = mailboxId,
+                            mailboxId = threadMailboxId,
                             emailId = emailId,
                             threadId = openThreadId,
                             useCloseAffordance = true,
@@ -143,14 +151,15 @@ fun InboxListDetailScreen(
                                 // and refreshing so an archive/delete leaves the list too.
                                 openEmailId = null
                                 openThreadId = null
+                                openMailboxId = null
                                 viewModel.onRefresh()
                             },
-                            onReply = { id -> onReply(id, openThreadId) },
-                            onReplyAll = { id -> onReplyAll(id, openThreadId) },
-                            onForward = { id -> onForward(id, openThreadId) },
-                            onEditDraft = { id -> onEditDraft(id, openThreadId) },
-                            viewModel = koinViewModel(key = "thread-$emailId") {
-                                parametersOf(mailboxId, emailId, openThreadId)
+                            onReply = { id -> onReply(threadMailboxId, id, openThreadId) },
+                            onReplyAll = { id -> onReplyAll(threadMailboxId, id, openThreadId) },
+                            onForward = { id -> onForward(threadMailboxId, id, openThreadId) },
+                            onEditDraft = { id -> onEditDraft(threadMailboxId, id, openThreadId) },
+                            viewModel = koinViewModel(key = "thread-$threadMailboxId-$emailId") {
+                                parametersOf(threadMailboxId, emailId, openThreadId)
                             },
                         )
                     }
