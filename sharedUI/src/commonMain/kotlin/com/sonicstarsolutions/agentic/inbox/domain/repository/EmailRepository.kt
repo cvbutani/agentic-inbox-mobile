@@ -21,6 +21,17 @@ interface EmailRepository {
         limit: Int,
     ): Result<EmailPage>
 
+    /**
+     * One merged list across every mailbox on [domain], newest first, one row per conversation.
+     * Pages by [cursor] (null for the first page; the previous page's [EmailPage.nextCursor]
+     * after that). The first page is cached under each row's own mailbox, and is what an
+     * offline call falls back to.
+     */
+    suspend fun getDomainEmails(domain: String, folder: String, cursor: String?, limit: Int): Result<EmailPage>
+
+    /** Search across every mailbox on [domain]; same paging as [getDomainEmails]. Not cached. */
+    suspend fun searchDomain(domain: String, query: SearchQuery, cursor: String?, limit: Int): Result<EmailPage>
+
     /** Emails carrying [labelId], newest first, across folders (Trash excluded by the server). Not cached. */
     suspend fun getEmailsByLabel(mailboxId: String, labelId: String, page: Int, limit: Int): Result<EmailPage>
 

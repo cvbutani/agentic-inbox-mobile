@@ -33,6 +33,9 @@ class FakeFolderDao : FolderDao {
 
     override suspend fun getForMailbox(mailboxId: String): List<FolderEntity> = rows.filter { it.mailboxId == mailboxId }
 
+    override suspend fun getForDomain(domain: String): List<FolderEntity> =
+        rows.filter { it.mailboxId.substringAfter('@').equals(domain, ignoreCase = true) }
+
     override suspend fun deleteForMailbox(mailboxId: String) {
         rows.removeAll { it.mailboxId == mailboxId }
     }
@@ -51,6 +54,11 @@ class FakeEmailDao : EmailDao {
 
     override suspend fun getForFolder(mailboxId: String, folderId: String): List<EmailEntity> =
         rows.filter { it.mailboxId == mailboxId && it.folderId == folderId }.sortedByDescending { it.date }
+
+    override suspend fun getForDomainFolder(domain: String, folderId: String, limit: Int): List<EmailEntity> =
+        rows.filter { it.mailboxId.substringAfter('@').equals(domain, ignoreCase = true) && it.folderId == folderId }
+            .sortedByDescending { it.date }
+            .take(limit)
 
     override suspend fun deleteForFolder(mailboxId: String, folderId: String) {
         rows.removeAll { it.mailboxId == mailboxId && it.folderId == folderId }

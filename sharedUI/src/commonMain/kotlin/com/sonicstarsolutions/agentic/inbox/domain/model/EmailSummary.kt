@@ -17,6 +17,9 @@ data class EmailSummary(
     val labels: List<Label> = emptyList(),
     /** How many messages the row stands for: more than 1 means it is a whole conversation. */
     val threadCount: Int = 1,
+    /** The mailbox this row lives in. In a single mailbox's list it is that mailbox; in the
+     * domain-wide "All inboxes" list it is what says where to send a swipe, a reply or a delete. */
+    val mailboxId: String = "",
 ) {
     fun isUnread(): Boolean = !read || threadUnreadCount > 0
 }

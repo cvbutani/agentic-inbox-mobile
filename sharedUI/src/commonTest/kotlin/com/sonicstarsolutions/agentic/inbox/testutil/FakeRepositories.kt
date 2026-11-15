@@ -92,6 +92,14 @@ class FakeFolderRepository(
 
     var getFoldersCalls = 0
 
+    var domainResult: Result<List<Folder>> = Result.success(SystemFolders.defaults)
+    var getDomainFoldersCalls = 0
+
+    override suspend fun getDomainFolders(domain: String): Result<List<Folder>> {
+        getDomainFoldersCalls++
+        return domainResult
+    }
+
     override suspend fun getFolders(mailboxId: String): Result<List<Folder>> {
         getFoldersCalls++
         return result
@@ -207,12 +215,18 @@ class FakeEmailRepository(
     var forwardResult: Result<Unit> = Result.success(Unit),
     var labelPageHandler: (labelId: String, page: Int, limit: Int) -> Result<EmailPage> =
         { _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
+    var domainHandler: (domain: String, folder: String, cursor: String?, limit: Int) -> Result<EmailPage> =
+        { _, _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
+    var domainSearchHandler: (domain: String, query: SearchQuery, cursor: String?, limit: Int) -> Result<EmailPage> =
+        { _, _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
     /** Decides each [bulkUpdate] outcome; by default every id succeeds. */
     var bulkHandler: (action: BulkAction, ids: Collection<String>) -> BulkOutcome =
         { _, ids -> BulkOutcome(succeeded = ids.toSet(), failed = emptySet()) },
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
     data class SearchCall(val mailboxId: String, val query: SearchQuery, val page: Int, val limit: Int)
+    data class DomainCall(val domain: String, val folder: String, val cursor: String?, val limit: Int)
+    data class DomainSearchCall(val domain: String, val query: SearchQuery, val cursor: String?, val limit: Int)
     data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
     data class DeleteCall(val mailboxId: String, val emailId: String)
     data class BulkCall(
@@ -234,6 +248,8 @@ class FakeEmailRepository(
 
     val calls = mutableListOf<Call>()
     val searchCalls = mutableListOf<SearchCall>()
+    val domainCalls = mutableListOf<DomainCall>()
+    val domainSearchCalls = mutableListOf<DomainSearchCall>()
     val moveCalls = mutableListOf<MoveCall>()
     val deleteCalls = mutableListOf<DeleteCall>()
     val bulkCalls = mutableListOf<BulkCall>()
@@ -263,6 +279,18 @@ class FakeEmailRepository(
         calls += Call(mailboxId, folder, page, limit)
         gate?.await()
         return handler(mailboxId, folder, page, limit)
+    }
+
+    override suspend fun getDomainEmails(domain: String, folder: String, cursor: String?, limit: Int): Result<EmailPage> {
+        domainCalls += DomainCall(domain, folder, cursor, limit)
+        gate?.await()
+        return domainHandler(domain, folder, cursor, limit)
+    }
+
+    override suspend fun searchDomain(domain: String, query: SearchQuery, cursor: String?, limit: Int): Result<EmailPage> {
+        domainSearchCalls += DomainSearchCall(domain, query, cursor, limit)
+        searchGate?.await()
+        return domainSearchHandler(domain, query, cursor, limit)
     }
 
     override suspend fun search(mailboxId: String, query: SearchQuery, page: Int, limit: Int): Result<EmailPage> {
