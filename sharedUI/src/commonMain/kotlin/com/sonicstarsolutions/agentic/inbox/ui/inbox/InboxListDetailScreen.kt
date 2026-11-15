@@ -63,7 +63,7 @@ fun InboxListDetailScreen(
     /** Fired when the window narrows out of the split while an email is open in the detail
      * pane — the host should push it as a full-screen thread so it doesn't silently vanish. */
     onOpenEmailFullScreen: (emailId: String, threadId: String?) -> Unit = { _, _ -> },
-    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
+    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName, null) },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         // Below EXPANDED a split would leave both panes too narrow to read, so phones and

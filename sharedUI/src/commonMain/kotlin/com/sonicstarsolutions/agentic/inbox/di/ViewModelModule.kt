@@ -23,10 +23,12 @@ val viewModelModule = module {
     viewModelOf(::SwipeSettingsViewModel)
     // Runtime args (mailboxId/mailboxName) come from the Inbox nav key via parametersOf(...);
     // the use case is injected. Destructure the ParametersHolder positionally.
-    viewModel { (mailboxId: String, mailboxName: String) ->
+    // domain is null for one mailbox and the domain's name for the merged "All inboxes" view.
+    viewModel { (mailboxId: String, mailboxName: String, domain: String?) ->
         InboxViewModel(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
-            mailboxId, mailboxName,
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get(),
+            mailboxId, mailboxName, domain,
         )
     }
     viewModel { (mailboxId: String, emailId: String, threadId: String?) ->

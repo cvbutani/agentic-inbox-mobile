@@ -21,6 +21,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchDomainEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDomainLiveUpdatesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
@@ -63,6 +67,10 @@ val useCaseModule = module {
     singleOf(::GetAllowedDomainsUseCase)
     singleOf(::GetMailboxUseCase)
     singleOf(::GetEmailsUseCase)
+    singleOf(::GetDomainEmailsUseCase)
+    singleOf(::SearchDomainEmailsUseCase)
+    singleOf(::GetDomainFoldersUseCase)
+    singleOf(::ObserveDomainLiveUpdatesUseCase)
     singleOf(::SearchEmailsUseCase)
     singleOf(::GetFoldersUseCase)
     singleOf(::CreateFolderUseCase)

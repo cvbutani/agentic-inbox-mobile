@@ -133,7 +133,7 @@ fun InboxScreen(
     /** The email currently open in the detail pane, when this list is one half of the two-pane
      * layout — highlights that row. Null in single-pane, where opening an email leaves the list. */
     openEmailId: String? = null,
-    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
+    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName, null) },
     swipeSettingsViewModel: SwipeSettingsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()

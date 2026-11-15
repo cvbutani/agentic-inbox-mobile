@@ -29,6 +29,12 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCas
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDomainLiveUpdatesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeLabelRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeLiveUpdates
 import androidx.lifecycle.viewModelScope
@@ -85,6 +91,8 @@ class InboxViewModelTest {
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
         labelRepository: FakeLabelRepository = FakeLabelRepository(),
         liveUpdates: FakeLiveUpdates = FakeLiveUpdates(),
+        mailboxRepository: FakeMailboxRepository = FakeMailboxRepository(),
+        domain: String? = null,
     ): InboxViewModel = InboxViewModel(
         getEmails = GetEmailsUseCase(repository),
         getFolders = GetFoldersUseCase(folderRepository),
@@ -103,11 +111,18 @@ class InboxViewModelTest {
         observeLiveUpdates = ObserveLiveUpdatesUseCase(liveUpdates),
         observeDraftsUseCase = ObserveDraftsUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
+        getDomainEmails = GetDomainEmailsUseCase(repository),
+        getDomainFolders = GetDomainFoldersUseCase(folderRepository),
+        observeDomainLiveUpdates = ObserveDomainLiveUpdatesUseCase(
+            GetMailboxesUseCase(mailboxRepository),
+            ObserveLiveUpdatesUseCase(liveUpdates),
+        ),
         // Stands in for the app-lifetime scope; shares the test's virtual clock so the undo
         // window can be advanced past.
         externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
-        mailboxId = "mb1",
-        mailboxName = "Inbox",
+        mailboxId = if (domain == null) "mb1" else "",
+        mailboxName = if (domain == null) "Inbox" else "All inboxes",
+        domain = domain,
     )
 
     private fun draft(id: String, mailboxId: String = "mb1") = Draft(
@@ -1510,5 +1525,202 @@ class InboxViewModelTest {
         viewModel.enterSelectionMode("s2")
         viewModel.batchArchive()
         assertEquals(1, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+    }
+
+    // --- domain-wide "All inboxes" scope -------------------------------------------------------
+
+    private val alice = "a@example.com"
+    private val bob = "b@example.com"
+
+    private fun row(id: String, mailbox: String) = summary(id).copy(mailboxId = mailbox)
+
+    private fun domainInbox(vararg pages: Pair<List<EmailSummary>, String?>, total: Int = 99): FakeEmailRepository {
+        val byCursor = mutableMapOf<String?, Pair<List<EmailSummary>, String?>>()
+        var cursor: String? = null
+        pages.forEachIndexed { i, page ->
+            byCursor[cursor] = page
+            cursor = page.second ?: "end$i"
+        }
+        return FakeEmailRepository(
+            domainHandler = { _, _, requested, _ ->
+                val page = byCursor[requested] ?: (emptyList<EmailSummary>() to null)
+                Result.success(EmailPage(page.first, total, page.second))
+            },
+        )
+    }
+
+    @Test
+    fun `domain scope loads the merged first page from the domain endpoint`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice), row("b1", bob)) to null)
+
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        assertEquals(listOf(FakeEmailRepository.DomainCall("example.com", "inbox", null, 50)), repository.domainCalls)
+        assertTrue(repository.calls.isEmpty(), "the single-mailbox endpoint is not used")
+        assertEquals(listOf("a1", "b1"), viewModel.state.value.emails.map { it.id })
+        assertEquals("example.com", viewModel.state.value.domain)
+    }
+
+    @Test
+    fun `domain scope pages by cursor and stops when the server gives none`() = runTest {
+        val repository = domainInbox(
+            listOf(row("a1", alice)) to "C1",
+            listOf(row("b1", bob)) to null,
+        )
+        val viewModel = buildViewModel(repository, domain = "example.com")
+        assertEquals("C1", viewModel.state.value.nextCursor)
+
+        viewModel.loadMore()
+
+        assertEquals(listOf("a1", "b1"), viewModel.state.value.emails.map { it.id })
+        assertEquals("C1", repository.domainCalls.last().cursor)
+        assertNull(viewModel.state.value.nextCursor)
+
+        viewModel.loadMore()
+        assertEquals(2, repository.domainCalls.size, "no cursor left, so no further request")
+    }
+
+    @Test
+    fun `domain scope refresh starts again from the first page`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice)) to "C1", listOf(row("b1", bob)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+        viewModel.loadMore()
+
+        viewModel.onRefresh()
+
+        assertNull(repository.domainCalls.last().cursor)
+        assertEquals("C1", viewModel.state.value.nextCursor)
+        assertEquals(listOf("a1"), viewModel.state.value.emails.map { it.id })
+    }
+
+    @Test
+    fun `domain scope switching folder asks the domain endpoint for that folder`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        viewModel.selectFolder(SystemFolders.defaults.first { it.id == SystemFolders.SENT })
+
+        assertEquals("sent", repository.domainCalls.last().folder)
+        assertNull(repository.domainCalls.last().cursor)
+    }
+
+    @Test
+    fun `domain scope takes the drawer counts from the domain endpoint`() = runTest {
+        val folders = FakeFolderRepository()
+        folders.domainResult = inboxUnread(8)
+        val viewModel = buildViewModel(domainInbox(emptyList<EmailSummary>() to null), folders, domain = "example.com")
+
+        assertEquals(8, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+        assertEquals(0, folders.getFoldersCalls, "per-mailbox folders are not used")
+    }
+
+    @Test
+    fun `domain scope leaves labels and local drafts out`() = runTest {
+        val labels = FakeLabelRepository()
+        val viewModel = buildViewModel(domainInbox(emptyList<EmailSummary>() to null), labelRepository = labels, domain = "example.com")
+
+        assertTrue(viewModel.state.value.labels.isEmpty())
+        assertTrue(viewModel.state.value.drafts.isEmpty())
+    }
+
+    @Test
+    fun `archiving a row goes to that row's own mailbox`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice), row("b1", bob)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        viewModel.archiveEmail(row("b1", bob))
+
+        assertEquals(listOf(FakeEmailRepository.MoveCall(bob, "b1", SystemFolders.ARCHIVE)), repository.moveCalls)
+    }
+
+    @Test
+    fun `starring a row goes to that row's own mailbox`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        viewModel.toggleStarred(row("a1", alice))
+
+        assertEquals(alice, repository.setStarredCalls.single().mailboxId)
+    }
+
+    @Test
+    fun `a committed delete goes to that row's own mailbox`() = runTest {
+        val repository = domainInbox(listOf(row("b1", bob)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        viewModel.deleteEmail(row("b1", bob))
+        viewModel.commitPendingDelete()
+
+        assertEquals(listOf(FakeEmailRepository.DeleteCall(bob, "b1")), repository.deleteCalls)
+    }
+
+    @Test
+    fun `marking a row read goes to that row's own mailbox`() = runTest {
+        val repository = domainInbox(listOf(row("b1", bob)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+
+        viewModel.toggleRead(row("b1", bob))
+
+        assertEquals(bob, repository.bulkCalls.single().mailboxId)
+    }
+
+    @Test
+    fun `a batch across mailboxes sends one bulk request per mailbox, each with only its own rows`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice), row("b1", bob), row("a2", alice)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+        viewModel.enterSelectionMode("a1")
+        viewModel.toggleSelection("b1")
+        viewModel.toggleSelection("a2")
+
+        viewModel.batchArchive()
+
+        val byMailbox = repository.bulkCalls.associate { it.mailboxId to it.ids }
+        assertEquals(mapOf(alice to setOf("a1", "a2"), bob to setOf("b1")), byMailbox)
+        assertTrue(repository.bulkCalls.all { it.action == BulkAction.MOVE && it.folderId == SystemFolders.ARCHIVE })
+        assertTrue(viewModel.state.value.emails.isEmpty())
+    }
+
+    @Test
+    fun `a failed mailbox in a batch keeps only its own rows in the list`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice), row("b1", bob)) to null)
+        val viewModel = buildViewModel(repository, domain = "example.com")
+        repository.bulkHandler = { _, ids -> if ("b1" in ids) BulkOutcome(emptySet(), ids.toSet()) else BulkOutcome(ids.toSet(), emptySet()) }
+        viewModel.enterSelectionMode("a1")
+        viewModel.toggleSelection("b1")
+
+        viewModel.batchArchive()
+
+        assertEquals(listOf("b1"), viewModel.state.value.emails.map { it.id })
+        assertEquals("Failed to update 1 email(s)", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `a single-mailbox row with no mailbox of its own still goes to the screen's mailbox`() = runTest {
+        val repository = inboxOf(summary("s1"))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.archiveEmail(summary("s1"))
+
+        assertEquals("mb1", repository.moveCalls.single().mailboxId)
+    }
+
+    @Test
+    fun `domain scope refreshes when any mailbox on the domain reports a change`() = runTest {
+        val repository = domainInbox(listOf(row("a1", alice)) to null)
+        val live = FakeLiveUpdates()
+        val mailboxes = FakeMailboxRepository(result = Result.success(listOf(Mailbox(alice, alice, alice))))
+        val folders = FakeFolderRepository()
+        val viewModel = buildViewModel(repository, folders, liveUpdates = live, mailboxRepository = mailboxes, domain = "example.com")
+        val job = launch { viewModel.keepLive() }
+        advanceUntilIdle()
+        val callsBefore = repository.domainCalls.size
+
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(InboxViewModel.LIVE_DEBOUNCE_MILLIS + 1)
+        advanceUntilIdle()
+
+        assertTrue(repository.domainCalls.size > callsBefore)
+        assertTrue(folders.getDomainFoldersCalls > 1)
+        job.cancel()
     }
 }
