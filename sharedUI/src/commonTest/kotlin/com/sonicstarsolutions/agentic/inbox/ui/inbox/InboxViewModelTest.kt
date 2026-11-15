@@ -1430,4 +1430,85 @@ class InboxViewModelTest {
         assertEquals(BulkAction.READ, repository.bulkCalls.single().action)
         assertEquals(mapOf("c1" to "t1"), repository.bulkCalls.single().conversations)
     }
+
+    // --- drawer counts stay current ------------------------------------------------------------
+
+    private fun inboxUnread(count: Int) = Result.success(
+        SystemFolders.defaults.map { if (it.id == SystemFolders.INBOX) it.copy(unreadCount = count) else it },
+    )
+
+    @Test
+    fun `pull to refresh also reloads the folder counts`() = runTest {
+        val folders = FakeFolderRepository(result = inboxUnread(2))
+        val viewModel = buildViewModel(inboxOf(summary("s1")), folders)
+        assertEquals(2, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+
+        folders.result = inboxUnread(7)
+        viewModel.onRefresh()
+
+        assertEquals(7, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+    }
+
+    @Test
+    fun `switching folder reloads the folder counts`() = runTest {
+        val folders = FakeFolderRepository(result = inboxUnread(2))
+        val viewModel = buildViewModel(inboxOf(summary("s1")), folders)
+
+        folders.result = inboxUnread(5)
+        viewModel.selectFolder(SystemFolders.defaults.first { it.id == SystemFolders.SENT })
+
+        assertEquals(5, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+    }
+
+    @Test
+    fun `archiving reloads the folder counts`() = runTest {
+        val folders = FakeFolderRepository(result = inboxUnread(2))
+        val viewModel = buildViewModel(inboxOf(summary("s1")), folders)
+
+        folders.result = inboxUnread(1)
+        viewModel.archiveEmail(summary("s1"))
+
+        assertEquals(1, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+    }
+
+    @Test
+    fun `marking a row read reloads the folder counts`() = runTest {
+        val folders = FakeFolderRepository(result = inboxUnread(2))
+        val unread = summary("s1").copy(read = false)
+        val viewModel = buildViewModel(inboxOf(unread), folders)
+
+        folders.result = inboxUnread(1)
+        viewModel.toggleRead(unread)
+
+        assertEquals(1, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+    }
+
+    @Test
+    fun `a committed delete reloads the folder counts`() = runTest {
+        val folders = FakeFolderRepository(result = inboxUnread(2))
+        val viewModel = buildViewModel(inboxOf(summary("s1")), folders)
+
+        folders.result = inboxUnread(1)
+        viewModel.deleteEmail(summary("s1"))
+        viewModel.commitPendingDelete()
+
+        assertEquals(1, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+    }
+
+    @Test
+    fun `batch archive and batch mark read reload the folder counts`() = runTest {
+        val folders = FakeFolderRepository(result = inboxUnread(3))
+        val repository = inboxOf(summary("s1"), summary("s2"))
+        val viewModel = buildViewModel(repository, folders)
+
+        folders.result = inboxUnread(2)
+        viewModel.enterSelectionMode("s1")
+        viewModel.batchMarkAsRead()
+        assertEquals(2, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+
+        folders.result = inboxUnread(1)
+        viewModel.enterSelectionMode("s2")
+        viewModel.batchArchive()
+        assertEquals(1, viewModel.state.value.folders.first { it.id == SystemFolders.INBOX }.unreadCount)
+    }
 }

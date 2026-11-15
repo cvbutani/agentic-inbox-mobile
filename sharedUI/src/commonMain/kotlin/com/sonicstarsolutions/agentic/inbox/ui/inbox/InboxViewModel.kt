@@ -207,6 +207,9 @@ class InboxViewModel(
         // A reload would otherwise bring a swiped-away row straight back from the server.
         commitPendingDelete()
         _state.update { it.copy(refreshing = true, errorMessage = null) }
+        // The drawer's counts are as stale as the list is, so a refresh reloads both.
+        loadFolders()
+        loadLabels()
         viewModelScope.launch {
             fetchPage(page = 1)
                 .onSuccess { page ->
@@ -248,6 +251,7 @@ class InboxViewModel(
                 errorMessage = null,
             )
         }
+        loadFolders()
         viewModelScope.launch {
             fetchPage(page = 1)
                 .onSuccess { page ->
@@ -391,6 +395,7 @@ class InboxViewModel(
                         },
                     )
                 }
+                loadFolders()
             }.onFailure { t ->
                 _state.update { it.copy(errorMessage = t.message ?: "Failed to update") }
             }
@@ -457,7 +462,7 @@ class InboxViewModel(
             } else {
                 deleteEmailUseCase(mailboxId, pending.email.id)
             }
-            result.onFailure { t ->
+            result.onSuccess { loadFolders() }.onFailure { t ->
                 _state.update { current ->
                     val restored = current.emails.toMutableList()
                         .apply { add(pending.originalIndex.coerceAtMost(size), pending.email) }
@@ -480,7 +485,7 @@ class InboxViewModel(
             current.copy(emails = current.emails.filterNot { it.id == email.id }, totalCount = (current.totalCount - 1).coerceAtLeast(0))
         }
         viewModelScope.launch {
-            action().onFailure { t ->
+            action().onSuccess { loadFolders() }.onFailure { t ->
                 _state.update { current ->
                     val restored = current.emails.toMutableList().apply { add(originalIndex.coerceAtMost(size), email) }
                     current.copy(
@@ -785,6 +790,7 @@ class InboxViewModel(
                     errorMessage = failureMessage(outcome),
                 )
             }
+            loadFolders()
         }
     }
 
@@ -803,6 +809,7 @@ class InboxViewModel(
                     errorMessage = failureMessage(outcome),
                 )
             }
+            loadFolders()
         }
     }
 
