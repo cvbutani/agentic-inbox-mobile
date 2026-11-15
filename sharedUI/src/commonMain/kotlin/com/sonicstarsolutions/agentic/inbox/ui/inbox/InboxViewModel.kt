@@ -7,10 +7,17 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
 import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsByLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetLabelsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateLabelUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
@@ -54,6 +61,12 @@ data class InboxUiState(
     val folderDeleted: Boolean = false,
     val selectionMode: Boolean = false,
     val selectedEmailIds: Set<String> = emptySet(),
+    val labels: List<Label> = emptyList(),
+    /** When set, the list shows this label's emails (across folders) instead of [currentFolder]. */
+    val currentLabel: Label? = null,
+    val labelActionError: String? = null,
+    /** Pulses true when a create/edit succeeded so the dialog can close (same pattern as folderCreated). */
+    val labelSaved: Boolean = false,
     val pendingDelete: PendingDelete? = null,
     /** Locally saved drafts for this mailbox. Always observed, but only surfaced in the Drafts
      * folder — see [showingDrafts]. */
@@ -64,7 +77,21 @@ data class InboxUiState(
      * the folder to be honest about what's in it. */
     val showingDrafts: Boolean
         get() = currentFolder.id == SystemFolders.DRAFT
+
+    /** How many of the selected emails carry [labelId]: drives the tri-state box in the label picker. */
+    fun labelCheck(labelId: String): LabelCheck {
+        val selected = emails.filter { it.id in selectedEmailIds }
+        val carrying = selected.count { email -> email.labels.any { it.id == labelId } }
+        return when {
+            carrying == 0 -> LabelCheck.NONE
+            carrying == selected.size -> LabelCheck.ALL
+            else -> LabelCheck.SOME
+        }
+    }
 }
+
+/** Whether none, some or all of the selected emails carry a label. */
+enum class LabelCheck { NONE, SOME, ALL }
 
 class InboxViewModel(
     private val getEmails: GetEmailsUseCase,
@@ -76,6 +103,11 @@ class InboxViewModel(
     private val moveEmailUseCase: MoveEmailUseCase,
     private val deleteEmailUseCase: DeleteEmailUseCase,
     private val bulkUpdateEmails: BulkUpdateEmailsUseCase,
+    private val getEmailsByLabel: GetEmailsByLabelUseCase,
+    private val getLabels: GetLabelsUseCase,
+    private val createLabelUseCase: CreateLabelUseCase,
+    private val updateLabelUseCase: UpdateLabelUseCase,
+    private val deleteLabelUseCase: DeleteLabelUseCase,
     private val observeDraftsUseCase: ObserveDraftsUseCase,
     private val deleteDraftUseCase: DeleteDraftUseCase,
     /**
@@ -96,7 +128,18 @@ class InboxViewModel(
     init {
         loadFirstPage()
         loadFolders()
+        loadLabels()
         observeDrafts()
+    }
+
+    /** One page of whatever the list is showing: the open label's emails, else the current folder's. */
+    private suspend fun fetchPage(page: Int): Result<EmailPage> {
+        val label = _state.value.currentLabel
+        return if (label != null) {
+            getEmailsByLabel(mailboxId, label.id, page = page, limit = PAGE_SIZE)
+        } else {
+            getEmails(mailboxId, folder = _state.value.currentFolder.id, page = page, limit = PAGE_SIZE)
+        }
     }
 
     /** Collected for the ViewModel's whole life, not just while the Drafts folder is open, so
@@ -119,13 +162,14 @@ class InboxViewModel(
          * and the row the user just rescued would vanish anyway.
          */
         const val UNDO_WINDOW_MILLIS: Long = 6_000
+
+        private const val PAGE_SIZE = 50
     }
 
     fun loadFirstPage() {
-        val folderId = _state.value.currentFolder.id
         _state.update { it.copy(loading = true, errorMessage = null) }
         viewModelScope.launch {
-            getEmails(mailboxId, folder = folderId, page = 1, limit = 50)
+            fetchPage(page = 1)
                 .onSuccess { page ->
                     _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
                 }
@@ -152,10 +196,9 @@ class InboxViewModel(
         if (_state.value.refreshing) return
         // A reload would otherwise bring a swiped-away row straight back from the server.
         commitPendingDelete()
-        val folderId = _state.value.currentFolder.id
         _state.update { it.copy(refreshing = true, errorMessage = null) }
         viewModelScope.launch {
-            getEmails(mailboxId, folder = folderId, page = 1, limit = 50)
+            fetchPage(page = 1)
                 .onSuccess { page ->
                     _state.update { it.copy(refreshing = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
                 }
@@ -169,10 +212,9 @@ class InboxViewModel(
         val currentState = _state.value
         if (currentState.loading || currentState.emails.size >= currentState.totalCount) return
         val nextPage = currentState.page + 1
-        val folderId = currentState.currentFolder.id
         _state.update { it.copy(loading = true, errorMessage = null) }
         viewModelScope.launch {
-            getEmails(mailboxId, folder = folderId, page = nextPage, limit = 50)
+            fetchPage(page = nextPage)
                 .onSuccess { page ->
                     _state.update { it.copy(loading = false, emails = it.emails + page.emails, totalCount = page.totalCount, page = nextPage) }
                 }
@@ -183,11 +225,12 @@ class InboxViewModel(
     }
 
     fun selectFolder(folder: Folder) {
-        if (folder.id == _state.value.currentFolder.id) return
+        if (folder.id == _state.value.currentFolder.id && _state.value.currentLabel == null) return
         commitPendingDelete()
         _state.update {
             it.copy(
                 currentFolder = folder,
+                currentLabel = null,
                 emails = emptyList(),
                 totalCount = 0,
                 page = 1,
@@ -196,7 +239,7 @@ class InboxViewModel(
             )
         }
         viewModelScope.launch {
-            getEmails(mailboxId, folder = folder.id, page = 1, limit = 50)
+            fetchPage(page = 1)
                 .onSuccess { page ->
                     _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
                 }
@@ -408,6 +451,183 @@ class InboxViewModel(
             }
         }
     }
+
+    // --- labels -------------------------------------------------------------------------------
+
+    private fun loadLabels() {
+        viewModelScope.launch {
+            // Non-fatal like folders: without labels the drawer just has no Labels section.
+            getLabels(mailboxId).onSuccess { list -> _state.update { it.copy(labels = list) } }
+        }
+    }
+
+    /** Shows [label]'s emails (across folders) in place of the current folder's. */
+    fun selectLabel(label: Label) {
+        if (_state.value.currentLabel?.id == label.id) return
+        commitPendingDelete()
+        _state.update {
+            it.copy(
+                currentLabel = label,
+                emails = emptyList(),
+                totalCount = 0,
+                page = 1,
+                loading = true,
+                errorMessage = null,
+                selectionMode = false,
+                selectedEmailIds = emptySet(),
+            )
+        }
+        reloadFirstPage()
+    }
+
+    private fun reloadFirstPage() {
+        viewModelScope.launch {
+            fetchPage(page = 1)
+                .onSuccess { page ->
+                    _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
+                }
+                .onFailure { t ->
+                    _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
+                }
+        }
+    }
+
+    private fun leaveLabel() {
+        _state.update {
+            it.copy(currentLabel = null, emails = emptyList(), totalCount = 0, page = 1, loading = true, errorMessage = null)
+        }
+        reloadFirstPage()
+    }
+
+    fun createLabel(name: String, color: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            _state.update { it.copy(labelActionError = "Label name is required.") }
+            return
+        }
+        _state.update { it.copy(labelActionError = null) }
+        viewModelScope.launch {
+            createLabelUseCase(mailboxId, trimmed, color)
+                .onSuccess { label ->
+                    _state.update { it.copy(labels = (it.labels + label).sortedBy { l -> l.name.lowercase() }, labelSaved = true) }
+                }
+                .onFailure { t ->
+                    _state.update { it.copy(labelActionError = t.message ?: t::class.simpleName ?: "Failed to create label") }
+                }
+        }
+    }
+
+    fun updateLabel(label: Label, name: String, color: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            _state.update { it.copy(labelActionError = "Label name is required.") }
+            return
+        }
+        val newName = trimmed.takeIf { it != label.name }
+        val newColor = color.takeIf { it != label.color }
+        if (newName == null && newColor == null) {
+            _state.update { it.copy(labelSaved = true) }
+            return
+        }
+        _state.update { it.copy(labelActionError = null) }
+        viewModelScope.launch {
+            updateLabelUseCase(mailboxId, label.id, newName, newColor)
+                .onSuccess { updated ->
+                    val renamed = updated.copy(count = label.count)
+                    _state.update { current ->
+                        current.copy(
+                            labels = current.labels.map { if (it.id == label.id) renamed else it }.sortedBy { it.name.lowercase() },
+                            currentLabel = if (current.currentLabel?.id == label.id) renamed else current.currentLabel,
+                            emails = current.emails.map { email ->
+                                email.copy(labels = email.labels.map { if (it.id == label.id) renamed.copy(count = 0) else it })
+                            },
+                            labelSaved = true,
+                        )
+                    }
+                }
+                .onFailure { t ->
+                    _state.update { it.copy(labelActionError = t.message ?: t::class.simpleName ?: "Failed to update label") }
+                }
+        }
+    }
+
+    fun deleteLabel(label: Label) {
+        viewModelScope.launch {
+            deleteLabelUseCase(mailboxId, label.id)
+                .onSuccess {
+                    val wasOpen = _state.value.currentLabel?.id == label.id
+                    _state.update { current ->
+                        current.copy(
+                            labels = current.labels.filterNot { it.id == label.id },
+                            emails = current.emails.map { e -> e.copy(labels = e.labels.filterNot { it.id == label.id }) },
+                        )
+                    }
+                    if (wasOpen) leaveLabel()
+                }
+                .onFailure { t ->
+                    _state.update { it.copy(labelActionError = t.message ?: t::class.simpleName ?: "Failed to delete label") }
+                }
+        }
+    }
+
+    fun consumeLabelSaved() {
+        _state.update { it.copy(labelSaved = false) }
+    }
+
+    fun consumeLabelActionError() {
+        _state.update { it.copy(labelActionError = null) }
+    }
+
+    /**
+     * Applies the label picker's result to the selection: each entry says whether that label
+     * should now be on the selected emails (true) or off them (false). Labels the user left
+     * untouched aren't in [changes], so a mixed state stays mixed.
+     */
+    fun applyLabelChanges(changes: Map<String, Boolean>) {
+        val ids = _state.value.selectedEmailIds
+        if (ids.isEmpty()) return
+        if (changes.isEmpty()) {
+            clearSelection()
+            return
+        }
+        viewModelScope.launch {
+            val results = changes.map { (labelId, add) ->
+                val action = if (add) BulkAction.LABEL else BulkAction.UNLABEL
+                LabelChangeResult(labelId, add, bulkUpdateEmails(mailboxId, action, ids, labelId = labelId))
+            }
+            _state.update { current ->
+                val known = current.labels.associateBy { it.id }
+                var emails = current.emails
+                for (result in results) {
+                    val label = known[result.labelId] ?: Label(id = result.labelId, name = result.labelId)
+                    emails = emails.map { email ->
+                        if (email.id !in result.outcome.succeeded) {
+                            email
+                        } else {
+                            val others = email.labels.filterNot { it.id == result.labelId }
+                            email.copy(labels = if (result.add) others + label.copy(count = 0) else others)
+                        }
+                    }
+                }
+                // Taking the open label off an email means it no longer belongs in this list.
+                val open = current.currentLabel
+                val dropped = results
+                    .filter { !it.add && it.labelId == open?.id }
+                    .flatMap { it.outcome.succeeded }
+                    .toSet()
+                val failed = results.flatMap { it.outcome.failed }.toSet()
+                current.copy(
+                    emails = emails.filterNot { it.id in dropped },
+                    totalCount = (current.totalCount - dropped.count { id -> current.emails.any { it.id == id } }).coerceAtLeast(0),
+                    selectionMode = false,
+                    selectedEmailIds = emptySet(),
+                    errorMessage = failed.size.takeIf { it > 0 }?.let { "Failed to update $it email(s)" },
+                )
+            }
+        }
+    }
+
+    private class LabelChangeResult(val labelId: String, val add: Boolean, val outcome: BulkOutcome)
 
     fun enterSelectionMode(emailId: String) {
         _state.update { it.copy(selectionMode = true, selectedEmailIds = setOf(emailId)) }

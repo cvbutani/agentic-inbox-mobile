@@ -5,6 +5,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.data.local.EmailEntity
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
@@ -298,6 +299,86 @@ class EmailRepositoryImplTest {
         val result = repository.markThreadRead(mailboxId = "mb1", threadId = "t1")
 
         assertTrue(result.isFailure)
+    }
+
+    // --- labels --------------------------------------------------------------------------------
+
+    private val labelledPage = """
+        {"emails":[{"id":"e1","subject":"S","sender":"a@x.dev","recipient":"me@x.dev","date":"2026-01-01T00:00:00Z",
+          "labels":[{"id":"work","name":"Work","color":"blue"},{"id":"fun","name":"Fun","color":"red"}]}],"totalCount":1}
+    """.trimIndent()
+
+    private val workLabel = Label("work", "Work", "blue")
+    private val funLabel = Label("fun", "Fun", "red")
+
+    @Test
+    fun `getEmails maps the labels on each email`() = runTest {
+        val engine = MockEngine { respond(labelledPage, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json")) }
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        val page = repository.getEmails("mb1", "inbox", page = 1, limit = 25).getOrThrow()
+
+        assertEquals(listOf(workLabel, funLabel), page.emails.single().labels)
+    }
+
+    @Test
+    fun `a server that sends no labels field gives an email with no labels`() = runTest {
+        val engine = MockEngine {
+            respond(
+                """{"emails":[{"id":"e1","subject":"S","sender":"a@x.dev","recipient":"me@x.dev","date":"2026-01-01T00:00:00Z"}],"totalCount":1}""",
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        val page = repository.getEmails("mb1", "inbox", page = 1, limit = 25).getOrThrow()
+
+        assertTrue(page.emails.single().labels.isEmpty())
+    }
+
+    @Test
+    fun `labels survive the offline cache round trip`() = runTest {
+        var online = true
+        val engine = MockEngine {
+            if (online) respond(labelledPage, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            else respond("", HttpStatusCode.InternalServerError)
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+        repository.getEmails("mb1", "inbox", page = 1, limit = 25)
+
+        online = false
+        val cached = repository.getEmails("mb1", "inbox", page = 1, limit = 25).getOrThrow()
+
+        assertEquals(listOf(workLabel, funLabel), cached.emails.single().labels)
+    }
+
+    @Test
+    fun `getEmailsByLabel asks for the label and does not touch the folder cache`() = runTest {
+        val engine = MockEngine { respond(labelledPage, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json")) }
+        val dao = FakeEmailDao()
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        val page = repository.getEmailsByLabel("mb1", "work", page = 2, limit = 25).getOrThrow()
+
+        val request = engine.requestHistory.single()
+        assertEquals("/api/v1/mailboxes/mb1/emails", request.url.encodedPath)
+        assertEquals("work", request.url.parameters["label"])
+        assertEquals("2", request.url.parameters["page"])
+        assertEquals(1, page.totalCount)
+        assertTrue(dao.getForFolder("mb1", "inbox").isEmpty())
+    }
+
+    @Test
+    fun `bulkUpdate sends the label id for label and unlabel`() = runTest {
+        for ((action, name) in mapOf(BulkAction.LABEL to "label", BulkAction.UNLABEL to "unlabel")) {
+            val engine = bulkEngine()
+            EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+                .bulkUpdate("mb1", action, listOf("e1"), labelId = "work")
+
+            val body = bodyOf(engine.requestHistory.single())
+            assertTrue(body.contains("\"action\":\"$name\"") && body.contains("\"labelId\":\"work\""), body)
+        }
     }
 
     // --- bulk actions --------------------------------------------------------------------------

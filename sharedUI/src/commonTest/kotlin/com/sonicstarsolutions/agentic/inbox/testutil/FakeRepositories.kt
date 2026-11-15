@@ -7,6 +7,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
@@ -15,6 +16,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionReposito
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import kotlinx.coroutines.CompletableDeferred
@@ -187,6 +189,8 @@ class FakeEmailRepository(
     var sendResult: Result<Unit> = Result.success(Unit),
     var replyResult: Result<Unit> = Result.success(Unit),
     var forwardResult: Result<Unit> = Result.success(Unit),
+    var labelPageHandler: (labelId: String, page: Int, limit: Int) -> Result<EmailPage> =
+        { _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
     /** Decides each [bulkUpdate] outcome; by default every id succeeds. */
     var bulkHandler: (action: BulkAction, ids: Collection<String>) -> BulkOutcome =
         { _, ids -> BulkOutcome(succeeded = ids.toSet(), failed = emptySet()) },
@@ -195,7 +199,14 @@ class FakeEmailRepository(
     data class SearchCall(val mailboxId: String, val query: SearchQuery, val page: Int, val limit: Int)
     data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
     data class DeleteCall(val mailboxId: String, val emailId: String)
-    data class BulkCall(val mailboxId: String, val action: BulkAction, val ids: Set<String>, val folderId: String?)
+    data class BulkCall(
+        val mailboxId: String,
+        val action: BulkAction,
+        val ids: Set<String>,
+        val folderId: String?,
+        val labelId: String? = null,
+    )
+    data class LabelPageCall(val mailboxId: String, val labelId: String, val page: Int, val limit: Int)
     data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
     data class SetStarredCall(val mailboxId: String, val emailId: String, val starred: Boolean)
     data class MarkThreadReadCall(val mailboxId: String, val threadId: String)
@@ -208,6 +219,7 @@ class FakeEmailRepository(
     val moveCalls = mutableListOf<MoveCall>()
     val deleteCalls = mutableListOf<DeleteCall>()
     val bulkCalls = mutableListOf<BulkCall>()
+    val labelPageCalls = mutableListOf<LabelPageCall>()
     val setReadCalls = mutableListOf<SetReadCall>()
     val setStarredCalls = mutableListOf<SetStarredCall>()
     val markThreadReadCalls = mutableListOf<MarkThreadReadCall>()
@@ -247,13 +259,19 @@ class FakeEmailRepository(
         return moveResult
     }
 
+    override suspend fun getEmailsByLabel(mailboxId: String, labelId: String, page: Int, limit: Int): Result<EmailPage> {
+        labelPageCalls += LabelPageCall(mailboxId, labelId, page, limit)
+        return labelPageHandler(labelId, page, limit)
+    }
+
     override suspend fun bulkUpdate(
         mailboxId: String,
         action: BulkAction,
         emailIds: Collection<String>,
         folderId: String?,
+        labelId: String?,
     ): BulkOutcome {
-        bulkCalls += BulkCall(mailboxId, action, emailIds.toSet(), folderId)
+        bulkCalls += BulkCall(mailboxId, action, emailIds.toSet(), folderId, labelId)
         return bulkHandler(action, emailIds)
     }
 
@@ -347,5 +365,35 @@ class FakeAttachmentOpener : AttachmentOpener {
     override fun share(path: String, mimeType: String): Result<Unit> {
         shareCalls += OpenCall(path, mimeType)
         return Result.success(Unit)
+    }
+}
+
+class FakeLabelRepository(
+    var labelsResult: Result<List<Label>> = Result.success(emptyList()),
+    var createResult: (name: String, color: String) -> Result<Label> =
+        { name, color -> Result.success(Label(id = name.lowercase(), name = name, color = color)) },
+    var updateResult: (id: String, name: String?, color: String?) -> Result<Label> =
+        { id, name, color -> Result.success(Label(id = id, name = name ?: id, color = color ?: "slate")) },
+    var deleteResult: Result<Unit> = Result.success(Unit),
+) : LabelRepository {
+    val createCalls = mutableListOf<Pair<String, String>>()
+    val updateCalls = mutableListOf<Triple<String, String?, String?>>()
+    val deleteCalls = mutableListOf<String>()
+
+    override suspend fun getLabels(mailboxId: String): Result<List<Label>> = labelsResult
+
+    override suspend fun createLabel(mailboxId: String, name: String, color: String): Result<Label> {
+        createCalls += name to color
+        return createResult(name, color)
+    }
+
+    override suspend fun updateLabel(mailboxId: String, labelId: String, name: String?, color: String?): Result<Label> {
+        updateCalls += Triple(labelId, name, color)
+        return updateResult(labelId, name, color)
+    }
+
+    override suspend fun deleteLabel(mailboxId: String, labelId: String): Result<Unit> {
+        deleteCalls += labelId
+        return deleteResult
     }
 }

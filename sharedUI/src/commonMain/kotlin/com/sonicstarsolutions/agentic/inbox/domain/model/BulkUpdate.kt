@@ -1,7 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.domain.model
 
 /** A change applied to many emails in one request. */
-enum class BulkAction { READ, UNREAD, STAR, UNSTAR, MOVE, DELETE }
+enum class BulkAction { READ, UNREAD, STAR, UNSTAR, MOVE, DELETE, LABEL, UNLABEL }
 
 /**
  * Which of the requested emails a bulk update changed. The two sets partition the requested ids:

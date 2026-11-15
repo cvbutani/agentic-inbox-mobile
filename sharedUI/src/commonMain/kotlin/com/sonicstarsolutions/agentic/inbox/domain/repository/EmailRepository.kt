@@ -21,14 +21,18 @@ interface EmailRepository {
         limit: Int,
     ): Result<EmailPage>
 
+    /** Emails carrying [labelId], newest first, across folders (Trash excluded by the server). Not cached. */
+    suspend fun getEmailsByLabel(mailboxId: String, labelId: String, page: Int, limit: Int): Result<EmailPage>
+
     suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit>
     /** Applies [action] to every id in as few requests as the server allows. Never throws: ids
-     * that could not be updated come back in [BulkOutcome.failed]. [folderId] is the target of a move. */
+     * that could not be updated come back in [BulkOutcome.failed]. [folderId] is the target of a move and [labelId] the label for LABEL/UNLABEL. */
     suspend fun bulkUpdate(
         mailboxId: String,
         action: BulkAction,
         emailIds: Collection<String>,
         folderId: String? = null,
+        labelId: String? = null,
     ): BulkOutcome
 
     suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit>

@@ -10,7 +10,7 @@ import androidx.sqlite.execSQL
 
 @Database(
     entities = [MailboxEntity::class, FolderEntity::class, EmailEntity::class, DraftEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -53,6 +53,14 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(connection: SQLiteConnection) {
         connection.execSQL("ALTER TABLE `mailboxes` ADD COLUMN `fromName` TEXT")
+    }
+}
+
+/** Adds the `labelsJson` column to `emails` so list rows keep their label chips offline. A cache
+ * column like `fromName`: nullable, refilled on the next fetch. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `emails` ADD COLUMN `labelsJson` TEXT")
     }
 }
 

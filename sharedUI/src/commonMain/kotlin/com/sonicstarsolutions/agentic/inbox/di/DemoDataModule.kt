@@ -20,6 +20,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsReposit
 import com.sonicstarsolutions.agentic.inbox.domain.repository.DraftRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import kotlinx.coroutines.flow.Flow
@@ -307,6 +309,9 @@ class DemoEmailRepository : EmailRepository {
         return Result.success(EmailPage(emails, emails.size))
     }
 
+
+    override suspend fun getEmailsByLabel(mailboxId: String, labelId: String, page: Int, limit: Int): Result<EmailPage> =
+        Result.success(EmailPage(emptyList(), 0))
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> {
         messagesById[emailId]?.let { messagesById[emailId] = it.copy(folderId = folderId) }
         return Result.success(Unit)
@@ -317,6 +322,7 @@ class DemoEmailRepository : EmailRepository {
         action: BulkAction,
         emailIds: Collection<String>,
         folderId: String?,
+        labelId: String?,
     ): BulkOutcome {
         for (id in emailIds) {
             when (action) {
@@ -326,6 +332,7 @@ class DemoEmailRepository : EmailRepository {
                 BulkAction.UNSTAR -> setStarred(mailboxId, id, false)
                 BulkAction.MOVE -> moveEmail(mailboxId, id, folderId ?: SystemFolders.INBOX)
                 BulkAction.DELETE -> deleteEmail(mailboxId, id)
+                BulkAction.LABEL, BulkAction.UNLABEL -> Unit // demo mail carries no labels
             }
         }
         return BulkOutcome(succeeded = emailIds.toSet(), failed = emptySet())
@@ -391,7 +398,36 @@ val demoRepositoryModule = module {
     single<MailboxRepository> { DemoMailboxRepository() }
     single<EmailRepository> { DemoEmailRepository() }
     single<FolderRepository> { DemoFolderRepository() }
+    single<LabelRepository> { DemoLabelRepository() }
     single<ThreadRepository> { DemoThreadRepository() }
     single<DraftRepository> { DemoDraftRepository() }
     single<AttachmentRepository> { DemoAttachmentRepository() }
+}
+
+/** In-memory labels for demo mode. */
+class DemoLabelRepository : LabelRepository {
+    private val labels = mutableListOf(
+        Label("work", "Work", "blue"),
+        Label("travel", "Travel", "teal"),
+    )
+
+    override suspend fun getLabels(mailboxId: String): Result<List<Label>> = Result.success(labels.toList())
+
+    override suspend fun createLabel(mailboxId: String, name: String, color: String): Result<Label> {
+        val label = Label(id = name.lowercase().replace(' ', '-'), name = name, color = color)
+        labels += label
+        return Result.success(label)
+    }
+
+    override suspend fun updateLabel(mailboxId: String, labelId: String, name: String?, color: String?): Result<Label> {
+        val index = labels.indexOfFirst { it.id == labelId }
+        if (index < 0) return Result.failure(IllegalArgumentException("Label not found"))
+        labels[index] = labels[index].copy(name = name ?: labels[index].name, color = color ?: labels[index].color)
+        return Result.success(labels[index])
+    }
+
+    override suspend fun deleteLabel(mailboxId: String, labelId: String): Result<Unit> {
+        labels.removeAll { it.id == labelId }
+        return Result.success(Unit)
+    }
 }

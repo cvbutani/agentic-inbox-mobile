@@ -14,6 +14,7 @@ data class EmailSummary(
     // The list row's own `read` reflects just this one message — a thread can still have earlier
     // unread messages in it even once its latest message is read, so the list must check both.
     val threadUnreadCount: Int = 0,
+    val labels: List<Label> = emptyList(),
 ) {
     fun isUnread(): Boolean = !read || threadUnreadCount > 0
 }

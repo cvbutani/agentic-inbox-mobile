@@ -22,6 +22,7 @@ data class EmailMetadataDto(
     @SerialName("folder_id") val folderId: String? = null,
     val snippet: String? = null,
     @SerialName("thread_unread_count") val threadUnreadCount: Int = 0,
+    @SerialName("labels") val labels: List<LabelDto> = emptyList(),
 )
 
 @Serializable
@@ -127,6 +128,7 @@ data class BulkRequestDto(
     @SerialName("action") val action: String,
     @SerialName("ids") val ids: List<String>,
     @SerialName("folderId") val folderId: String? = null,
+    @SerialName("labelId") val labelId: String? = null,
 )
 
 @Serializable

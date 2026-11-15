@@ -135,6 +135,24 @@ fun EmailListItem(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        if (email.labels.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                email.labels.take(MAX_ROW_LABELS).forEach { label ->
+                                    LabelChip(label, modifier = Modifier.weight(1f, fill = false))
+                                }
+                                val hidden = email.labels.size - MAX_ROW_LABELS
+                                if (hidden > 0) {
+                                    Text(
+                                        text = "+$hidden",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     // Star toggle — hidden while selecting so it doesn't compete with the checkbox
@@ -159,3 +177,6 @@ fun EmailListItem(
         }
     }
 }
+
+/** Chips shown on a row before the rest collapse into "+N" — enough to scan, few enough for one line. */
+private const val MAX_ROW_LABELS = 3

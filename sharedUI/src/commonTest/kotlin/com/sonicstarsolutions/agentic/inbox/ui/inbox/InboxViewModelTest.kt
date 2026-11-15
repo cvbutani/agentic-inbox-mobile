@@ -6,8 +6,14 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsByLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetLabelsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateLabelUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
@@ -21,6 +27,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCas
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeLabelRepository
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -72,6 +79,7 @@ class InboxViewModelTest {
         repository: FakeEmailRepository,
         folderRepository: FakeFolderRepository = FakeFolderRepository(),
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
+        labelRepository: FakeLabelRepository = FakeLabelRepository(),
     ): InboxViewModel = InboxViewModel(
         getEmails = GetEmailsUseCase(repository),
         getFolders = GetFoldersUseCase(folderRepository),
@@ -82,6 +90,11 @@ class InboxViewModelTest {
         moveEmailUseCase = MoveEmailUseCase(repository),
         deleteEmailUseCase = DeleteEmailUseCase(repository),
         bulkUpdateEmails = BulkUpdateEmailsUseCase(repository),
+        getEmailsByLabel = GetEmailsByLabelUseCase(repository),
+        getLabels = GetLabelsUseCase(labelRepository),
+        createLabelUseCase = CreateLabelUseCase(labelRepository),
+        updateLabelUseCase = UpdateLabelUseCase(labelRepository),
+        deleteLabelUseCase = DeleteLabelUseCase(labelRepository),
         observeDraftsUseCase = ObserveDraftsUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
         // Stands in for the app-lifetime scope; shares the test's virtual clock so the undo
@@ -880,5 +893,227 @@ class InboxViewModelTest {
         )
         assertTrue(viewModel.state.value.emails.none { it.read })
         assertFalse(viewModel.state.value.selectionMode)
+    }
+
+    // --- labels ----------------------------------------------------------------------------
+
+    private val work = Label("work", "Work", "blue")
+    private val fun_ = Label("fun", "Fun", "red")
+
+    @Test
+    fun `the mailbox's labels are loaded into state`() = runTest {
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = FakeLabelRepository(Result.success(listOf(work, fun_))))
+        advanceUntilIdle()
+
+        assertEquals(listOf(work, fun_), viewModel.state.value.labels)
+    }
+
+    @Test
+    fun `a failed label lookup leaves the drawer without labels and shows no error`() = runTest {
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = FakeLabelRepository(Result.failure(RuntimeException("offline"))))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.labels.isEmpty())
+        assertNull(viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `selectLabel shows that label's emails instead of a folder`() = runTest {
+        val repository = FakeEmailRepository(
+            labelPageHandler = { _, _, _ -> Result.success(EmailPage(listOf(summary("l1"), summary("l2")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository, labelRepository = FakeLabelRepository(Result.success(listOf(work))))
+
+        viewModel.selectLabel(work)
+
+        assertEquals(work, viewModel.state.value.currentLabel)
+        assertEquals(listOf("l1", "l2"), viewModel.state.value.emails.map { it.id })
+        assertEquals(listOf(FakeEmailRepository.LabelPageCall("mb1", "work", 1, 50)), repository.labelPageCalls)
+        assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `selecting a folder leaves the label view`() = runTest {
+        val repository = FakeEmailRepository()
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+
+        viewModel.selectFolder(SystemFolders.defaults.first { it.id == SystemFolders.ARCHIVE })
+
+        assertNull(viewModel.state.value.currentLabel)
+        assertEquals("archive", viewModel.state.value.currentFolder.id)
+        assertEquals("archive", repository.calls.last().folder)
+    }
+
+    @Test
+    fun `refresh and load more keep using the label query while a label is open`() = runTest {
+        val repository = FakeEmailRepository(
+            labelPageHandler = { _, page, _ -> Result.success(EmailPage(listOf(summary("p$page")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+
+        viewModel.loadMore()
+        viewModel.onRefresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf(1, 2, 1), repository.labelPageCalls.map { it.page })
+        assertTrue(repository.calls.none { it.page == 2 }, "a folder page must not be fetched for a label view")
+    }
+
+    @Test
+    fun `createLabel adds the label and signals the dialog to close`() = runTest {
+        val labels = FakeLabelRepository()
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.createLabel("  Client work ", "teal")
+
+        assertEquals(listOf("Client work" to "teal"), labels.createCalls)
+        assertEquals(listOf("client work"), viewModel.state.value.labels.map { it.id })
+        assertTrue(viewModel.state.value.labelSaved)
+    }
+
+    @Test
+    fun `createLabel rejects a blank name without calling the server`() = runTest {
+        val labels = FakeLabelRepository()
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.createLabel("   ", "teal")
+
+        assertTrue(labels.createCalls.isEmpty())
+        assertEquals("Label name is required.", viewModel.state.value.labelActionError)
+    }
+
+    @Test
+    fun `createLabel shows the server's message when it fails`() = runTest {
+        val labels = FakeLabelRepository(createResult = { _, _ -> Result.failure(RuntimeException("A label with this name already exists")) })
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.createLabel("Work", "blue")
+
+        assertEquals("A label with this name already exists", viewModel.state.value.labelActionError)
+        assertFalse(viewModel.state.value.labelSaved)
+        assertTrue(viewModel.state.value.labels.isEmpty())
+    }
+
+    @Test
+    fun `updateLabel changes the label in the list and the open label view`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work, fun_)))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+        viewModel.selectLabel(work)
+
+        viewModel.updateLabel(work, name = "Office", color = "purple")
+
+        val renamed = Label("work", "Office", "purple")
+        assertEquals(listOf("fun" to "Fun", "work" to "Office"), viewModel.state.value.labels.map { it.id to it.name })
+        assertEquals(renamed, viewModel.state.value.currentLabel)
+        assertTrue(viewModel.state.value.labelSaved)
+    }
+
+    @Test
+    fun `updateLabel only sends what changed`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work)))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.updateLabel(work, name = "Work", color = "red")
+
+        assertEquals(listOf(Triple<String, String?, String?>("work", null, "red")), labels.updateCalls)
+    }
+
+    @Test
+    fun `deleteLabel removes it and returns to the inbox when it was open`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work, fun_)))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+        viewModel.selectLabel(work)
+
+        viewModel.deleteLabel(work)
+
+        assertEquals(listOf("work"), labels.deleteCalls)
+        assertEquals(listOf(fun_), viewModel.state.value.labels)
+        assertNull(viewModel.state.value.currentLabel)
+        assertEquals("inbox", viewModel.state.value.currentFolder.id)
+    }
+
+    @Test
+    fun `deleteLabel keeps the label and reports the error when it fails`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work)), deleteResult = Result.failure(RuntimeException("offline")))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.deleteLabel(work)
+
+        assertEquals(listOf(work), viewModel.state.value.labels)
+        assertEquals("offline", viewModel.state.value.labelActionError)
+    }
+
+    // --- applying labels to a selection ----------------------------------------------------
+
+    private fun labelled(id: String, vararg labels: Label) = summary(id).copy(labels = labels.toList())
+
+    @Test
+    fun `a label's check state reflects how many selected emails carry it`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(labelled("e1", work, fun_), labelled("e2", work), labelled("e3")), totalCount = 3)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.enterSelectionMode("e1")
+        viewModel.toggleSelection("e2")
+
+        assertEquals(LabelCheck.ALL, viewModel.state.value.labelCheck("work"))
+        assertEquals(LabelCheck.SOME, viewModel.state.value.labelCheck("fun"))
+        assertEquals(LabelCheck.NONE, viewModel.state.value.labelCheck("other"))
+    }
+
+    @Test
+    fun `applyLabelChanges labels and unlabels the selection in bulk requests`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(labelled("e1", fun_), labelled("e2")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository, labelRepository = FakeLabelRepository(Result.success(listOf(work, fun_))))
+        viewModel.enterSelectionMode("e1")
+        viewModel.toggleSelection("e2")
+
+        viewModel.applyLabelChanges(mapOf("work" to true, "fun" to false))
+
+        assertEquals(
+            setOf(
+                FakeEmailRepository.BulkCall("mb1", BulkAction.LABEL, setOf("e1", "e2"), null, "work"),
+                FakeEmailRepository.BulkCall("mb1", BulkAction.UNLABEL, setOf("e1", "e2"), null, "fun"),
+            ),
+            repository.bulkCalls.toSet(),
+        )
+        val emails = viewModel.state.value.emails
+        assertEquals(listOf(work), emails.first { it.id == "e1" }.labels)
+        assertEquals(listOf(work), emails.first { it.id == "e2" }.labels)
+        assertFalse(viewModel.state.value.selectionMode)
+    }
+
+    @Test
+    fun `a failed label request leaves the labels alone and reports it`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(labelled("e1")), totalCount = 1)) },
+            bulkHandler = { _, ids -> BulkOutcome(emptySet(), ids.toSet()) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.enterSelectionMode("e1")
+
+        viewModel.applyLabelChanges(mapOf("work" to true))
+
+        assertTrue(viewModel.state.value.emails.single().labels.isEmpty())
+        assertEquals("Failed to update 1 email(s)", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `removing the open label from emails drops them from that label's list`() = runTest {
+        val repository = FakeEmailRepository(
+            labelPageHandler = { _, _, _ -> Result.success(EmailPage(listOf(labelled("e1", work), labelled("e2", work)), 2)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+        viewModel.enterSelectionMode("e1")
+
+        viewModel.applyLabelChanges(mapOf("work" to false))
+
+        assertEquals(listOf("e2"), viewModel.state.value.emails.map { it.id })
+        assertEquals(1, viewModel.state.value.totalCount)
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Close
@@ -83,6 +84,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
@@ -215,6 +217,53 @@ fun InboxScreen(
         }
     }
 
+    var showLabelEditor by remember { mutableStateOf(false) }
+    var labelToEdit by remember { mutableStateOf<Label?>(null) }
+    var labelToDelete by remember { mutableStateOf<Label?>(null) }
+    var showLabelPicker by remember { mutableStateOf(false) }
+    LaunchedEffect(state.labelSaved) {
+        if (state.labelSaved) {
+            showLabelEditor = false
+            labelToEdit = null
+            viewModel.consumeLabelSaved()
+        }
+    }
+    if (showLabelEditor || labelToEdit != null) {
+        LabelEditorDialog(
+            initial = labelToEdit,
+            errorMessage = state.labelActionError,
+            onDismiss = {
+                showLabelEditor = false
+                labelToEdit = null
+                viewModel.consumeLabelActionError()
+            },
+            onSave = { name, color ->
+                labelToEdit?.let { viewModel.updateLabel(it, name, color) } ?: viewModel.createLabel(name, color)
+            },
+        )
+    }
+    labelToDelete?.let { label ->
+        DeleteLabelDialog(
+            labelName = label.name,
+            onDismiss = { labelToDelete = null },
+            onConfirm = {
+                labelToDelete = null
+                viewModel.deleteLabel(label)
+            },
+        )
+    }
+    if (showLabelPicker) {
+        LabelPickerDialog(
+            labels = state.labels,
+            initial = state::labelCheck,
+            onDismiss = { showLabelPicker = false },
+            onApply = { changes ->
+                showLabelPicker = false
+                viewModel.applyLabelChanges(changes)
+            },
+        )
+    }
+
     // A discarded draft is gone for good — it exists nowhere but this device — so it asks first.
     var draftToDelete by remember { mutableStateOf<Draft?>(null) }
     draftToDelete?.let { draft ->
@@ -270,7 +319,25 @@ fun InboxScreen(
             FolderDrawerContent(
                 mailboxName = mailboxName,
                 folders = state.folders,
-                selectedFolderId = state.currentFolder.id,
+                selectedFolderId = if (state.currentLabel == null) state.currentFolder.id else null,
+                labels = state.labels,
+                selectedLabelId = state.currentLabel?.id,
+                onLabelSelected = { label ->
+                    viewModel.selectLabel(label)
+                    scope.launch { drawerState.close() }
+                },
+                onCreateLabel = {
+                    scope.launch { drawerState.close() }
+                    showLabelEditor = true
+                },
+                onEditLabel = { label ->
+                    scope.launch { drawerState.close() }
+                    labelToEdit = label
+                },
+                onDeleteLabel = { label ->
+                    scope.launch { drawerState.close() }
+                    labelToDelete = label
+                },
                 onFolderSelected = { folder ->
                     viewModel.selectFolder(folder)
                     scope.launch { drawerState.close() }
@@ -316,6 +383,7 @@ fun InboxScreen(
                         onSelectAll = viewModel::selectAll,
                         onMarkRead = viewModel::batchMarkAsRead,
                         onMarkUnread = viewModel::batchMarkAsUnread,
+                        onLabel = { showLabelPicker = true },
                         onArchive = viewModel::batchArchive,
                         onDelete = { showBatchDeleteDialog = true },
                     )
@@ -323,7 +391,7 @@ fun InboxScreen(
                     TopAppBar(
                         title = {
                             Text(
-                                text = state.currentFolder.name,
+                                text = state.currentLabel?.name ?: state.currentFolder.name,
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -427,7 +495,7 @@ fun InboxScreen(
                                 modifier = Modifier.size(64.dp),
                             )
                             Text(
-                                text = "No emails in ${state.currentFolder.name}",
+                                text = "No emails in ${state.currentLabel?.name ?: state.currentFolder.name}",
                                 style = MaterialTheme.typography.headlineSmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -543,6 +611,7 @@ private fun SelectionTopAppBar(
     onSelectAll: () -> Unit,
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
+    onLabel: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -572,6 +641,11 @@ private fun SelectionTopAppBar(
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     DropdownMenuItem(
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
+                        text = { Text("Label as…") },
+                        onClick = { showMenu = false; onLabel() },
+                    )
+                    DropdownMenuItem(
                         leadingIcon = { Icon(Icons.Default.MarkEmailRead, contentDescription = null) },
                         text = { Text("Mark as read") },
                         onClick = { showMenu = false; onMarkRead() },
@@ -594,7 +668,13 @@ private fun SelectionTopAppBar(
 private fun FolderDrawerContent(
     mailboxName: String,
     folders: List<Folder>,
-    selectedFolderId: String,
+    selectedFolderId: String?,
+    labels: List<Label>,
+    selectedLabelId: String?,
+    onLabelSelected: (Label) -> Unit,
+    onCreateLabel: () -> Unit,
+    onEditLabel: (Label) -> Unit,
+    onDeleteLabel: (Label) -> Unit,
     onFolderSelected: (Folder) -> Unit,
     onSwitchMailbox: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -670,6 +750,19 @@ private fun FolderDrawerContent(
                 onClick = onCreateFolder,
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            LabelDrawerSection(
+                labels = labels,
+                selectedLabelId = selectedLabelId,
+                onLabelSelected = onLabelSelected,
+                onCreateLabel = onCreateLabel,
+                onEditLabel = onEditLabel,
+                onDeleteLabel = onDeleteLabel,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Settings, contentDescription = null) },

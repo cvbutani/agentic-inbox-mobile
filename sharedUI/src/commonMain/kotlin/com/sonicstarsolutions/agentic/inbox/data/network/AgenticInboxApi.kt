@@ -8,6 +8,10 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailFullDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailPageDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderNameDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.LabelDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.LabelInputDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.LabelUpdateDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.LabelsResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
@@ -69,6 +73,37 @@ interface AgenticInboxApi {
         @Query("sortColumn") sortColumn: String? = null,
         @Query("sortDirection") sortDirection: String? = null,
     ): EmailPageDto
+
+    // Same path as getEmails: with `label` the server lists that label's emails across folders.
+    @GET("/api/v1/mailboxes/{mailboxId}/emails")
+    suspend fun getEmailsByLabel(
+        @Path("mailboxId") mailboxId: String,
+        @Query("label") label: String,
+        @Query("page") page: Int? = null,
+        @Query("limit") limit: Int? = null,
+    ): EmailPageDto
+
+    @GET("/api/v1/mailboxes/{mailboxId}/labels")
+    suspend fun getLabels(@Path("mailboxId") mailboxId: String): LabelsResponseDto
+
+    @POST("/api/v1/mailboxes/{mailboxId}/labels")
+    suspend fun createLabel(
+        @Path("mailboxId") mailboxId: String,
+        @Body body: LabelInputDto,
+    ): LabelDto
+
+    @PUT("/api/v1/mailboxes/{mailboxId}/labels/{labelId}")
+    suspend fun updateLabel(
+        @Path("mailboxId") mailboxId: String,
+        @Path("labelId") labelId: String,
+        @Body body: LabelUpdateDto,
+    ): LabelDto
+
+    @DELETE("/api/v1/mailboxes/{mailboxId}/labels/{labelId}")
+    suspend fun deleteLabel(
+        @Path("mailboxId") mailboxId: String,
+        @Path("labelId") labelId: String,
+    )
 
     @GET("/api/v1/mailboxes/{mailboxId}/emails/{emailId}")
     suspend fun getEmail(

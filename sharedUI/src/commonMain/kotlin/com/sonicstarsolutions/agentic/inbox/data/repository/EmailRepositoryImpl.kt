@@ -7,6 +7,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.BulkRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailMetadataDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FromDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.LabelDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MoveEmailRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.OutboundAttachmentDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.SendEmailRequestDto
@@ -16,6 +17,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
@@ -74,6 +78,12 @@ class EmailRepositoryImpl(
             EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
         }
 
+
+    override suspend fun getEmailsByLabel(mailboxId: String, labelId: String, page: Int, limit: Int): Result<EmailPage> =
+        safeApiCall {
+            val pageDto = api.getEmailsByLabel(mailboxId, label = labelId, page = page, limit = limit)
+            EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
+        }
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> =
         safeApiCall { api.moveEmail(mailboxId, emailId, MoveEmailRequestDto(folderId)) }.map {}
 
@@ -82,11 +92,17 @@ class EmailRepositoryImpl(
         action: BulkAction,
         emailIds: Collection<String>,
         folderId: String?,
+        labelId: String?,
     ): BulkOutcome {
         val succeeded = mutableSetOf<String>()
         val failed = mutableSetOf<String>()
         for (chunk in emailIds.distinct().chunked(MAX_BULK_IDS)) {
-            val body = BulkRequestDto(action.serverName, chunk, folderId.takeIf { action == BulkAction.MOVE })
+            val body = BulkRequestDto(
+                action = action.serverName,
+                ids = chunk,
+                folderId = folderId.takeIf { action == BulkAction.MOVE },
+                labelId = labelId.takeIf { action == BulkAction.LABEL || action == BulkAction.UNLABEL },
+            )
             // A chunk is all-or-nothing on the server, so its ids succeed or fail together.
             if (safeApiCall { api.bulkUpdate(mailboxId, body) }.isSuccess) succeeded += chunk else failed += chunk
         }
@@ -142,6 +158,7 @@ private fun EmailMetadataDto.toDomain(): EmailSummary = EmailSummary(
     folderId = folderId,
     snippet = snippet,
     threadUnreadCount = threadUnreadCount,
+    labels = labels.map { it.toDomain() },
 )
 
 private fun EmailSummary.toEntity(mailboxId: String, folder: String): EmailEntity = EmailEntity(
@@ -157,6 +174,7 @@ private fun EmailSummary.toEntity(mailboxId: String, folder: String): EmailEntit
     threadId = threadId,
     snippet = snippet,
     threadUnreadCount = threadUnreadCount,
+    labelsJson = labels.toJson(),
 )
 
 private fun EmailEntity.toDomain(): EmailSummary = EmailSummary(
@@ -171,6 +189,7 @@ private fun EmailEntity.toDomain(): EmailSummary = EmailSummary(
     folderId = folderId,
     snippet = snippet,
     threadUnreadCount = threadUnreadCount,
+    labels = labelsJson.toLabels(),
 )
 
 /** The server rejects a bulk request with more ids than this. */
@@ -184,4 +203,17 @@ private val BulkAction.serverName: String
         BulkAction.UNSTAR -> "unstar"
         BulkAction.MOVE -> "move"
         BulkAction.DELETE -> "delete"
+        BulkAction.LABEL -> "label"
+        BulkAction.UNLABEL -> "unlabel"
     }
+
+private val labelCodec = Json { ignoreUnknownKeys = true }
+private val labelListSerializer = ListSerializer(LabelDto.serializer())
+
+private fun List<Label>.toJson(): String? =
+    takeIf { it.isNotEmpty() }?.let { labelCodec.encodeToString(labelListSerializer, it.map { label -> label.toDto() }) }
+
+/** A cache row written by another app version, or damaged, just shows no chips. */
+private fun String?.toLabels(): List<Label> =
+    this?.let { runCatching { labelCodec.decodeFromString(labelListSerializer, it).map { dto -> dto.toDomain() } }.getOrNull() }
+        .orEmpty()

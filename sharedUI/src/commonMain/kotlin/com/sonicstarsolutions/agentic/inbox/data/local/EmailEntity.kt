@@ -16,4 +16,6 @@ data class EmailEntity(
     val threadId: String?,
     val snippet: String?,
     val threadUnreadCount: Int,
+    /** The email's labels as a JSON array of LabelDto; null when it has none. */
+    val labelsJson: String? = null,
 )
