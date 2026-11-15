@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Overlay for the baseline-profile generation variant only; never merged into release.
+     Lets BaselineProfileGenerator point the app at the stub Worker it serves over plain HTTP
+     on the device's loopback interface. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application android:networkSecurityConfig="@xml/profile_generation_network_security_config" />
+
+</manifest>

@@ -485,7 +485,7 @@ private fun MessageCard(
                     // Collapsed messages get one preview line — in a long thread, a header
                     // with no content hint is unidentifiable without expanding it.
                     if (!expanded) {
-                        val preview = HtmlTextExtractor.toPlainText(message.body.orEmpty())
+                        val preview = remember(message.body) { HtmlTextExtractor.toPlainText(message.body.orEmpty()) }
                         if (preview.isNotBlank()) {
                             Text(
                                 text = preview,
@@ -510,7 +510,9 @@ private fun MessageCard(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 val body = message.body.orEmpty()
-                val sanitized = EmailHtmlSanitizer.sanitize(body, allowRemoteImages = imagesAllowed)
+                val sanitized = remember(body, imagesAllowed) {
+                    EmailHtmlSanitizer.sanitize(body, allowRemoteImages = imagesAllowed)
+                }
                 val hasBlockedImages = !imagesAllowed && sanitized.contains("data-src=")
 
                 if (hasBlockedImages) {
@@ -547,12 +549,16 @@ private fun MessageCard(
                     // The card's own color — theming the body to plain `surface` split the card
                     // into two visible background tones in dark mode.
                     val backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow
-                    val themedHtml = EmailHtmlDocumentBuilder.wrap(
-                        bodyHtml = sanitized,
-                        textColorHex = MaterialTheme.colorScheme.onSurface.toCssHex(),
-                        backgroundColorHex = backgroundColor.toCssHex(),
-                        linkColorHex = MaterialTheme.colorScheme.primary.toCssHex(),
-                    )
+                    val textColor = MaterialTheme.colorScheme.onSurface
+                    val linkColor = MaterialTheme.colorScheme.primary
+                    val themedHtml = remember(sanitized, backgroundColor, textColor, linkColor) {
+                        EmailHtmlDocumentBuilder.wrap(
+                            bodyHtml = sanitized,
+                            textColorHex = textColor.toCssHex(),
+                            backgroundColorHex = backgroundColor.toCssHex(),
+                            linkColorHex = linkColor.toCssHex(),
+                        )
+                    }
                     // No height constraint: HtmlBody measures its own content and sizes to it, so
                     // the message reads as part of the thread rather than as a scroller inside it.
                     HtmlBody(

@@ -625,7 +625,7 @@ private fun FolderDrawerContent(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            val (systemFolders, customFolders) = folders.partition { it.isSystem }
+            val (systemFolders, customFolders) = remember(folders) { folders.partition { it.isSystem } }
 
             systemFolders.forEach { folder ->
                 FolderDrawerItem(

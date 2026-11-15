@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.android.application)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -17,6 +18,17 @@ android {
 
         versionCode = (project.properties["versionCode"] as? String)?.toInt() ?: 1
         versionName = project.properties["versionName"] as? String ?: "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
     }
 
     // Release signing is only configured when the CI keystore env vars are present,
@@ -53,6 +65,8 @@ dependencies {
     implementation(libs.androidx.activityCompose)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.koin.core)
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineprofile"))
 
     testImplementation(kotlin("test-junit"))
     testImplementation(libs.ktor.client.mock)

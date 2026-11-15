@@ -23,7 +23,7 @@ import org.koin.dsl.module
 import kotlin.coroutines.CoroutineContext
 
 val networkModule = module {
-    factory<HttpClient> {
+    single<HttpClient> {
         val credentials: CredentialsRepository = get()
         val engine: HttpClientEngine = get()
         val json = Json {
@@ -59,7 +59,7 @@ val networkModule = module {
             }
         }
     }
-    factory<AgenticInboxApi> {
+    single<AgenticInboxApi> {
 
         Ktorfit.Builder()
             .baseUrl("", checkUrl = false)

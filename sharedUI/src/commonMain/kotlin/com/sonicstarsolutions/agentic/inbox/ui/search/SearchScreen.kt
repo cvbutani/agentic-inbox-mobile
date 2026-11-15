@@ -312,8 +312,7 @@ private fun ActiveFilterChips(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        items(chips.size) { index ->
-            val chip = chips[index]
+        items(chips, key = { it.label }) { chip ->
             InputChip(
                 selected = true,
                 onClick = {

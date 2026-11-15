@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,14 +26,16 @@ fun InitialsAvatar(
     modifier: Modifier = Modifier,
     textStyle: TextStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
 ) {
-    val initials = name
-        .split(" ")
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercase() }
-        .take(2)
-
-    val (backgroundColor, contentColor) = AVATAR_COLORS[name.hashCode().absoluteValue % AVATAR_COLORS.size]
+    val (initials, backgroundColor, contentColor) = remember(name) {
+        val initials = name
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .take(2)
+            .joinToString("") { it.first().uppercase() }
+            .take(2)
+        val (backgroundColor, contentColor) = AVATAR_COLORS[name.hashCode().absoluteValue % AVATAR_COLORS.size]
+        Triple(initials, backgroundColor, contentColor)
+    }
 
     Box(
         modifier = modifier
