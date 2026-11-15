@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -37,10 +38,14 @@ private const val SLIDE_MILLIS = 500
  * more than one on a screen. See "AirmailBand" in docs/DESIGN_SYSTEM.md.
  */
 @Composable
-fun AirmailBand(active: Boolean, modifier: Modifier = Modifier) {
+fun AirmailBand(
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    /** What the gaps between stripes show: the surface the band sits on. */
+    paper: Color = MaterialTheme.colorScheme.surface,
+) {
     val navy = MaterialTheme.airmail.airmailNavy
     val red = MaterialTheme.airmail.airmailRed
-    val paper = MaterialTheme.colorScheme.surface
     val reduceMotion = rememberReduceMotion()
     val phase = bandPhase(slide = active && !reduceMotion)
     val stripe = remember { Path() }
@@ -70,7 +75,7 @@ fun AirmailBand(active: Boolean, modifier: Modifier = Modifier) {
 
         // Stripes rise to the right (-45°): a parallelogram whose top edge is shifted by the
         // band's height. Start two periods back so the slide never uncovers the left edge.
-        fun drawStripe(left: Float, width: Float, color: androidx.compose.ui.graphics.Color) {
+        fun drawStripe(left: Float, width: Float, color: Color) {
             stripe.rewind()
             stripe.moveTo(left, height)
             stripe.lineTo(left + width, height)
