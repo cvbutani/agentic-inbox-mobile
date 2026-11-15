@@ -1,6 +1,10 @@
 package com.sonicstarsolutions.agentic.inbox.ui.thread
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
@@ -16,6 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.sonicstarsolutions.agentic.inbox.util.ExternalLinkPolicy
 import kotlinx.coroutines.delay
 
 @Composable
@@ -69,6 +74,7 @@ actual fun HtmlBody(html: String, backgroundColor: Color, modifier: Modifier) {
                 settings.useWideViewPort = false
                 settings.loadWithOverviewMode = false
                 setBackgroundColor(backgroundArgb)
+                webViewClient = ExternalLinkWebViewClient()
                 // The view ends up exactly as tall as its content, so there is nothing left for it
                 // to scroll internally — these just stop a scrollbar flashing while it settles.
                 isVerticalScrollBarEnabled = false
@@ -92,6 +98,27 @@ actual fun HtmlBody(html: String, backgroundColor: Color, modifier: Modifier) {
             }
         },
     )
+}
+
+/**
+ * Sends tapped links to the user's default handler (browser, mail or dialer app) instead of
+ * navigating the email body view away from the message. Returning true always keeps the view on
+ * the message; schemes outside [ExternalLinkPolicy] are dropped rather than followed.
+ */
+private class ExternalLinkWebViewClient : WebViewClient() {
+    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+        val url = request.url.toString()
+        if (ExternalLinkPolicy.opensExternally(url)) {
+            try {
+                view.context.startActivity(
+                    Intent(Intent.ACTION_VIEW, request.url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            } catch (_: ActivityNotFoundException) {
+                // No app can handle this link (e.g. a tel: link on a tablet) — nothing to open.
+            }
+        }
+        return true
+    }
 }
 
 private val PLACEHOLDER_HEIGHT = 120.dp
