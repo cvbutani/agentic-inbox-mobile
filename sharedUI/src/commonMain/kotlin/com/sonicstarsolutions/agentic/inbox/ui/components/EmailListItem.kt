@@ -1,17 +1,20 @@
 package com.sonicstarsolutions.agentic.inbox.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,17 +53,31 @@ fun EmailListItem(
     onToggleStarred: () -> Unit = {},
     selectionMode: Boolean = false,
     selected: Boolean = false,
+    /** The time label. Rows under a day header pass [EmailTimeFormatter.formatClock] (the header
+     * carries the day); rows with no header, like search results, keep the default. */
+    timeText: String = EmailTimeFormatter.format(email.date),
 ) {
     // A thread's latest message can be read while earlier messages in it aren't — thread_unread_count
     // catches that; a plain !email.read alone would show the row as read even with unread messages
     // still in the conversation.
     val isUnread = email.isUnread()
     val contentWeight = if (isUnread) FontWeight.SemiBold else FontWeight.Normal
+    // A container color always pairs with its own "on" color: a selected row sets all of its
+    // secondary text and the star to onPrimaryContainer, never onSurfaceVariant.
+    val secondaryColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .semantics {
+                // The row is the control, so it must say what the check circle shows.
+                if (selectionMode) stateDescription = if (selected) "Selected" else "Not selected"
+            },
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
     ) {
         Row(
@@ -70,13 +88,21 @@ fun EmailListItem(
             horizontalArrangement = Arrangement.spacedBy(ListRowDimens.contentGap),
             verticalAlignment = Alignment.Top,
         ) {
-            // Avatar, or a checkbox in place of it while selecting
-            if (selectionMode) {
-                Checkbox(
-                    checked = selected,
-                    onCheckedChange = { onClick() },
-                    modifier = Modifier.size(ListRowDimens.avatarSize),
-                )
+            // A selected row swaps its avatar for a navy check; unselected rows keep theirs, so
+            // while selecting you still see who each message is from.
+            if (selected && selectionMode) {
+                Box(
+                    modifier = Modifier
+                        .size(ListRowDimens.avatarSize)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
             } else {
                 InitialsAvatar(
                     name = EmailAddressUtils.displayName(email.sender, ownEmail = null),
@@ -111,13 +137,9 @@ fun EmailListItem(
                         )
                     }
                     Text(
-                        text = EmailTimeFormatter.format(email.date),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = contentWeight),
-                        color = if (isUnread) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        text = timeText,
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = contentWeight),
+                        color = if (isUnread && !selected) MaterialTheme.colorScheme.primary else secondaryColor,
                     )
                 }
 
@@ -143,7 +165,7 @@ fun EmailListItem(
                             Text(
                                 text = preview,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = secondaryColor,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -168,7 +190,7 @@ fun EmailListItem(
                         }
                     }
 
-                    // Star toggle — hidden while selecting so it doesn't compete with the checkbox
+                    // Star toggle — hidden while selecting so it doesn't compete with the row's own
                     // tap target. No size override: IconButton's default 48dp minimum touch target
                     // is the accessibility floor.
                     if (!selectionMode) {
@@ -176,10 +198,10 @@ fun EmailListItem(
                             Icon(
                                 imageVector = if (email.starred) Icons.Default.Star else Icons.Default.StarBorder,
                                 contentDescription = if (email.starred) "Unstar" else "Star",
-                                tint = if (email.starred) {
+                                tint = if (email.starred && !selected) {
                                     MaterialTheme.airmail.star
                                 } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                    secondaryColor
                                 },
                                 modifier = Modifier.size(20.dp),
                             )

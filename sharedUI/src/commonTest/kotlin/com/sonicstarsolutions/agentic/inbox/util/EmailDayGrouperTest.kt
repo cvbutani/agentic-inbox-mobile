@@ -18,6 +18,17 @@ class EmailDayGrouperTest {
         EmailDayGrouper.group(isoDates.toList(), { Instant.parse(it) }, at, zone)
 
     @Test
+    fun `instantOrEpoch parses a server timestamp`() {
+        assertEquals(Instant.parse("2026-07-17T09:00:00Z"), EmailDayGrouper.instantOrEpoch("2026-07-17T09:00:00Z"))
+    }
+
+    @Test
+    fun `instantOrEpoch maps an unparseable date to the epoch instead of throwing`() {
+        assertEquals(Instant.fromEpochMilliseconds(0), EmailDayGrouper.instantOrEpoch("not-a-date"))
+        assertEquals(Instant.fromEpochMilliseconds(0), EmailDayGrouper.instantOrEpoch(""))
+    }
+
+    @Test
     fun `an empty list gives no groups`() {
         assertTrue(group().isEmpty())
     }

@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,7 +60,7 @@ internal fun LabelDrawerSection(
             text = "Labels",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+            modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 16.dp, bottom = 4.dp),
         )
         labels.forEach { label ->
             LabelDrawerItem(
@@ -123,14 +124,16 @@ private fun LabelDrawerItem(
     )
 }
 
-/** A solid dot in the label's text colour — the drawer-icon stand-in for a chip. */
+/** The drawer-icon stand-in for a chip: a 14dp dot with the pair's pastel fill and a 2dp ring in
+ * its deep color, so it reads on both the light and the dark drawer. */
 @Composable
 internal fun LabelDot(color: String, modifier: Modifier = Modifier) {
+    val (fill, ring) = labelColorPair(color)
     Box(
         modifier = modifier
-            .size(12.dp)
-            .clip(CircleShape)
-            .background(labelColorPair(color).second),
+            .size(14.dp)
+            .background(fill, CircleShape)
+            .border(2.dp, ring, CircleShape),
     )
 }
 

@@ -44,6 +44,17 @@ object EmailDayGrouper {
         return byDate.map { (date, dayItems) -> DayGroup(date, dayName(date, today), dayItems) }
     }
 
+    /**
+     * Parses a server timestamp for grouping. A message whose date cannot be read lands on the
+     * epoch day rather than crashing the list.
+     */
+    fun instantOrEpoch(dateString: String): Instant =
+        try {
+            Instant.parse(dateString)
+        } catch (e: Exception) {
+            Instant.fromEpochMilliseconds(0)
+        }
+
     /** "Today", "Yesterday", the weekday inside a week, then "3 July" (+ year once it differs). */
     fun dayName(date: LocalDate, today: LocalDate): String = when (date.daysUntil(today)) {
         0 -> "Today"
