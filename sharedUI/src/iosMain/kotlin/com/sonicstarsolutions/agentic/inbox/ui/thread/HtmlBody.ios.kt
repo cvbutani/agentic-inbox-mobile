@@ -13,13 +13,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.UIKitView
+import com.sonicstarsolutions.agentic.inbox.util.ExternalLinkPolicy
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import kotlinx.coroutines.delay
 import platform.CoreGraphics.CGRectMake
+import platform.UIKit.UIApplication
 import platform.UIKit.UIColor
+import platform.WebKit.WKNavigationAction
+import platform.WebKit.WKNavigationActionPolicy
+import platform.WebKit.WKNavigationActionPolicyAllow
+import platform.WebKit.WKNavigationActionPolicyCancel
+import platform.WebKit.WKNavigationDelegateProtocol
+import platform.WebKit.WKNavigationTypeLinkActivated
 import platform.WebKit.WKWebView
 import platform.WebKit.WKWebViewConfiguration
+import platform.darwin.NSObject
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -30,6 +39,7 @@ actual fun HtmlBody(html: String, backgroundColor: Color, modifier: Modifier) {
         blue = backgroundColor.blue.toDouble(),
         alpha = backgroundColor.alpha.toDouble(),
     )
+    val linkDelegate = remember { ExternalLinkNavigationDelegate() }
     var webView by remember { mutableStateOf<WKWebView?>(null) }
     var contentHeight by remember(html) { mutableStateOf<Dp?>(null) }
     // Measuring the height feeds a state change back into this composable, so `update` must not
@@ -80,6 +90,8 @@ actual fun HtmlBody(html: String, backgroundColor: Color, modifier: Modifier) {
                 // LazyColumn; leaving its own scrolling on would swallow those drags.
                 this.scrollView.scrollEnabled = false
                 this.scrollView.bounces = false
+                // WKWebView holds its navigation delegate weakly — the remembered reference keeps it alive.
+                navigationDelegate = linkDelegate
                 webView = this
             }
         },
@@ -97,6 +109,30 @@ actual fun HtmlBody(html: String, backgroundColor: Color, modifier: Modifier) {
             }
         },
     )
+}
+
+/**
+ * Sends tapped links to the system (Safari, Mail, Phone) instead of navigating the email body view
+ * away from the message. Anything outside [ExternalLinkPolicy] is cancelled rather than followed.
+ * The initial HTML load is not a link activation, so it is allowed through.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private class ExternalLinkNavigationDelegate : NSObject(), WKNavigationDelegateProtocol {
+    override fun webView(
+        webView: WKWebView,
+        decidePolicyForNavigationAction: WKNavigationAction,
+        decisionHandler: (WKNavigationActionPolicy) -> Unit,
+    ) {
+        if (decidePolicyForNavigationAction.navigationType != WKNavigationTypeLinkActivated) {
+            decisionHandler(WKNavigationActionPolicyAllow)
+            return
+        }
+        val url = decidePolicyForNavigationAction.request.URL
+        if (url != null && ExternalLinkPolicy.opensExternally(url.absoluteString.orEmpty())) {
+            UIApplication.sharedApplication.openURL(url, options = emptyMap<Any?, Any>(), completionHandler = null)
+        }
+        decisionHandler(WKNavigationActionPolicyCancel)
+    }
 }
 
 private val PLACEHOLDER_HEIGHT = 120.dp

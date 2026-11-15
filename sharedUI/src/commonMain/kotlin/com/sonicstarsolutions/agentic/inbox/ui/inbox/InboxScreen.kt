@@ -37,6 +37,11 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeSettings
+import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.SwipeSettingsViewModel
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -129,8 +134,10 @@ fun InboxScreen(
      * layout — highlights that row. Null in single-pane, where opening an email leaves the list. */
     openEmailId: String? = null,
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
+    swipeSettingsViewModel: SwipeSettingsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val swipeSettings by swipeSettingsViewModel.settings.collectAsStateWithLifecycle()
     // Live updates run only while the screen is visible: the socket opens on start, closes on stop.
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(viewModel, lifecycleOwner) {
@@ -556,6 +563,8 @@ fun InboxScreen(
                                     onToggleStarred = { viewModel.toggleStarred(email) },
                                     onArchive = { viewModel.archiveEmail(email) },
                                     onDelete = { viewModel.deleteEmail(email) },
+                                    onToggleRead = { viewModel.toggleRead(email) },
+                                    swipeSettings = swipeSettings,
                                     modifier = Modifier.animateItem(),
                                 )
                             }
@@ -599,6 +608,8 @@ private fun SwipeableEmailRow(
     onToggleStarred: () -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
+    onToggleRead: () -> Unit,
+    swipeSettings: SwipeSettings,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -619,24 +630,49 @@ private fun SwipeableEmailRow(
         } else {
             val currentOnArchive by rememberUpdatedState(onArchive)
             val currentOnDelete by rememberUpdatedState(onDelete)
+            val currentOnToggleRead by rememberUpdatedState(onToggleRead)
+            val currentOnToggleStarred by rememberUpdatedState(onToggleStarred)
+            // The state's callback is captured once; reading through this keeps it current when
+            // the user changes the setting while the list is on screen.
+            val currentSettings by rememberUpdatedState(swipeSettings)
             val dismissState = rememberSwipeToDismissBoxState(
                 confirmValueChange = { value ->
-                    when (value) {
-                        SwipeToDismissBoxValue.StartToEnd -> {
+                    when (currentSettings.actionFor(value)) {
+                        // These two take the row out of the list, so the swipe is allowed to complete.
+                        SwipeAction.Archive -> {
                             currentOnArchive()
                             true
                         }
-                        SwipeToDismissBoxValue.EndToStart -> {
+                        SwipeAction.Delete -> {
                             currentOnDelete()
                             true
                         }
-                        SwipeToDismissBoxValue.Settled -> false
+                        // These change the row in place: do the work, then let it spring back.
+                        SwipeAction.ToggleRead -> {
+                            currentOnToggleRead()
+                            false
+                        }
+                        SwipeAction.ToggleStar -> {
+                            currentOnToggleStarred()
+                            false
+                        }
+                        SwipeAction.None, null -> false
                     }
                 },
             )
             SwipeToDismissBox(
                 state = dismissState,
-                backgroundContent = { SwipeActionBackground(dismissState.targetValue) },
+                enableDismissFromStartToEnd = swipeSettings.swipeRight != SwipeAction.None,
+                enableDismissFromEndToStart = swipeSettings.swipeLeft != SwipeAction.None,
+                // dismissDirection follows the finger from the first pixel; targetValue stays
+                // Settled until the commit threshold, so the action stayed hidden for most of the drag.
+                backgroundContent = {
+                    SwipeActionBackground(
+                        direction = dismissState.dismissDirection,
+                        action = swipeSettings.actionFor(dismissState.dismissDirection),
+                        email = email,
+                    )
+                },
                 content = { emailItem() },
             )
         }
@@ -882,30 +918,31 @@ private fun FolderDrawerItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeActionBackground(targetValue: SwipeToDismissBoxValue) {
+private fun SwipeActionBackground(
+    direction: SwipeToDismissBoxValue,
+    action: SwipeAction?,
+    email: EmailSummary,
+) {
     // Each container color pairs with its own "on" color — onSurface on errorContainer would
     // wash out in dark mode.
-    val (color, iconTint, alignment) = when (targetValue) {
-        SwipeToDismissBoxValue.StartToEnd -> Triple(
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.onPrimaryContainer,
-            Alignment.CenterStart,
-        )
-        SwipeToDismissBoxValue.EndToStart -> Triple(
-            MaterialTheme.colorScheme.errorContainer,
-            MaterialTheme.colorScheme.onErrorContainer,
-            Alignment.CenterEnd,
-        )
-        SwipeToDismissBoxValue.Settled -> Triple(
-            MaterialTheme.colorScheme.surface,
-            MaterialTheme.colorScheme.onSurface,
-            Alignment.Center,
-        )
+    val (color, iconTint) = when (action) {
+        SwipeAction.Archive -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+        SwipeAction.Delete -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        SwipeAction.ToggleRead, SwipeAction.ToggleStar ->
+            MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        SwipeAction.None, null -> MaterialTheme.colorScheme.surface to MaterialTheme.colorScheme.onSurface
     }
-    val icon = when (targetValue) {
-        SwipeToDismissBoxValue.StartToEnd -> Icons.Default.Archive
-        SwipeToDismissBoxValue.EndToStart -> Icons.Default.Delete
-        SwipeToDismissBoxValue.Settled -> null
+    val alignment = when (direction) {
+        SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+        SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+        SwipeToDismissBoxValue.Settled -> Alignment.Center
+    }
+    val icon = when (action) {
+        SwipeAction.Archive -> Icons.Default.Archive
+        SwipeAction.Delete -> Icons.Default.Delete
+        SwipeAction.ToggleRead -> if (email.isUnread()) Icons.Default.MarkEmailRead else Icons.Default.MarkEmailUnread
+        SwipeAction.ToggleStar -> if (email.starred) Icons.Default.StarBorder else Icons.Default.Star
+        SwipeAction.None, null -> null
     }
     Box(
         modifier = Modifier
@@ -914,8 +951,20 @@ private fun SwipeActionBackground(targetValue: SwipeToDismissBoxValue) {
             .padding(horizontal = 24.dp),
         contentAlignment = alignment,
     ) {
-        icon?.let {
-            Icon(imageVector = it, contentDescription = null, tint = iconTint)
+        if (action != null && icon != null) {
+            // Icon and word together: the icon alone doesn't say whether a swipe archives or
+            // trashes, and the word is what a screen reader announces for the revealed action.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(imageVector = icon, contentDescription = null, tint = iconTint)
+                Text(
+                    text = action.labelFor(email),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = iconTint,
+                )
+            }
         }
     }
 }

@@ -1394,4 +1394,40 @@ class InboxViewModelTest {
         assertTrue(repository.bulkCalls.single().conversations.isEmpty())
         assertNull(repository.bulkCalls.single().folder)
     }
+
+    @Test
+    fun `toggleRead marks an unread message read and keeps it in the list`() = runTest {
+        val unread = summary("s1").copy(read = false)
+        val repository = inboxOf(unread)
+        val viewModel = buildViewModel(repository)
+
+        viewModel.toggleRead(unread)
+
+        assertEquals(BulkAction.READ, repository.bulkCalls.single().action)
+        assertEquals(setOf("s1"), repository.bulkCalls.single().ids)
+        assertTrue(viewModel.state.value.emails.single().read)
+    }
+
+    @Test
+    fun `toggleRead marks a read message unread`() = runTest {
+        val read = summary("s1").copy(read = true)
+        val repository = inboxOf(read)
+        val viewModel = buildViewModel(repository)
+
+        viewModel.toggleRead(read)
+
+        assertEquals(BulkAction.UNREAD, repository.bulkCalls.single().action)
+        assertFalse(viewModel.state.value.emails.single().read)
+    }
+
+    @Test
+    fun `toggleRead on a conversation with unread messages marks the whole conversation read`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 3))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.toggleRead(conversation("c1", "t1", 3))
+
+        assertEquals(BulkAction.READ, repository.bulkCalls.single().action)
+        assertEquals(mapOf("c1" to "t1"), repository.bulkCalls.single().conversations)
+    }
 }

@@ -5,6 +5,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.MailboxSettingsViewModel
+import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.SwipeSettingsViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.scheduled.ScheduledViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.search.SearchViewModel
@@ -19,6 +20,7 @@ val viewModelModule = module {
     viewModelOf(::OnboardingViewModel)
     viewModelOf(::MailboxPickerViewModel)
     viewModel { (mailboxId: String) -> MailboxSettingsViewModel(get(), get(), mailboxId) }
+    viewModelOf(::SwipeSettingsViewModel)
     // Runtime args (mailboxId/mailboxName) come from the Inbox nav key via parametersOf(...);
     // the use case is injected. Destructure the ParametersHolder positionally.
     viewModel { (mailboxId: String, mailboxName: String) ->

@@ -375,6 +375,28 @@ class InboxViewModel(
         }
     }
 
+    /**
+     * Flips one row between read and unread — the swipe action. A conversation is flipped as a
+     * whole, and a row is unread while any message in it is, so that is what "toggle" reverses.
+     */
+    fun toggleRead(email: EmailSummary) {
+        val markRead = email.isUnread()
+        viewModelScope.launch {
+            val result = bulkOne(if (markRead) BulkAction.READ else BulkAction.UNREAD, email)
+            result.onSuccess {
+                _state.update { current ->
+                    current.copy(
+                        emails = current.emails.map {
+                            if (it.id == email.id) it.copy(read = markRead, threadUnreadCount = if (markRead) 0 else it.threadUnreadCount) else it
+                        },
+                    )
+                }
+            }.onFailure { t ->
+                _state.update { it.copy(errorMessage = t.message ?: "Failed to update") }
+            }
+        }
+    }
+
     fun archiveEmail(email: EmailSummary) = removeOptimistically(email) {
         if (email.isConversation && _state.value.currentLabel == null) {
             bulkOne(BulkAction.MOVE, email, SystemFolders.ARCHIVE)
