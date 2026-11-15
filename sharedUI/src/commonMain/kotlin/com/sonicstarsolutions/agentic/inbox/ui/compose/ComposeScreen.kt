@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.ui.compose
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -51,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -61,7 +64,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
+import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.util.formatFileSize
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -253,7 +258,9 @@ fun ComposeScreen(
                         null
                     },
                     modifier = Modifier.focusRequester(toFocusRequester),
+                    onFocusLost = viewModel::dismissSuggestions,
                 )
+                SuggestionList(state.suggestions.takeIf { state.suggestionsFor == ComposeField.TO }.orEmpty(), viewModel::onSuggestionPicked)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 if (showCcBcc) {
@@ -263,7 +270,9 @@ fun ComposeScreen(
                         prefixLabel = "Cc",
                         keyboardOptions = addressKeyboard,
                         keyboardActions = nextField,
+                        onFocusLost = viewModel::dismissSuggestions,
                     )
+                    SuggestionList(state.suggestions.takeIf { state.suggestionsFor == ComposeField.CC }.orEmpty(), viewModel::onSuggestionPicked)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     ComposeFieldRow(
                         value = state.bcc,
@@ -271,7 +280,9 @@ fun ComposeScreen(
                         prefixLabel = "Bcc",
                         keyboardOptions = addressKeyboard,
                         keyboardActions = nextField,
+                        onFocusLost = viewModel::dismissSuggestions,
                     )
+                    SuggestionList(state.suggestions.takeIf { state.suggestionsFor == ComposeField.BCC }.orEmpty(), viewModel::onSuggestionPicked)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
 
@@ -333,6 +344,8 @@ private fun ComposeFieldRow(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     trailing: (@Composable () -> Unit)? = null,
+    /** Called when the field loses focus — lets recipient fields close their suggestion list. */
+    onFocusLost: (() -> Unit)? = null,
 ) {
     TextField(
         value = value,
@@ -352,7 +365,11 @@ private fun ComposeFieldRow(
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
         colors = borderlessFieldColors(),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .let { base ->
+                if (onFocusLost == null) base else base.onFocusChanged { focus -> if (!focus.isFocused) onFocusLost() }
+            },
     )
 }
 
@@ -435,6 +452,36 @@ private fun FromRow(
                         expanded = false
                         onSelected(address)
                     },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Contacts matching the address being typed, listed directly under its field. Each row is the
+ * whole tap target (48dp+) and reuses the inbox's avatar so identities look the same everywhere.
+ */
+@Composable
+private fun SuggestionList(contacts: List<Contact>, onPick: (Contact) -> Unit) {
+    if (contacts.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
+        contacts.forEach { contact ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable { onPick(contact) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                InitialsAvatar(name = contact.address, modifier = Modifier.size(32.dp))
+                Text(
+                    text = contact.address,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

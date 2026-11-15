@@ -4,6 +4,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCa
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CancelScheduledEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetScheduledEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateLabelUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteLabelUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsByLabelUseCase
@@ -71,6 +72,7 @@ val useCaseModule = module {
     singleOf(::MoveEmailUseCase)
     singleOf(::BulkUpdateEmailsUseCase)
     singleOf(::ScheduleEmailUseCase)
+    singleOf(::SearchContactsUseCase)
     singleOf(::GetScheduledEmailsUseCase)
     singleOf(::CancelScheduledEmailUseCase)
     singleOf(::GetEmailsByLabelUseCase)

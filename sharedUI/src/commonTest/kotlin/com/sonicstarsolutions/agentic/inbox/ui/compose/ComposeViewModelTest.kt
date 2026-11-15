@@ -1,5 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.ui.compose
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
@@ -7,11 +8,14 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ContactRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeContactRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
@@ -24,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -80,6 +85,7 @@ class ComposeViewModelTest {
         threadRepository: FakeThreadRepository = FakeThreadRepository(result = Result.success(listOf(original()))),
         emailRepository: FakeEmailRepository = FakeEmailRepository(),
         scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
+        contactRepository: ContactRepository = FakeContactRepository(),
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
     ): ComposeViewModel = ComposeViewModel(
         getMailbox = GetMailboxUseCase(mailboxRepository),
@@ -88,6 +94,7 @@ class ComposeViewModelTest {
         replyEmailUseCase = ReplyEmailUseCase(emailRepository),
         forwardEmailUseCase = ForwardEmailUseCase(emailRepository),
         scheduleEmailUseCase = ScheduleEmailUseCase(scheduleRepository),
+        searchContacts = SearchContactsUseCase(contactRepository),
         deleteEmailUseCase = DeleteEmailUseCase(emailRepository),
         saveDraftUseCase = SaveDraftUseCase(draftRepository),
         getDraftUseCase = GetDraftUseCase(draftRepository),
@@ -475,5 +482,144 @@ class ComposeViewModelTest {
         assertEquals("Scheduled messages cannot have attachments yet", viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.sent)
         assertFalse(viewModel.state.value.sending)
+    }
+
+    // --- recipient autocomplete ------------------------------------------------------------
+
+    private val bob = Contact("bob@example.dev", 7)
+    private val boris = Contact("boris@example.dev", 2)
+
+    private fun contacts(vararg all: Contact) = FakeContactRepository { query ->
+        Result.success(all.filter { it.address.contains(query.lowercase()) })
+    }
+
+    @Test
+    fun `typing in To suggests contacts for the word being typed after a short pause`() = runTest {
+        val repo = contacts(bob, boris)
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = repo)
+
+        viewModel.onToChanged("alice@example.dev, bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+
+        assertEquals(listOf("bo"), repo.queries)
+        assertEquals(listOf(bob, boris), viewModel.state.value.suggestions)
+        assertEquals(ComposeField.TO, viewModel.state.value.suggestionsFor)
+    }
+
+    @Test
+    fun `nothing is requested before the pause ends, and fast typing makes one request`() = runTest {
+        val repo = contacts(bob)
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = repo)
+
+        viewModel.onToChanged("b")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS / 2)
+        viewModel.onToChanged("bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS / 2)
+        assertTrue(repo.queries.isEmpty())
+
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS)
+        assertEquals(listOf("bo"), repo.queries)
+    }
+
+    @Test
+    fun `a blank word clears suggestions and asks nothing`() = runTest {
+        val repo = contacts(bob)
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = repo)
+        viewModel.onToChanged("bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+        assertEquals(1, viewModel.state.value.suggestions.size)
+
+        viewModel.onToChanged("bob@example.dev, ")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+
+        assertTrue(viewModel.state.value.suggestions.isEmpty())
+        assertEquals(listOf("bo"), repo.queries)
+    }
+
+    @Test
+    fun `addresses already in the field and the user's own addresses are not suggested`() = runTest {
+        val repo = contacts(bob, boris, Contact("me@example.dev", 50), Contact("sales@example.dev", 9))
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = aliasMailboxRepository(), contactRepository = repo)
+
+        viewModel.onToChanged("bob@example.dev, ")
+        viewModel.onToChanged("bob@example.dev, e")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+
+        assertEquals(listOf(boris), viewModel.state.value.suggestions)
+    }
+
+    @Test
+    fun `picking a suggestion completes the word, adds a separator and closes the list`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = contacts(bob))
+        viewModel.onToChanged("alice@example.dev, bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+
+        viewModel.onSuggestionPicked(bob)
+
+        assertEquals("alice@example.dev, bob@example.dev, ", viewModel.state.value.to)
+        assertTrue(viewModel.state.value.suggestions.isEmpty())
+        assertNull(viewModel.state.value.suggestionsFor)
+    }
+
+    @Test
+    fun `suggestions follow the Cc and Bcc fields too`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = contacts(bob))
+        viewModel.onCcChanged("bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+        assertEquals(ComposeField.CC, viewModel.state.value.suggestionsFor)
+
+        viewModel.onSuggestionPicked(bob)
+        assertEquals("bob@example.dev, ", viewModel.state.value.cc)
+        assertEquals("", viewModel.state.value.to)
+
+        viewModel.onBccChanged("bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+        viewModel.onSuggestionPicked(bob)
+        assertEquals("bob@example.dev, ", viewModel.state.value.bcc)
+    }
+
+    @Test
+    fun `a failed lookup just leaves no suggestions and never shows an error`() = runTest {
+        val repo = FakeContactRepository { Result.failure(RuntimeException("offline")) }
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = repo)
+
+        viewModel.onToChanged("bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+
+        assertTrue(viewModel.state.value.suggestions.isEmpty())
+        assertNull(viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `dismissing the suggestions closes the list without touching the field`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = contacts(bob))
+        viewModel.onToChanged("bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+
+        viewModel.dismissSuggestions()
+
+        assertTrue(viewModel.state.value.suggestions.isEmpty())
+        assertEquals("bo", viewModel.state.value.to)
+    }
+
+    @Test
+    fun `an answer that arrives after the user moved on is dropped`() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val repo = object : ContactRepository {
+            override suspend fun search(mailboxId: String, query: String, limit: Int): Result<List<Contact>> {
+                if (query == "bo") gate.await()
+                return Result.success(listOf(bob).filter { it.address.contains(query) })
+            }
+        }
+        val viewModel = buildViewModel(ComposeMode.NEW, contactRepository = repo)
+
+        viewModel.onToChanged("bo")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1) // "bo" request now waiting
+        viewModel.onToChanged("zz")
+        advanceTimeBy(ComposeViewModel.SUGGEST_DEBOUNCE_MILLIS + 1)
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.suggestions.isEmpty(), "stale answer for 'bo' must not show for 'zz'")
     }
 }

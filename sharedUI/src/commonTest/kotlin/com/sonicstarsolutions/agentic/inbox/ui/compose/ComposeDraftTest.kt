@@ -12,6 +12,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeContactRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
@@ -72,6 +74,7 @@ class ComposeDraftTest {
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
         emailRepository: FakeEmailRepository = FakeEmailRepository(),
         scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
+        contactRepository: FakeContactRepository = FakeContactRepository(),
         newDraftId: () -> String = { "draft-1" },
     ): ComposeViewModel {
         val mailboxRepository = FakeMailboxRepository().apply {
@@ -84,6 +87,7 @@ class ComposeDraftTest {
             replyEmailUseCase = ReplyEmailUseCase(emailRepository),
             forwardEmailUseCase = ForwardEmailUseCase(emailRepository),
             scheduleEmailUseCase = ScheduleEmailUseCase(scheduleRepository),
+            searchContacts = SearchContactsUseCase(contactRepository),
             deleteEmailUseCase = DeleteEmailUseCase(emailRepository),
             saveDraftUseCase = SaveDraftUseCase(draftRepository),
             getDraftUseCase = GetDraftUseCase(draftRepository),

@@ -3,6 +3,7 @@ package com.sonicstarsolutions.agentic.inbox.data.network
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.BulkRequestDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.BulkResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ConfigDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.ContactsResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailFullDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailPageDto
@@ -85,6 +86,13 @@ interface AgenticInboxApi {
         @Query("page") page: Int? = null,
         @Query("limit") limit: Int? = null,
     ): EmailPageDto
+
+    @GET("/api/v1/mailboxes/{mailboxId}/contacts")
+    suspend fun getContacts(
+        @Path("mailboxId") mailboxId: String,
+        @Query("q") query: String,
+        @Query("limit") limit: Int? = null,
+    ): ContactsResponseDto
 
     @GET("/api/v1/mailboxes/{mailboxId}/labels")
     suspend fun getLabels(@Path("mailboxId") mailboxId: String): LabelsResponseDto

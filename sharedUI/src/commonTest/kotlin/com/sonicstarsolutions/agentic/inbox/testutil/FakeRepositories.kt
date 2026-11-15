@@ -7,6 +7,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
@@ -18,6 +19,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionReposito
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ContactRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
@@ -438,5 +440,16 @@ class FakeScheduleRepository(
     override suspend fun cancel(mailboxId: String, scheduledId: String): Result<Unit> {
         cancelCalls += scheduledId
         return cancelResult
+    }
+}
+
+class FakeContactRepository(
+    var handler: (query: String) -> Result<List<Contact>> = { Result.success(emptyList()) },
+) : ContactRepository {
+    val queries = mutableListOf<String>()
+
+    override suspend fun search(mailboxId: String, query: String, limit: Int): Result<List<Contact>> {
+        queries += query
+        return handler(query)
     }
 }

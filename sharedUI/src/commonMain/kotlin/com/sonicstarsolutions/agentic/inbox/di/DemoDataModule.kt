@@ -22,6 +22,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ContactRepository
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledStatus
@@ -405,6 +407,7 @@ val demoRepositoryModule = module {
     single<FolderRepository> { DemoFolderRepository() }
     single<LabelRepository> { DemoLabelRepository() }
     single<ScheduleRepository> { DemoScheduleRepository() }
+    single<ContactRepository> { DemoContactRepository() }
     single<ThreadRepository> { DemoThreadRepository() }
     single<DraftRepository> { DemoDraftRepository() }
     single<AttachmentRepository> { DemoAttachmentRepository() }
@@ -467,4 +470,16 @@ class DemoScheduleRepository : ScheduleRepository {
         queue.removeAll { it.id == scheduledId }
         return Result.success(Unit)
     }
+}
+
+/** A few made-up correspondents for demo mode's autocomplete. */
+class DemoContactRepository : ContactRepository {
+    private val contacts = listOf(
+        Contact("alex.morgan@example.com", 12),
+        Contact("priya.shah@example.com", 8),
+        Contact("sam.lee@example.com", 5),
+    )
+
+    override suspend fun search(mailboxId: String, query: String, limit: Int): Result<List<Contact>> =
+        Result.success(contacts.filter { it.address.contains(query.lowercase()) }.take(limit))
 }

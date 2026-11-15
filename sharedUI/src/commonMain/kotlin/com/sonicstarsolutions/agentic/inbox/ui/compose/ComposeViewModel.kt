@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
@@ -11,6 +12,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
@@ -19,6 +21,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
+import com.sonicstarsolutions.agentic.inbox.util.RecipientTokens
 import com.sonicstarsolutions.agentic.inbox.util.SendLater
 import kotlinx.coroutines.CoroutineScope
 import kotlin.time.Instant
@@ -54,6 +57,9 @@ data class ComposeUiState(
      * the mailbox loads; the picker is only offered when there is more than one. */
     val fromOptions: List<String> = emptyList(),
     val selectedFrom: String = "",
+    /** Contacts matching the address being typed, shown under [suggestionsFor]. */
+    val suggestions: List<Contact> = emptyList(),
+    val suggestionsFor: ComposeField? = null,
     val to: String = "",
     val cc: String = "",
     val bcc: String = "",
@@ -79,6 +85,7 @@ class ComposeViewModel(
     private val replyEmailUseCase: ReplyEmailUseCase,
     private val forwardEmailUseCase: ForwardEmailUseCase,
     private val scheduleEmailUseCase: ScheduleEmailUseCase,
+    private val searchContacts: SearchContactsUseCase,
     /** Server-side cleanup after an EDIT_DRAFT send — distinct from [deleteDraftUseCase], which
      * only ever touches this app's own local Room-backed drafts. */
     private val deleteEmailUseCase: DeleteEmailUseCase,
@@ -106,6 +113,7 @@ class ComposeViewModel(
     private var fromEmail: String = ""
     private var fromName: String = ""
     private var aliases: List<String> = emptyList()
+    private var suggestJob: Job? = null
     private var mailboxFromDisplay: String = ""
     private var signatureText: String? = null
     private var autosaveJob: Job? = null
@@ -123,6 +131,11 @@ class ComposeViewModel(
         /** Quiet period after the last keystroke before an autosave fires. Long enough that
          * ordinary typing doesn't hit the database on every character. */
         const val AUTOSAVE_DEBOUNCE_MILLIS: Long = 2_000
+
+        /** Pause after the last keystroke before contacts are looked up — short, so the list
+         * feels live, but long enough that fast typing makes one request, not one per letter. */
+        const val SUGGEST_DEBOUNCE_MILLIS: Long = 250
+        private const val SUGGESTION_LIMIT = 6
 
         /** Caps chosen for the transport: the whole message travels as one JSON body with
          * base64 (~4/3 inflation) to the Worker, and mail providers reject ~25MB anyway.
@@ -259,10 +272,76 @@ class ComposeViewModel(
         }
     }
 
-    fun onToChanged(value: String) = edit { it.copy(to = value, errorMessage = null) }
-    fun onCcChanged(value: String) = edit { it.copy(cc = value) }
-    fun onBccChanged(value: String) = edit { it.copy(bcc = value) }
+    fun onToChanged(value: String) {
+        edit { it.copy(to = value, errorMessage = null) }
+        requestSuggestions(ComposeField.TO, value)
+    }
+    fun onCcChanged(value: String) {
+        edit { it.copy(cc = value) }
+        requestSuggestions(ComposeField.CC, value)
+    }
+    fun onBccChanged(value: String) {
+        edit { it.copy(bcc = value) }
+        requestSuggestions(ComposeField.BCC, value)
+    }
     fun onSubjectChanged(value: String) = edit { it.copy(subject = value) }
+
+    private fun textOf(field: ComposeField): String = when (field) {
+        ComposeField.TO -> _state.value.to
+        ComposeField.CC -> _state.value.cc
+        ComposeField.BCC -> _state.value.bcc
+    }
+
+    /**
+     * Looks up contacts for the address being typed in [field], after a short pause. A lookup
+     * that fails, or that comes back after the user has typed on, is dropped silently: suggestions
+     * are a convenience and must never produce an error or show stale results.
+     */
+    private fun requestSuggestions(field: ComposeField, text: String) {
+        suggestJob?.cancel()
+        val word = RecipientTokens.current(text)
+        if (word.isBlank()) {
+            clearSuggestions()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(SUGGEST_DEBOUNCE_MILLIS)
+            searchContacts(mailboxId, word, SUGGESTION_LIMIT)
+                .onSuccess { found ->
+                    val now = textOf(field)
+                    if (RecipientTokens.current(now) != word) return@onSuccess
+                    val taken = (EmailAddressUtils.parseAddressList(now) + _state.value.fromOptions + fromEmail)
+                        .map { it.lowercase() }
+                        .toSet()
+                    val list = found.filterNot { it.address.lowercase() in taken }
+                    _state.update { it.copy(suggestions = list, suggestionsFor = field.takeIf { list.isNotEmpty() }) }
+                }
+                .onFailure { clearSuggestions() }
+        }
+    }
+
+    private fun clearSuggestions() {
+        _state.update { if (it.suggestions.isEmpty() && it.suggestionsFor == null) it else it.copy(suggestions = emptyList(), suggestionsFor = null) }
+    }
+
+    /** Completes the address being typed with [contact]. */
+    fun onSuggestionPicked(contact: Contact) {
+        val field = _state.value.suggestionsFor ?: return
+        suggestJob?.cancel()
+        val completed = RecipientTokens.replaceCurrent(textOf(field), contact.address)
+        edit {
+            when (field) {
+                ComposeField.TO -> it.copy(to = completed, errorMessage = null)
+                ComposeField.CC -> it.copy(cc = completed)
+                ComposeField.BCC -> it.copy(bcc = completed)
+            }.copy(suggestions = emptyList(), suggestionsFor = null)
+        }
+    }
+
+    fun dismissSuggestions() {
+        suggestJob?.cancel()
+        clearSuggestions()
+    }
 
     /** Picks which of the mailbox's addresses to send from; an address that isn't one of them is ignored. */
     fun onFromSelected(address: String) {
@@ -442,3 +521,6 @@ if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else addres
             }
     }
 }
+
+/** The recipient fields that offer contact suggestions. */
+enum class ComposeField { TO, CC, BCC }

@@ -101,7 +101,7 @@ Phase 0-1: about 2-3 days (Phase 1 includes the deletions). Phase 3 items 1, 3, 
 | 3.2 Labels | done | feat(labels): create, edit, filter and apply labels |
 | 3.3 Aliases and From picker | done | feat(aliases): manage aliases and send from them |
 | 3.4 Send later | done | feat(send-later): schedule messages and manage the queue |
-| 3.5 Recipient autocomplete | not started | |
+| 3.5 Recipient autocomplete | done | feat(compose): suggest recipients from past correspondents |
 | 3.6 Live updates | not started | |
 | 3.7 Search grouped by conversation, threaded list | not started | |
 
