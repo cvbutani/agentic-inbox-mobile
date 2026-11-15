@@ -15,7 +15,7 @@ data class MailboxDto(
     @SerialName("id") val id: String,
     @SerialName("email") val email: String,
     @SerialName("name") val name: String,
-    // Free-form per-mailbox preferences (forwarding/signature/autoReply); only present on the
+    // Free-form per-mailbox preferences (signature, aliases, auto-draft, …); only present on the
     // single-mailbox GET, omitted by the list endpoint. Untyped here since the app doesn't edit it.
     @SerialName("settings") val settings: JsonElement? = null,
 )
@@ -25,6 +25,11 @@ data class CreateMailboxDto(
     @SerialName("email") val email: String,
     @SerialName("name") val name: String,
     @SerialName("settings") val settings: JsonElement? = null,
+)
+
+@Serializable
+data class UpdateMailboxDto(
+    @SerialName("settings") val settings: JsonElement,
 )
 
 @Serializable

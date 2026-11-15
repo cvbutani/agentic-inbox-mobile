@@ -4,7 +4,9 @@ import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeMode
 import com.sonicstarsolutions.agentic.inbox.ui.compose.ComposeViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.inbox.InboxViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker.MailboxPickerViewModel
+import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.MailboxSettingsViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingViewModel
+import com.sonicstarsolutions.agentic.inbox.ui.scheduled.ScheduledViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.search.SearchViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.splash.SplashViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.thread.ThreadViewModel
@@ -16,11 +18,12 @@ val viewModelModule = module {
     viewModelOf(::SplashViewModel)
     viewModelOf(::OnboardingViewModel)
     viewModelOf(::MailboxPickerViewModel)
+    viewModel { (mailboxId: String) -> MailboxSettingsViewModel(get(), get(), mailboxId) }
     // Runtime args (mailboxId/mailboxName) come from the Inbox nav key via parametersOf(...);
     // the use case is injected. Destructure the ParametersHolder positionally.
     viewModel { (mailboxId: String, mailboxName: String) ->
         InboxViewModel(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
             mailboxId, mailboxName,
         )
     }
@@ -29,10 +32,11 @@ val viewModelModule = module {
     }
     viewModel { (mailboxId: String, mode: ComposeMode, emailId: String?, threadId: String?, draftId: String?) ->
         ComposeViewModel(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
             mailboxId, mode, emailId, threadId, draftId,
         )
     }
+    viewModel { (mailboxId: String) -> ScheduledViewModel(get(), get(), get(), mailboxId) }
     viewModel { (mailboxId: String) ->
         SearchViewModel(get(), get(), mailboxId)
     }

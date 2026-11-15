@@ -146,6 +146,18 @@ class ThreadViewModel(
         }
     }
 
+    /**
+     * Moves the currently-expanded message to the Spam folder and navigates back — like an
+     * archive or delete, the message leaves the current folder. The server has no spam
+     * classification, so this is a plain folder move.
+     */
+    fun markSpam() {
+        val targetId = targetMessageId() ?: return
+        runAction {
+            moveEmail(mailboxId, targetId, SystemFolders.SPAM).map { "Moved to Spam" }
+        }
+    }
+
     fun toggleReadState(messageId: String) {
         val target = _state.value.messages.firstOrNull { it.id == messageId } ?: return
         val newReadState = !target.read

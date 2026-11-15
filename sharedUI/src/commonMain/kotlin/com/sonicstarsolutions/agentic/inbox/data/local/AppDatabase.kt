@@ -10,7 +10,7 @@ import androidx.sqlite.execSQL
 
 @Database(
     entities = [MailboxEntity::class, FolderEntity::class, EmailEntity::class, DraftEntity::class],
-    version = 3,
+    version = 5,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -56,6 +56,25 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/** Adds the `labelsJson` column to `emails` so list rows keep their label chips offline. A cache
+ * column like `fromName`: nullable, refilled on the next fetch. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `emails` ADD COLUMN `labelsJson` TEXT")
+    }
+}
+
+/** Adds `threadCount` to `emails` so a conversation row keeps its size offline. A cache column:
+ * existing rows read as single messages until the next fetch refills them. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE `emails` ADD COLUMN `threadCount` INTEGER NOT NULL DEFAULT 1")
+    }
+}
+
 /** Room's KSP processor generates the `actual` implementation of this per target (Android/iOS) —
  * required boilerplate for Room's Kotlin Multiplatform constructor pattern. */
-expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase>
+@Suppress("NO_ACTUAL_FOR_EXPECT")
+expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
+    override fun initialize(): AppDatabase
+}

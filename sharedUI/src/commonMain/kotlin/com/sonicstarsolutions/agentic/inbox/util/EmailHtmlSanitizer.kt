@@ -9,7 +9,7 @@ package com.sonicstarsolutions.agentic.inbox.util
  */
 object EmailHtmlSanitizer {
 
-    private val SCRIPT_TAG = Regex("""<script\b[^>]*>.*?</script>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val SCRIPT_TAG = Regex("""(?is)<script\b[^>]*>.*?</script>""")
     private val IMG_TAG = Regex("""<img\b[^>]*>""", RegexOption.IGNORE_CASE)
     private val SRC_ATTR = Regex("""\bsrc(\s*=\s*)(["'])(.*?)\2""", RegexOption.IGNORE_CASE)
 

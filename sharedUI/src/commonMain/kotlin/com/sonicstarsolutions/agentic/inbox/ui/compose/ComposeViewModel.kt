@@ -4,11 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
@@ -17,7 +21,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
+import com.sonicstarsolutions.agentic.inbox.util.RecipientTokens
+import com.sonicstarsolutions.agentic.inbox.util.SendLater
 import kotlinx.coroutines.CoroutineScope
+import kotlin.time.Instant
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +53,13 @@ data class ComposeUiState(
     /** The sending mailbox's address, for the composer's read-only From row — in a
      * multi-mailbox app the sender identity shouldn't be a mystery. */
     val fromAddress: String = "",
+    /** The addresses the message may be sent from — the mailbox, then its aliases. Empty until
+     * the mailbox loads; the picker is only offered when there is more than one. */
+    val fromOptions: List<String> = emptyList(),
+    val selectedFrom: String = "",
+    /** Contacts matching the address being typed, shown under [suggestionsFor]. */
+    val suggestions: List<Contact> = emptyList(),
+    val suggestionsFor: ComposeField? = null,
     val to: String = "",
     val cc: String = "",
     val bcc: String = "",
@@ -70,6 +84,8 @@ class ComposeViewModel(
     private val sendEmailUseCase: SendEmailUseCase,
     private val replyEmailUseCase: ReplyEmailUseCase,
     private val forwardEmailUseCase: ForwardEmailUseCase,
+    private val scheduleEmailUseCase: ScheduleEmailUseCase,
+    private val searchContacts: SearchContactsUseCase,
     /** Server-side cleanup after an EDIT_DRAFT send — distinct from [deleteDraftUseCase], which
      * only ever touches this app's own local Room-backed drafts. */
     private val deleteEmailUseCase: DeleteEmailUseCase,
@@ -96,6 +112,10 @@ class ComposeViewModel(
 
     private var fromEmail: String = ""
     private var fromName: String = ""
+    private var aliases: List<String> = emptyList()
+    private var suggestJob: Job? = null
+    private var mailboxFromDisplay: String = ""
+    private var signatureText: String? = null
     private var autosaveJob: Job? = null
 
     /** Set while loading an EDIT_DRAFT message — the id of the message *that draft* was replying
@@ -112,6 +132,11 @@ class ComposeViewModel(
          * ordinary typing doesn't hit the database on every character. */
         const val AUTOSAVE_DEBOUNCE_MILLIS: Long = 2_000
 
+        /** Pause after the last keystroke before contacts are looked up — short, so the list
+         * feels live, but long enough that fast typing makes one request, not one per letter. */
+        const val SUGGEST_DEBOUNCE_MILLIS: Long = 250
+        private const val SUGGESTION_LIMIT = 6
+
         /** Caps chosen for the transport: the whole message travels as one JSON body with
          * base64 (~4/3 inflation) to the Worker, and mail providers reject ~25MB anyway.
          * Refusing here beats timing out mid-send. */
@@ -124,7 +149,19 @@ class ComposeViewModel(
             getMailbox(mailboxId).onSuccess { mailbox ->
                 fromEmail = mailbox.email
                 fromName = mailbox.displayName
-                _state.update { it.copy(fromAddress = mailbox.email) }
+                aliases = mailbox.aliases
+                val fromDisplay = if (mailbox.fromName.isNullOrBlank()) mailbox.email else "${mailbox.fromName} <${mailbox.email}>"
+                mailboxFromDisplay = fromDisplay
+                _state.update {
+                    it.copy(
+                        fromAddress = fromDisplay,
+                        fromOptions = ComposeFrom.choices(mailbox.email, aliases),
+                        selectedFrom = mailbox.email,
+                    )
+                }
+                if (mailbox.signatureEnabled && !mailbox.signatureText.isNullOrBlank()) {
+                    signatureText = mailbox.signatureText
+                }
             }
             val resumed = draftId?.let { getDraftUseCase(it) }
             if (resumed != null) {
@@ -147,7 +184,8 @@ class ComposeViewModel(
 
     private suspend fun loadOriginalIfNeeded() {
         if (mode == ComposeMode.NEW || emailId == null) {
-            _state.update { it.copy(loading = false) }
+            val initialBody = if (!signatureText.isNullOrBlank()) "\n\n-- \n$signatureText" else ""
+            _state.update { it.copy(loading = false, body = it.body.ifEmpty { initialBody }) }
             return
         }
         getThread(mailboxId, emailId, threadId)
@@ -159,11 +197,18 @@ class ComposeViewModel(
                 if (original == null) {
                     _state.update { it.copy(loading = false) }
                 } else {
+                    if (mode == ComposeMode.REPLY || mode == ComposeMode.REPLY_ALL || mode == ComposeMode.FORWARD) {
+                        // Answer from the address the sender actually wrote to.
+                        val addressedTo = EmailAddressUtils.parseAddressList(original.recipient) +
+                            EmailAddressUtils.parseAddressList(original.cc.orEmpty())
+                        val from = ComposeFrom.defaultFor(fromEmail, aliases, addressedTo)
+                        _state.update { it.copy(selectedFrom = from, fromAddress = fromDisplayFor(from)) }
+                    }
                     val fields = when (mode) {
-                        ComposeMode.REPLY -> ComposePrefill.forReply(original, replyAll = false, ownEmail = fromEmail)
-                        ComposeMode.REPLY_ALL -> ComposePrefill.forReply(original, replyAll = true, ownEmail = fromEmail)
-                        ComposeMode.FORWARD -> ComposePrefill.forForward(original)
-                        ComposeMode.NEW -> PrefilledFields(to = "", cc = "", subject = "", body = "")
+                        ComposeMode.REPLY -> ComposePrefill.forReply(original, replyAll = false, ownEmail = fromEmail, aliases = aliases, signature = signatureText)
+                        ComposeMode.REPLY_ALL -> ComposePrefill.forReply(original, replyAll = true, ownEmail = fromEmail, aliases = aliases, signature = signatureText)
+                        ComposeMode.FORWARD -> ComposePrefill.forForward(original, signature = signatureText)
+                        ComposeMode.NEW -> PrefilledFields(to = "", cc = "", subject = "", body = if (!signatureText.isNullOrBlank()) "\n\n-- \n$signatureText" else "")
                         ComposeMode.EDIT_DRAFT -> {
                             // Continuing an existing draft, not deriving a fresh reply/forward — its
                             // own current fields are the whole message, not a starting point to
@@ -227,10 +272,86 @@ class ComposeViewModel(
         }
     }
 
-    fun onToChanged(value: String) = edit { it.copy(to = value, errorMessage = null) }
-    fun onCcChanged(value: String) = edit { it.copy(cc = value) }
-    fun onBccChanged(value: String) = edit { it.copy(bcc = value) }
+    fun onToChanged(value: String) {
+        edit { it.copy(to = value, errorMessage = null) }
+        requestSuggestions(ComposeField.TO, value)
+    }
+    fun onCcChanged(value: String) {
+        edit { it.copy(cc = value) }
+        requestSuggestions(ComposeField.CC, value)
+    }
+    fun onBccChanged(value: String) {
+        edit { it.copy(bcc = value) }
+        requestSuggestions(ComposeField.BCC, value)
+    }
     fun onSubjectChanged(value: String) = edit { it.copy(subject = value) }
+
+    private fun textOf(field: ComposeField): String = when (field) {
+        ComposeField.TO -> _state.value.to
+        ComposeField.CC -> _state.value.cc
+        ComposeField.BCC -> _state.value.bcc
+    }
+
+    /**
+     * Looks up contacts for the address being typed in [field], after a short pause. A lookup
+     * that fails, or that comes back after the user has typed on, is dropped silently: suggestions
+     * are a convenience and must never produce an error or show stale results.
+     */
+    private fun requestSuggestions(field: ComposeField, text: String) {
+        suggestJob?.cancel()
+        val word = RecipientTokens.current(text)
+        if (word.isBlank()) {
+            clearSuggestions()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(SUGGEST_DEBOUNCE_MILLIS)
+            searchContacts(mailboxId, word, SUGGESTION_LIMIT)
+                .onSuccess { found ->
+                    val now = textOf(field)
+                    if (RecipientTokens.current(now) != word) return@onSuccess
+                    val taken = (EmailAddressUtils.parseAddressList(now) + _state.value.fromOptions + fromEmail)
+                        .map { it.lowercase() }
+                        .toSet()
+                    val list = found.filterNot { it.address.lowercase() in taken }
+                    _state.update { it.copy(suggestions = list, suggestionsFor = field.takeIf { list.isNotEmpty() }) }
+                }
+                .onFailure { clearSuggestions() }
+        }
+    }
+
+    private fun clearSuggestions() {
+        _state.update { if (it.suggestions.isEmpty() && it.suggestionsFor == null) it else it.copy(suggestions = emptyList(), suggestionsFor = null) }
+    }
+
+    /** Completes the address being typed with [contact]. */
+    fun onSuggestionPicked(contact: Contact) {
+        val field = _state.value.suggestionsFor ?: return
+        suggestJob?.cancel()
+        val completed = RecipientTokens.replaceCurrent(textOf(field), contact.address)
+        edit {
+            when (field) {
+                ComposeField.TO -> it.copy(to = completed, errorMessage = null)
+                ComposeField.CC -> it.copy(cc = completed)
+                ComposeField.BCC -> it.copy(bcc = completed)
+            }.copy(suggestions = emptyList(), suggestionsFor = null)
+        }
+    }
+
+    fun dismissSuggestions() {
+        suggestJob?.cancel()
+        clearSuggestions()
+    }
+
+    /** Picks which of the mailbox's addresses to send from; an address that isn't one of them is ignored. */
+    fun onFromSelected(address: String) {
+        val choice = _state.value.fromOptions.firstOrNull { it.equals(address, ignoreCase = true) } ?: return
+        _state.update { it.copy(selectedFrom = choice, fromAddress = fromDisplayFor(choice)) }
+    }
+
+    /** The mailbox shows with its display name; an alias shows as just the address. */
+    private fun fromDisplayFor(address: String): String =
+if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else address
     fun onBodyChanged(value: String) = edit { it.copy(body = value) }
 
     private fun edit(update: (ComposeUiState) -> ComposeUiState) {
@@ -306,26 +427,11 @@ class ComposeViewModel(
     fun consumeError() = _state.update { it.copy(errorMessage = null) }
 
     fun send() {
-        val toList = EmailAddressUtils.parseAddressList(_state.value.to)
-        if (toList.isEmpty()) {
-            _state.update { it.copy(errorMessage = "At least one recipient is required.") }
-            return
-        }
+        val toList = recipientsOrError() ?: return
         if (_state.value.sending) return
-        autosaveJob?.cancel()
-        autosaveJob = null
-        _state.update { it.copy(sending = true, errorMessage = null) }
+        beginSending()
         viewModelScope.launch {
-            val request = ComposeEmailRequest(
-                fromEmail = fromEmail,
-                fromName = fromName,
-                to = toList,
-                cc = EmailAddressUtils.parseAddressList(_state.value.cc),
-                bcc = EmailAddressUtils.parseAddressList(_state.value.bcc),
-                subject = _state.value.subject.trim(),
-                body = _state.value.body,
-                attachments = _state.value.attachments,
-            )
+            val request = buildRequest(toList)
             val result = when (mode) {
                 ComposeMode.NEW -> sendEmailUseCase(mailboxId, request)
                 ComposeMode.REPLY, ComposeMode.REPLY_ALL -> replyEmailUseCase(mailboxId, emailId!!, request)
@@ -337,21 +443,84 @@ class ComposeViewModel(
                     ?.let { originalEmailId -> replyEmailUseCase(mailboxId, originalEmailId, request) }
                     ?: sendEmailUseCase(mailboxId, request)
             }
-            result
-                .onSuccess {
-                    // The message is out; its draft has served its purpose. A send that failed
-                    // keeps the draft, so nothing the user wrote is lost.
-                    _state.value.draftId?.let { deleteDraftUseCase(it) }
-                    // EDIT_DRAFT's draft is a real row on the server (emailId is its id), separate
-                    // from the local-only one above — best-effort, same reasoning as
-                    // SendDraftEmailUseCase: the send already succeeded, so a cleanup failure here
-                    // must not be reported as this send having failed.
-                    if (mode == ComposeMode.EDIT_DRAFT) emailId?.let { deleteEmailUseCase(mailboxId, it) }
-                    _state.update { it.copy(sending = false, sent = true, draftId = null) }
-                }
-                .onFailure { t ->
-                    _state.update { it.copy(sending = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to send") }
-                }
+            finishSending(result, failureFallback = "Failed to send")
         }
     }
+
+    /**
+     * Queues the message to go out at [sendAt] instead of now. The server holds it and sends it
+     * even if this device is off, so on success the composer closes exactly as it does after a
+     * send. Attachments aren't supported by scheduled sends yet, so they are refused up front.
+     */
+    fun scheduleSend(sendAt: Instant, now: Instant = Clock.System.now()) {
+        val toList = recipientsOrError() ?: return
+        if (_state.value.sending) return
+        if (_state.value.attachments.isNotEmpty()) {
+            _state.update { it.copy(errorMessage = "Scheduled messages can't have attachments yet. Remove them, or send now.") }
+            return
+        }
+        SendLater.problemWith(sendAt, now)?.let { problem ->
+            _state.update { it.copy(errorMessage = problem.message) }
+            return
+        }
+        beginSending()
+        viewModelScope.launch {
+            val request = buildRequest(toList)
+            // The same rule as send(): an edited reply-draft is a reply, anything else a compose.
+            val (kind, originalId) = when (mode) {
+                ComposeMode.REPLY, ComposeMode.REPLY_ALL -> ScheduleKind.REPLY to emailId
+                ComposeMode.EDIT_DRAFT -> editDraftInReplyTo?.let { ScheduleKind.REPLY to it } ?: (ScheduleKind.COMPOSE to null)
+                ComposeMode.NEW, ComposeMode.FORWARD -> ScheduleKind.COMPOSE to null
+            }
+            finishSending(scheduleEmailUseCase(mailboxId, request, kind, originalId, sendAt), failureFallback = "Failed to schedule")
+        }
+    }
+
+    /** The parsed To list, or null after flagging that there isn't one. */
+    private fun recipientsOrError(): List<String>? {
+        val toList = EmailAddressUtils.parseAddressList(_state.value.to)
+        if (toList.isEmpty()) {
+            _state.update { it.copy(errorMessage = "At least one recipient is required.") }
+            return null
+        }
+        return toList
+    }
+
+    private fun beginSending() {
+        autosaveJob?.cancel()
+        autosaveJob = null
+        _state.update { it.copy(sending = true, errorMessage = null) }
+    }
+
+    private fun buildRequest(toList: List<String>) = ComposeEmailRequest(
+        fromEmail = _state.value.selectedFrom.ifBlank { fromEmail },
+        fromName = fromName,
+        to = toList,
+        cc = EmailAddressUtils.parseAddressList(_state.value.cc),
+        bcc = EmailAddressUtils.parseAddressList(_state.value.bcc),
+        subject = _state.value.subject.trim(),
+        body = _state.value.body,
+        attachments = _state.value.attachments,
+    )
+
+    private suspend fun finishSending(result: Result<Unit>, failureFallback: String) {
+        result
+            .onSuccess {
+                // The message is out (or queued); its draft has served its purpose. A send that
+                // failed keeps the draft, so nothing the user wrote is lost.
+                _state.value.draftId?.let { deleteDraftUseCase(it) }
+                // EDIT_DRAFT's draft is a real row on the server (emailId is its id), separate
+                // from the local-only one above — best-effort, same reasoning as
+                // SendDraftEmailUseCase: the send already succeeded, so a cleanup failure here
+                // must not be reported as this send having failed.
+                if (mode == ComposeMode.EDIT_DRAFT) emailId?.let { deleteEmailUseCase(mailboxId, it) }
+                _state.update { it.copy(sending = false, sent = true, draftId = null) }
+            }
+            .onFailure { t ->
+                _state.update { it.copy(sending = false, errorMessage = t.message ?: t::class.simpleName ?: failureFallback) }
+            }
+    }
 }
+
+/** The recipient fields that offer contact suggestions. */
+enum class ComposeField { TO, CC, BCC }

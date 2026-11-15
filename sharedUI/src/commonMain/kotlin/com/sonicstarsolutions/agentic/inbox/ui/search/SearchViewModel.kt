@@ -212,11 +212,15 @@ class SearchViewModel(
     }
 }
 
+private const val MAX_LIKE_TERM_LENGTH = 48
+
+private fun String.safeSearchTerm(): String = this.trim().take(MAX_LIKE_TERM_LENGTH)
+
 private fun SearchUiState.toQuery(): SearchQuery = SearchQuery(
-    query = queryText.trim(),
-    from = from.trim().ifBlank { null },
-    to = to.trim().ifBlank { null },
-    subject = subject.trim().ifBlank { null },
+    query = queryText.safeSearchTerm(),
+    from = from.safeSearchTerm().ifBlank { null },
+    to = to.safeSearchTerm().ifBlank { null },
+    subject = subject.safeSearchTerm().ifBlank { null },
     dateStart = dateStart.trim().ifBlank { null },
     dateEnd = dateEnd.trim().ifBlank { null },
     isRead = isRead,

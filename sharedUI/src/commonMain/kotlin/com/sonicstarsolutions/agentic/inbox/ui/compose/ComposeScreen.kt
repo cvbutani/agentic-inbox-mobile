@@ -1,12 +1,15 @@
 package com.sonicstarsolutions.agentic.inbox.ui.compose
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -16,11 +19,17 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -44,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -54,7 +64,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
+import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.util.formatFileSize
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -75,6 +87,16 @@ fun ComposeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showCcBcc by remember { mutableStateOf(false) }
     var showDiscardDialog by remember { mutableStateOf(false) }
+    var showSendLater by remember { mutableStateOf(false) }
+    if (showSendLater) {
+        SendLaterDialog(
+            onDismiss = { showSendLater = false },
+            onPick = { at ->
+                showSendLater = false
+                viewModel.scheduleSend(at)
+            },
+        )
+    }
 
     // Reveal Cc/Bcc automatically if Reply All prefilled either of them — hiding fields that
     // already have recipients in them would be confusing, not tidy.
@@ -136,17 +158,35 @@ fun ComposeScreen(
                     IconButton(onClick = pickFiles, enabled = !state.sending) {
                         Icon(Icons.Default.AttachFile, contentDescription = "Attach file")
                     }
-                    // Only offered once there's actually a draft to throw away.
-                    if (state.draftId != null) {
-                        IconButton(onClick = { showDiscardDialog = true }, enabled = !state.sending) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "Discard draft")
-                        }
-                    }
                     IconButton(onClick = viewModel::send, enabled = !state.sending) {
                         if (state.sending) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         } else {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                        }
+                    }
+                    // Two icons plus an overflow: the design system caps an app bar at three.
+                    var showMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                                text = { Text("Send later…") },
+                                enabled = !state.sending,
+                                onClick = { showMenu = false; showSendLater = true },
+                            )
+                            // Only offered once there's actually a draft to throw away.
+                            if (state.draftId != null) {
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
+                                    text = { Text("Discard draft") },
+                                    enabled = !state.sending,
+                                    onClick = { showMenu = false; showDiscardDialog = true },
+                                )
+                            }
                         }
                     }
                 },
@@ -194,25 +234,13 @@ fun ComposeScreen(
                 }
 
                 if (state.fromAddress.isNotBlank()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            text = "From",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = state.fromAddress,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    FromRow(
+                        fromAddress = state.fromAddress,
+                        options = state.fromOptions,
+                        selected = state.selectedFrom,
+                        enabled = !state.sending,
+                        onSelected = viewModel::onFromSelected,
+                    )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
 
@@ -230,7 +258,9 @@ fun ComposeScreen(
                         null
                     },
                     modifier = Modifier.focusRequester(toFocusRequester),
+                    onFocusLost = viewModel::dismissSuggestions,
                 )
+                SuggestionList(state.suggestions.takeIf { state.suggestionsFor == ComposeField.TO }.orEmpty(), viewModel::onSuggestionPicked)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 if (showCcBcc) {
@@ -240,7 +270,9 @@ fun ComposeScreen(
                         prefixLabel = "Cc",
                         keyboardOptions = addressKeyboard,
                         keyboardActions = nextField,
+                        onFocusLost = viewModel::dismissSuggestions,
                     )
+                    SuggestionList(state.suggestions.takeIf { state.suggestionsFor == ComposeField.CC }.orEmpty(), viewModel::onSuggestionPicked)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     ComposeFieldRow(
                         value = state.bcc,
@@ -248,7 +280,9 @@ fun ComposeScreen(
                         prefixLabel = "Bcc",
                         keyboardOptions = addressKeyboard,
                         keyboardActions = nextField,
+                        onFocusLost = viewModel::dismissSuggestions,
                     )
+                    SuggestionList(state.suggestions.takeIf { state.suggestionsFor == ComposeField.BCC }.orEmpty(), viewModel::onSuggestionPicked)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
 
@@ -310,6 +344,8 @@ private fun ComposeFieldRow(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     trailing: (@Composable () -> Unit)? = null,
+    /** Called when the field loses focus — lets recipient fields close their suggestion list. */
+    onFocusLost: (() -> Unit)? = null,
 ) {
     TextField(
         value = value,
@@ -329,7 +365,11 @@ private fun ComposeFieldRow(
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
         colors = borderlessFieldColors(),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .let { base ->
+                if (onFocusLost == null) base else base.onFocusChanged { focus -> if (!focus.isFocused) onFocusLost() }
+            },
     )
 }
 
@@ -352,4 +392,98 @@ private fun titleFor(mode: ComposeMode): String = when (mode) {
     ComposeMode.REPLY_ALL -> "Reply all"
     ComposeMode.FORWARD -> "Forward"
     ComposeMode.EDIT_DRAFT -> "Edit draft"
+}
+
+/**
+ * The read-only "From" row — or, when the mailbox has aliases, a row that opens a menu of the
+ * addresses the message can go out from. The row is the whole tap target (48dp+), so the small
+ * chevron never has to be hit on its own.
+ */
+@Composable
+private fun FromRow(
+    fromAddress: String,
+    options: List<String>,
+    selected: String,
+    enabled: Boolean,
+    onSelected: (String) -> Unit,
+) {
+    val canChoose = options.size > 1
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (canChoose && enabled) Modifier.clickable { expanded = true } else Modifier)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "From",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = fromAddress,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (canChoose) {
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "Choose sender address",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { address ->
+                DropdownMenuItem(
+                    text = { Text(address) },
+                    trailingIcon = {
+                        if (address.equals(selected, ignoreCase = true)) {
+                            Icon(Icons.Default.Check, contentDescription = "Selected")
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(address)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Contacts matching the address being typed, listed directly under its field. Each row is the
+ * whole tap target (48dp+) and reuses the inbox's avatar so identities look the same everywhere.
+ */
+@Composable
+private fun SuggestionList(contacts: List<Contact>, onPick: (Contact) -> Unit) {
+    if (contacts.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
+        contacts.forEach { contact ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable { onPick(contact) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                InitialsAvatar(name = contact.address, modifier = Modifier.size(32.dp))
+                Text(
+                    text = contact.address,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
 }

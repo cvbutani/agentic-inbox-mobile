@@ -7,7 +7,7 @@ package com.sonicstarsolutions.agentic.inbox.util
 object HtmlTextExtractor {
 
     private val SCRIPT_OR_STYLE_BLOCK =
-        Regex("""<(script|style)\b[^>]*>.*?</\1>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        Regex("""(?is)<(script|style)\b[^>]*>.*?</\1>""")
     private val BLOCK_BOUNDARY_TAG =
         Regex("""</(p|div|li|tr|h[1-6])\s*>|<br\s*/?>""", RegexOption.IGNORE_CASE)
     private val ANY_TAG = Regex("""<[^>]+>""")

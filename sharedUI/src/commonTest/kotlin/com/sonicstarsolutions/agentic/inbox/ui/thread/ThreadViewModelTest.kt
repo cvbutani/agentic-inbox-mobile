@@ -591,4 +591,30 @@ class ThreadViewModelTest {
 
         assertFalse(viewModel.state.value.actionInProgress)
     }
+
+    // --- Mark as spam: a plain move to the Spam folder (the server has no spam endpoint) ------
+
+    @Test
+    fun `markSpam moves the expanded message to the Spam folder and navigates back`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1"))))
+        val emailRepository = FakeEmailRepository()
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.markSpam()
+
+        assertEquals(listOf(FakeEmailRepository.MoveCall("mb1", "e1", "spam")), emailRepository.moveCalls)
+        assertEquals(ThreadActionResult.Success("Moved to Spam", shouldNavigateBack = true), viewModel.state.value.actionResult)
+    }
+
+    @Test
+    fun `markSpam failure reports the error and stays on the thread`() = runTest {
+        val threadRepository = FakeThreadRepository(result = Result.success(listOf(detail("e1"))))
+        val emailRepository = FakeEmailRepository(moveResult = Result.failure(RuntimeException("offline")))
+        val viewModel = buildViewModel(threadRepository, emailRepository)
+
+        viewModel.markSpam()
+
+        assertEquals(ThreadActionResult.Failure("offline"), viewModel.state.value.actionResult)
+        assertFalse(viewModel.state.value.actionInProgress)
+    }
 }

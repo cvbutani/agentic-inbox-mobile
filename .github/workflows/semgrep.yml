@@ -1,0 +1,43 @@
+name: Semgrep
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    # Weekly, so newly published rules are applied to code that hasn't changed.
+    - cron: "43 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semgrep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      # Open-source rules only: no Semgrep account or token. Fails the job on ERROR-severity
+      # findings; warnings are printed but don't block. Tighten with `--severity WARNING` later.
+      - name: Scan
+        run: >
+          semgrep scan
+          --metrics=off
+          --error
+          --severity ERROR
+          --config p/default
+          --config p/kotlin
+          --config p/swift
+          --config p/secrets
+          --config p/github-actions
+          --exclude build
+          --exclude .gradle
+          --exclude Pods

@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -193,11 +194,16 @@ fun ThreadScreen(
                         IconButton(onClick = { showDeleteDialog = true }, enabled = !state.actionInProgress) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }
-                        IconButton(
-                            onClick = { showMoveSheet = true },
+                        IconButton(onClick = { showMoveSheet = true },
                             enabled = !state.actionInProgress && state.folders.isNotEmpty(),
                         ) {
                             Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = "Move to folder")
+                        }
+                        IconButton(
+                            onClick = viewModel::markSpam,
+                            enabled = !state.actionInProgress,
+                        ) {
+                            Icon(Icons.Default.Report, contentDescription = "Mark as spam")
                         }
                     }
                 },
@@ -475,6 +481,16 @@ private fun MessageCard(
 
                     // Line 3 (expanded only): the full date and time.
                     if (expanded) {
+                        if (!message.cc.isNullOrBlank()) {
+                            val ccText = EmailAddressUtils.displayName(message.cc, mailboxEmail)
+                            Text(
+                                text = "cc $ccText",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                         Text(
                             text = EmailTimeFormatter.formatAbsolute(message.date),
                             style = MaterialTheme.typography.labelSmall,

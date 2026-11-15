@@ -1,6 +1,7 @@
 package com.sonicstarsolutions.agentic.inbox.domain.repository
 
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 
 interface MailboxRepository {
     suspend fun getMailboxes(): Result<List<Mailbox>>
@@ -11,6 +12,12 @@ interface MailboxRepository {
     suspend fun getAllowedDomains(): Result<List<String>>
 
     suspend fun getMailbox(mailboxId: String): Result<Mailbox>
+
+    suspend fun getMailboxSettings(mailboxId: String): Result<MailboxSettings>
+
+    /** Saves [settings] without disturbing any setting the app doesn't edit (the server replaces
+     * the whole blob, so this reads, merges and writes back). Returns what the server stored. */
+    suspend fun updateMailboxSettings(mailboxId: String, settings: MailboxSettings): Result<MailboxSettings>
 
     suspend fun deleteMailbox(mailboxId: String): Result<Unit>
 

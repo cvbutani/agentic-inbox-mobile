@@ -8,6 +8,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -17,6 +18,9 @@ import io.ktor.http.contentType
 import io.ktor.http.takeFrom
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.utils.io.InternalAPI
+import com.sonicstarsolutions.agentic.inbox.data.network.KtorSocketConnector
+import com.sonicstarsolutions.agentic.inbox.data.network.LiveUpdatesImpl
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LiveUpdates
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.serialization.json.Json
 import org.koin.dsl.module
@@ -41,6 +45,8 @@ val networkModule = module {
             // HTML is not.
             followRedirects = false
             install(ContentNegotiation) { json(json) }
+            // Pings keep the live-update socket alive through proxies and let a dead one be noticed.
+            install(WebSockets) { pingIntervalMillis = 20_000 }
             defaultRequest {
                 // Ktorfit's generated code calls setBody(dto) without ever setting Content-Type
                 // itself — Ktor 3.5.0's ContentNegotiation then throws "Fail to prepare request
@@ -59,6 +65,7 @@ val networkModule = module {
             }
         }
     }
+    single<LiveUpdates> { LiveUpdatesImpl(KtorSocketConnector(get(), get())) }
     single<AgenticInboxApi> {
 
         Ktorfit.Builder()

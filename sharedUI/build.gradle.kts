@@ -45,6 +45,7 @@ kotlin {
             implementation(libs.ktorfit.flow)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.client.websockets)
             implementation(libs.ktor.serialization.json)
             implementation(libs.ktor.client.logging)
             implementation(libs.androidx.lifecycle.viewmodel)

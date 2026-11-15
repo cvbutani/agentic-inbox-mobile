@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -95,8 +97,18 @@ fun EmailListItem(
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = contentWeight),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f, fill = email.threadCount <= 1),
                     )
+                    // A conversation row stands for several messages: say how many, as plain muted
+                    // text like the drawer's unread counts.
+                    if (email.threadCount > 1) {
+                        Text(
+                            text = email.threadCount.toString(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f).semantics { contentDescription = "${email.threadCount} messages" },
+                        )
+                    }
                     Text(
                         text = EmailTimeFormatter.format(email.date),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = contentWeight),
@@ -135,6 +147,24 @@ fun EmailListItem(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        if (email.labels.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                email.labels.take(MAX_ROW_LABELS).forEach { label ->
+                                    LabelChip(label, modifier = Modifier.weight(1f, fill = false))
+                                }
+                                val hidden = email.labels.size - MAX_ROW_LABELS
+                                if (hidden > 0) {
+                                    Text(
+                                        text = "+$hidden",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     // Star toggle — hidden while selecting so it doesn't compete with the checkbox
@@ -159,3 +189,6 @@ fun EmailListItem(
         }
     }
 }
+
+/** Chips shown on a row before the rest collapse into "+N" — enough to scan, few enough for one line. */
+private const val MAX_ROW_LABELS = 3

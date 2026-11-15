@@ -127,4 +127,38 @@ class ComposePrefillTest {
 
         assertTrue(fields.body.contains("Hi there"), fields.body)
     }
+
+    // --- aliases ---------------------------------------------------------------------------
+
+    @Test
+    fun `reply all does not cc the mailbox's own aliases`() {
+        val original = email(
+            sender = "Alice <alice@example.dev>",
+            recipient = "sales@example.dev, Bob <bob@example.dev>",
+            cc = "me@example.dev",
+        )
+
+        val fields = ComposePrefill.forReply(original, replyAll = true, ownEmail = "me@example.dev", aliases = listOf("sales@example.dev"))
+
+        assertEquals("alice@example.dev", fields.to)
+        assertEquals("bob@example.dev", fields.cc)
+    }
+
+    @Test
+    fun `a message the mailbox sent from an alias is answered to its recipient`() {
+        val original = email(sender = "Sales <sales@example.dev>", recipient = "Alice <alice@example.dev>")
+
+        val fields = ComposePrefill.forReply(original, replyAll = false, ownEmail = "me@example.dev", aliases = listOf("sales@example.dev"))
+
+        assertEquals("alice@example.dev", fields.to)
+    }
+
+    @Test
+    fun `alias matching ignores case`() {
+        val original = email(recipient = "SALES@Example.dev, Bob <bob@example.dev>")
+
+        val fields = ComposePrefill.forReply(original, replyAll = true, ownEmail = "me@example.dev", aliases = listOf("sales@example.dev"))
+
+        assertEquals("bob@example.dev", fields.cc)
+    }
 }

@@ -1,5 +1,16 @@
 package com.sonicstarsolutions.agentic.inbox.di
 
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CancelScheduledEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetScheduledEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveLiveUpdatesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsByLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetLabelsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateLabelUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearLocalCacheUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
@@ -20,6 +31,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.MarkThreadReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxSettingsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateMailboxSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
@@ -58,6 +71,17 @@ val useCaseModule = module {
     singleOf(::GetThreadUseCase)
     singleOf(::DownloadAttachmentUseCase)
     singleOf(::MoveEmailUseCase)
+    singleOf(::BulkUpdateEmailsUseCase)
+    singleOf(::ScheduleEmailUseCase)
+    singleOf(::SearchContactsUseCase)
+    singleOf(::ObserveLiveUpdatesUseCase)
+    singleOf(::GetScheduledEmailsUseCase)
+    singleOf(::CancelScheduledEmailUseCase)
+    singleOf(::GetEmailsByLabelUseCase)
+    singleOf(::GetLabelsUseCase)
+    singleOf(::CreateLabelUseCase)
+    singleOf(::UpdateLabelUseCase)
+    singleOf(::DeleteLabelUseCase)
     singleOf(::DeleteEmailUseCase)
     singleOf(::SetEmailReadUseCase)
     singleOf(::SetEmailStarredUseCase)
@@ -70,4 +94,6 @@ val useCaseModule = module {
     singleOf(::GetDraftUseCase)
     singleOf(::ObserveDraftsUseCase)
     singleOf(::DeleteDraftUseCase)
+    singleOf(::GetMailboxSettingsUseCase)
+    singleOf(::UpdateMailboxSettingsUseCase)
 }

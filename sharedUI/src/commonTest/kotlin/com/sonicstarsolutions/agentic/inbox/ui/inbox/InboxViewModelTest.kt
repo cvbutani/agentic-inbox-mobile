@@ -1,30 +1,43 @@
 package com.sonicstarsolutions.agentic.inbox.ui.inbox
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.Draft
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsByLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetLabelsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateLabelUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveLiveUpdatesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailReadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeLabelRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeLiveUpdates
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -70,6 +83,8 @@ class InboxViewModelTest {
         repository: FakeEmailRepository,
         folderRepository: FakeFolderRepository = FakeFolderRepository(),
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
+        labelRepository: FakeLabelRepository = FakeLabelRepository(),
+        liveUpdates: FakeLiveUpdates = FakeLiveUpdates(),
     ): InboxViewModel = InboxViewModel(
         getEmails = GetEmailsUseCase(repository),
         getFolders = GetFoldersUseCase(folderRepository),
@@ -79,7 +94,13 @@ class InboxViewModelTest {
         setEmailStarredUseCase = SetEmailStarredUseCase(repository),
         moveEmailUseCase = MoveEmailUseCase(repository),
         deleteEmailUseCase = DeleteEmailUseCase(repository),
-        setEmailReadUseCase = SetEmailReadUseCase(repository),
+        bulkUpdateEmails = BulkUpdateEmailsUseCase(repository),
+        getEmailsByLabel = GetEmailsByLabelUseCase(repository),
+        getLabels = GetLabelsUseCase(labelRepository),
+        createLabelUseCase = CreateLabelUseCase(labelRepository),
+        updateLabelUseCase = UpdateLabelUseCase(labelRepository),
+        deleteLabelUseCase = DeleteLabelUseCase(labelRepository),
+        observeLiveUpdates = ObserveLiveUpdatesUseCase(liveUpdates),
         observeDraftsUseCase = ObserveDraftsUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
         // Stands in for the app-lifetime scope; shares the test's virtual clock so the undo
@@ -773,24 +794,28 @@ class InboxViewModelTest {
         assertTrue(viewModel.state.value.selectedEmailIds.isEmpty())
     }
 
-    @Test
-    fun `batchArchive moves every selected email to Archive removes them and exits selection mode`() = runTest {
-        val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2"), summary("e3")), totalCount = 3)) },
-        )
+    private fun TestScope.twoSelected(repository: FakeEmailRepository): InboxViewModel {
         val viewModel = buildViewModel(repository)
         viewModel.enterSelectionMode("e1")
         viewModel.toggleSelection("e2")
+        return viewModel
+    }
+
+    private fun pageOf(vararg emails: EmailSummary) =
+        { _: String, _: String, _: Int, _: Int -> Result.success(EmailPage(emails.toList(), totalCount = emails.size)) }
+
+    @Test
+    fun `batchArchive moves the selection to Archive in one request removes them and exits selection mode`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1"), summary("e2"), summary("e3")))
+        val viewModel = twoSelected(repository)
 
         viewModel.batchArchive()
 
         assertEquals(
-            setOf(
-                FakeEmailRepository.MoveCall("mb1", "e1", SystemFolders.ARCHIVE),
-                FakeEmailRepository.MoveCall("mb1", "e2", SystemFolders.ARCHIVE),
-            ),
-            repository.moveCalls.toSet(),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.MOVE, setOf("e1", "e2"), SystemFolders.ARCHIVE, folder = "inbox")),
+            repository.bulkCalls,
         )
+        assertTrue(repository.moveCalls.isEmpty(), "per-email moves must not be used")
         assertEquals(listOf(summary("e3")), viewModel.state.value.emails)
         assertEquals(1, viewModel.state.value.totalCount)
         assertFalse(viewModel.state.value.selectionMode)
@@ -798,71 +823,575 @@ class InboxViewModelTest {
     }
 
     @Test
-    fun `batchArchive surfaces an error and keeps the emails when every call fails`() = runTest {
+    fun `batchArchive surfaces an error and keeps the emails when the request fails`() = runTest {
         val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
-            moveResult = Result.failure(RuntimeException("offline")),
+            handler = pageOf(summary("e1"), summary("e2")),
+            bulkHandler = { _, ids -> BulkOutcome(succeeded = emptySet(), failed = ids.toSet()) },
         )
-        val viewModel = buildViewModel(repository)
-        viewModel.enterSelectionMode("e1")
-        viewModel.toggleSelection("e2")
+        val viewModel = twoSelected(repository)
 
         viewModel.batchArchive()
 
         assertEquals(listOf(summary("e1"), summary("e2")), viewModel.state.value.emails)
         assertEquals(2, viewModel.state.value.totalCount)
-        assertTrue(viewModel.state.value.errorMessage != null)
+        assertEquals("Failed to update 2 email(s)", viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.selectionMode)
     }
 
     @Test
-    fun `batchDelete deletes every selected email removes them and exits selection mode`() = runTest {
+    fun `a partly failed batch removes only the emails that succeeded`() = runTest {
         val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), totalCount = 2)) },
+            handler = pageOf(summary("e1"), summary("e2")),
+            bulkHandler = { _, _ -> BulkOutcome(succeeded = setOf("e1"), failed = setOf("e2")) },
         )
-        val viewModel = buildViewModel(repository)
-        viewModel.enterSelectionMode("e1")
-        viewModel.toggleSelection("e2")
+        val viewModel = twoSelected(repository)
+
+        viewModel.batchDelete()
+
+        assertEquals(listOf(summary("e2")), viewModel.state.value.emails)
+        assertEquals(1, viewModel.state.value.totalCount)
+        assertEquals("Failed to update 1 email(s)", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `batchDelete deletes the selection in one request removes them and exits selection mode`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1"), summary("e2")))
+        val viewModel = twoSelected(repository)
 
         viewModel.batchDelete()
 
         assertEquals(
-            setOf(FakeEmailRepository.DeleteCall("mb1", "e1"), FakeEmailRepository.DeleteCall("mb1", "e2")),
-            repository.deleteCalls.toSet(),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.DELETE, setOf("e1", "e2"), null, folder = "inbox")),
+            repository.bulkCalls,
         )
+        assertTrue(repository.deleteCalls.isEmpty(), "per-email deletes must not be used")
         assertTrue(viewModel.state.value.emails.isEmpty())
         assertEquals(0, viewModel.state.value.totalCount)
         assertFalse(viewModel.state.value.selectionMode)
     }
 
     @Test
-    fun `batchMarkAsRead marks every selected email read without removing them`() = runTest {
-        val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1").copy(read = false), summary("e2").copy(read = false)), totalCount = 2)) },
-        )
-        val viewModel = buildViewModel(repository)
-        viewModel.enterSelectionMode("e1")
-        viewModel.toggleSelection("e2")
+    fun `batchMarkAsRead marks the selection read in one request without removing them`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1").copy(read = false), summary("e2").copy(read = false)))
+        val viewModel = twoSelected(repository)
 
         viewModel.batchMarkAsRead()
 
+        assertEquals(
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.READ, setOf("e1", "e2"), null, folder = "inbox")),
+            repository.bulkCalls,
+        )
         assertTrue(viewModel.state.value.emails.all { it.read })
         assertEquals(2, viewModel.state.value.emails.size)
         assertFalse(viewModel.state.value.selectionMode)
     }
 
     @Test
-    fun `batchMarkAsUnread marks every selected email unread`() = runTest {
+    fun `batchMarkAsUnread marks the selection unread in one request`() = runTest {
+        val repository = FakeEmailRepository(handler = pageOf(summary("e1").copy(read = true), summary("e2").copy(read = true)))
+        val viewModel = twoSelected(repository)
+
+        viewModel.batchMarkAsUnread()
+
+        assertEquals(
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.UNREAD, setOf("e1", "e2"), null, folder = "inbox")),
+            repository.bulkCalls,
+        )
+        assertTrue(viewModel.state.value.emails.none { it.read })
+        assertFalse(viewModel.state.value.selectionMode)
+    }
+
+    // --- labels ----------------------------------------------------------------------------
+
+    private val work = Label("work", "Work", "blue")
+    private val fun_ = Label("fun", "Fun", "red")
+
+    @Test
+    fun `the mailbox's labels are loaded into state`() = runTest {
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = FakeLabelRepository(Result.success(listOf(work, fun_))))
+        advanceUntilIdle()
+
+        assertEquals(listOf(work, fun_), viewModel.state.value.labels)
+    }
+
+    @Test
+    fun `a failed label lookup leaves the drawer without labels and shows no error`() = runTest {
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = FakeLabelRepository(Result.failure(RuntimeException("offline"))))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.labels.isEmpty())
+        assertNull(viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `selectLabel shows that label's emails instead of a folder`() = runTest {
         val repository = FakeEmailRepository(
-            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1").copy(read = true), summary("e2").copy(read = true)), totalCount = 2)) },
+            labelPageHandler = { _, _, _ -> Result.success(EmailPage(listOf(summary("l1"), summary("l2")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository, labelRepository = FakeLabelRepository(Result.success(listOf(work))))
+
+        viewModel.selectLabel(work)
+
+        assertEquals(work, viewModel.state.value.currentLabel)
+        assertEquals(listOf("l1", "l2"), viewModel.state.value.emails.map { it.id })
+        assertEquals(listOf(FakeEmailRepository.LabelPageCall("mb1", "work", 1, 50)), repository.labelPageCalls)
+        assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `selecting a folder leaves the label view`() = runTest {
+        val repository = FakeEmailRepository()
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+
+        viewModel.selectFolder(SystemFolders.defaults.first { it.id == SystemFolders.ARCHIVE })
+
+        assertNull(viewModel.state.value.currentLabel)
+        assertEquals("archive", viewModel.state.value.currentFolder.id)
+        assertEquals("archive", repository.calls.last().folder)
+    }
+
+    @Test
+    fun `refresh and load more keep using the label query while a label is open`() = runTest {
+        val repository = FakeEmailRepository(
+            labelPageHandler = { _, page, _ -> Result.success(EmailPage(listOf(summary("p$page")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+
+        viewModel.loadMore()
+        viewModel.onRefresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf(1, 2, 1), repository.labelPageCalls.map { it.page })
+        assertTrue(repository.calls.none { it.page == 2 }, "a folder page must not be fetched for a label view")
+    }
+
+    @Test
+    fun `createLabel adds the label and signals the dialog to close`() = runTest {
+        val labels = FakeLabelRepository()
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.createLabel("  Client work ", "teal")
+
+        assertEquals(listOf("Client work" to "teal"), labels.createCalls)
+        assertEquals(listOf("client work"), viewModel.state.value.labels.map { it.id })
+        assertTrue(viewModel.state.value.labelSaved)
+    }
+
+    @Test
+    fun `createLabel rejects a blank name without calling the server`() = runTest {
+        val labels = FakeLabelRepository()
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.createLabel("   ", "teal")
+
+        assertTrue(labels.createCalls.isEmpty())
+        assertEquals("Label name is required.", viewModel.state.value.labelActionError)
+    }
+
+    @Test
+    fun `createLabel shows the server's message when it fails`() = runTest {
+        val labels = FakeLabelRepository(createResult = { _, _ -> Result.failure(RuntimeException("A label with this name already exists")) })
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.createLabel("Work", "blue")
+
+        assertEquals("A label with this name already exists", viewModel.state.value.labelActionError)
+        assertFalse(viewModel.state.value.labelSaved)
+        assertTrue(viewModel.state.value.labels.isEmpty())
+    }
+
+    @Test
+    fun `updateLabel changes the label in the list and the open label view`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work, fun_)))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+        viewModel.selectLabel(work)
+
+        viewModel.updateLabel(work, name = "Office", color = "purple")
+
+        val renamed = Label("work", "Office", "purple")
+        assertEquals(listOf("fun" to "Fun", "work" to "Office"), viewModel.state.value.labels.map { it.id to it.name })
+        assertEquals(renamed, viewModel.state.value.currentLabel)
+        assertTrue(viewModel.state.value.labelSaved)
+    }
+
+    @Test
+    fun `updateLabel only sends what changed`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work)))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.updateLabel(work, name = "Work", color = "red")
+
+        assertEquals(listOf(Triple<String, String?, String?>("work", null, "red")), labels.updateCalls)
+    }
+
+    @Test
+    fun `deleteLabel removes it and returns to the inbox when it was open`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work, fun_)))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+        viewModel.selectLabel(work)
+
+        viewModel.deleteLabel(work)
+
+        assertEquals(listOf("work"), labels.deleteCalls)
+        assertEquals(listOf(fun_), viewModel.state.value.labels)
+        assertNull(viewModel.state.value.currentLabel)
+        assertEquals("inbox", viewModel.state.value.currentFolder.id)
+    }
+
+    @Test
+    fun `deleteLabel keeps the label and reports the error when it fails`() = runTest {
+        val labels = FakeLabelRepository(Result.success(listOf(work)), deleteResult = Result.failure(RuntimeException("offline")))
+        val viewModel = buildViewModel(FakeEmailRepository(), labelRepository = labels)
+
+        viewModel.deleteLabel(work)
+
+        assertEquals(listOf(work), viewModel.state.value.labels)
+        assertEquals("offline", viewModel.state.value.labelActionError)
+    }
+
+    // --- applying labels to a selection ----------------------------------------------------
+
+    private fun labelled(id: String, vararg labels: Label) = summary(id).copy(labels = labels.toList())
+
+    @Test
+    fun `a label's check state reflects how many selected emails carry it`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(labelled("e1", work, fun_), labelled("e2", work), labelled("e3")), totalCount = 3)) },
         )
         val viewModel = buildViewModel(repository)
         viewModel.enterSelectionMode("e1")
         viewModel.toggleSelection("e2")
 
-        viewModel.batchMarkAsUnread()
+        assertEquals(LabelCheck.ALL, viewModel.state.value.labelCheck("work"))
+        assertEquals(LabelCheck.SOME, viewModel.state.value.labelCheck("fun"))
+        assertEquals(LabelCheck.NONE, viewModel.state.value.labelCheck("other"))
+    }
 
-        assertTrue(viewModel.state.value.emails.none { it.read })
+    @Test
+    fun `applyLabelChanges labels and unlabels the selection in bulk requests`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(labelled("e1", fun_), labelled("e2")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository, labelRepository = FakeLabelRepository(Result.success(listOf(work, fun_))))
+        viewModel.enterSelectionMode("e1")
+        viewModel.toggleSelection("e2")
+
+        viewModel.applyLabelChanges(mapOf("work" to true, "fun" to false))
+
+        assertEquals(
+            setOf(
+                FakeEmailRepository.BulkCall("mb1", BulkAction.LABEL, setOf("e1", "e2"), null, "work", folder = "inbox"),
+                FakeEmailRepository.BulkCall("mb1", BulkAction.UNLABEL, setOf("e1", "e2"), null, "fun", folder = "inbox"),
+            ),
+            repository.bulkCalls.toSet(),
+        )
+        val emails = viewModel.state.value.emails
+        assertEquals(listOf(work), emails.first { it.id == "e1" }.labels)
+        assertEquals(listOf(work), emails.first { it.id == "e2" }.labels)
         assertFalse(viewModel.state.value.selectionMode)
+    }
+
+    @Test
+    fun `a failed label request leaves the labels alone and reports it`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(labelled("e1")), totalCount = 1)) },
+            bulkHandler = { _, ids -> BulkOutcome(emptySet(), ids.toSet()) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.enterSelectionMode("e1")
+
+        viewModel.applyLabelChanges(mapOf("work" to true))
+
+        assertTrue(viewModel.state.value.emails.single().labels.isEmpty())
+        assertEquals("Failed to update 1 email(s)", viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `removing the open label from emails drops them from that label's list`() = runTest {
+        val repository = FakeEmailRepository(
+            labelPageHandler = { _, _, _ -> Result.success(EmailPage(listOf(labelled("e1", work), labelled("e2", work)), 2)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+        viewModel.enterSelectionMode("e1")
+
+        viewModel.applyLabelChanges(mapOf("work" to false))
+
+        assertEquals(listOf("e2"), viewModel.state.value.emails.map { it.id })
+        assertEquals(1, viewModel.state.value.totalCount)
+    }
+
+    // --- live updates ----------------------------------------------------------------------
+
+    private val tick get() = InboxViewModel.LIVE_DEBOUNCE_MILLIS + 1
+
+    private fun TestScope.listening(
+        repository: FakeEmailRepository,
+        live: FakeLiveUpdates = FakeLiveUpdates(),
+        folders: FakeFolderRepository = FakeFolderRepository(),
+        labels: FakeLabelRepository = FakeLabelRepository(),
+    ): InboxViewModel {
+        val viewModel = buildViewModel(repository, folderRepository = folders, labelRepository = labels, liveUpdates = live)
+        backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+        return viewModel
+    }
+
+    @Test
+    fun `a change notice reloads the first page without showing a spinner`() = runTest {
+        var served = listOf(summary("old"))
+        val repository = FakeEmailRepository(handler = { _, _, _, _ -> Result.success(EmailPage(served, served.size)) })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        assertEquals(listOf("old"), viewModel.state.value.emails.map { it.id })
+
+        served = listOf(summary("new"), summary("old"))
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(listOf("new", "old"), viewModel.state.value.emails.map { it.id })
+        assertEquals(2, viewModel.state.value.totalCount)
+        assertFalse(viewModel.state.value.refreshing)
+        assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `a burst of notices causes one reload`() = runTest {
+        val repository = FakeEmailRepository()
+        val live = FakeLiveUpdates()
+        listening(repository, live)
+        val before = repository.calls.size
+
+        repeat(5) { live.emit(LiveScope.EMAILS); advanceTimeBy(InboxViewModel.LIVE_DEBOUNCE_MILLIS / 5) }
+        advanceTimeBy(tick)
+
+        assertEquals(before + 1, repository.calls.size)
+    }
+
+    @Test
+    fun `a change to the scheduled queue does not reload the inbox`() = runTest {
+        val repository = FakeEmailRepository()
+        val live = FakeLiveUpdates()
+        listening(repository, live)
+        val before = repository.calls.size
+
+        live.emit(LiveScope.SCHEDULED)
+        advanceTimeBy(tick)
+
+        assertEquals(before, repository.calls.size)
+    }
+
+    @Test
+    fun `a notice also refreshes folder counts and label counts`() = runTest {
+        val folders = FakeFolderRepository()
+        val labels = FakeLabelRepository()
+        val live = FakeLiveUpdates()
+        listening(FakeEmailRepository(), live, folders, labels)
+        val (folderCalls, labelCalls) = folders.getFoldersCalls to labels.getLabelsCalls
+
+        live.emit(LiveScope.FOLDERS)
+        advanceTimeBy(tick)
+
+        assertEquals(folderCalls + 1, folders.getFoldersCalls)
+        assertEquals(labelCalls + 1, labels.getLabelsCalls)
+    }
+
+    @Test
+    fun `a notice while a swiped delete can still be undone leaves the list alone`() = runTest {
+        val repository = FakeEmailRepository(handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), 2)) })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        viewModel.deleteEmail(summary("e1"))
+        val before = repository.calls.size
+
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(before, repository.calls.size)
+        assertEquals(listOf("e2"), viewModel.state.value.emails.map { it.id })
+    }
+
+    @Test
+    fun `when more than the first page is loaded the list is left to the user`() = runTest {
+        val repository = FakeEmailRepository(handler = { _, _, page, _ -> Result.success(EmailPage(listOf(summary("p$page")), totalCount = 2)) })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        viewModel.loadMore()
+        advanceUntilIdle()
+        val before = repository.calls.size
+
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        // Reloading page one would throw away the pages the user scrolled through.
+        assertEquals(before, repository.calls.size)
+        assertEquals(listOf("p1", "p2"), viewModel.state.value.emails.map { it.id })
+    }
+
+    @Test
+    fun `an open label view is reloaded through the label query`() = runTest {
+        val repository = FakeEmailRepository()
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        viewModel.selectLabel(work)
+        val before = repository.labelPageCalls.size
+
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(before + 1, repository.labelPageCalls.size)
+    }
+
+    @Test
+    fun `a failed quiet reload keeps the list and shows no error`() = runTest {
+        var fail = false
+        val repository = FakeEmailRepository(handler = { _, _, _, _ ->
+            if (fail) Result.failure(RuntimeException("offline")) else Result.success(EmailPage(listOf(summary("a")), 1))
+        })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+
+        fail = true
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(listOf("a"), viewModel.state.value.emails.map { it.id })
+        assertNull(viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `listening starts a connection and stopping it ends the connection`() = runTest {
+        val live = FakeLiveUpdates()
+        val viewModel = buildViewModel(FakeEmailRepository(), liveUpdates = live)
+        val job = backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+        assertEquals(1, live.collectors)
+
+        job.cancel()
+        advanceTimeBy(tick)
+
+        // A cancelled collector must not leave a reload running behind it.
+        assertTrue(job.isCancelled)
+    }
+
+    @Test
+    fun `coming back after the connection was closed catches up on what was missed`() = runTest {
+        val repository = FakeEmailRepository()
+        val viewModel = buildViewModel(repository)
+        advanceUntilIdle() // initial load done
+        val before = repository.calls.size
+
+        val job = backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+
+        assertEquals(before + 1, repository.calls.size)
+        job.cancel()
+    }
+
+    // --- conversations ---------------------------------------------------------------------
+
+    private fun conversation(id: String, thread: String, count: Int) = summary(id).copy(threadId = thread, threadCount = count)
+
+    private fun TestScope.conversationInbox(repository: FakeEmailRepository = inboxOf(conversation("c1", "t1", 3), summary("s1"))) = buildViewModel(repository)
+
+    private fun inboxOf(vararg emails: EmailSummary) =
+        FakeEmailRepository(handler = { _, _, _, _ -> Result.success(EmailPage(emails.toList(), emails.size)) })
+
+    @Test
+    fun `batch archive sends a conversation row by thread and a single message by id`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 3), summary("s1"))
+        val viewModel = buildViewModel(repository)
+        viewModel.enterSelectionMode("c1")
+        viewModel.toggleSelection("s1")
+
+        viewModel.batchArchive()
+
+        val call = repository.bulkCalls.single()
+        assertEquals(setOf("c1", "s1"), call.ids)
+        assertEquals(mapOf("c1" to "t1"), call.conversations)
+        assertEquals("inbox", call.folder)
+        assertEquals(SystemFolders.ARCHIVE, call.folderId)
+    }
+
+    @Test
+    fun `batch mark read covers the whole conversation`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 2))
+        val viewModel = buildViewModel(repository)
+        viewModel.enterSelectionMode("c1")
+
+        viewModel.batchMarkAsRead()
+
+        assertEquals(mapOf("c1" to "t1"), repository.bulkCalls.single().conversations)
+    }
+
+    @Test
+    fun `swiping a conversation to archive moves the whole conversation`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 3))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.archiveEmail(conversation("c1", "t1", 3))
+
+        assertTrue(repository.moveCalls.isEmpty(), "a lone message move would leave the rest of the conversation behind")
+        val call = repository.bulkCalls.single()
+        assertEquals(BulkAction.MOVE, call.action)
+        assertEquals(mapOf("c1" to "t1"), call.conversations)
+        assertEquals(SystemFolders.ARCHIVE, call.folderId)
+        assertTrue(viewModel.state.value.emails.none { it.id == "c1" })
+    }
+
+    @Test
+    fun `swiping a single message to archive still moves just that message`() = runTest {
+        val repository = inboxOf(summary("s1"))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.archiveEmail(summary("s1"))
+
+        assertEquals(listOf(FakeEmailRepository.MoveCall("mb1", "s1", SystemFolders.ARCHIVE)), repository.moveCalls)
+        assertTrue(repository.bulkCalls.isEmpty())
+    }
+
+    @Test
+    fun `a failed conversation archive puts the row back`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(conversation("c1", "t1", 3)), 1)) },
+            bulkHandler = { _, ids -> BulkOutcome(emptySet(), ids.toSet()) },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.archiveEmail(conversation("c1", "t1", 3))
+
+        assertEquals(listOf("c1"), viewModel.state.value.emails.map { it.id })
+        assertTrue(viewModel.state.value.errorMessage != null)
+    }
+
+    @Test
+    fun `a swipe-deleted conversation is deleted as a whole once the undo window passes`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 3))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.deleteEmail(conversation("c1", "t1", 3))
+        advanceTimeBy(InboxViewModel.UNDO_WINDOW_MILLIS + 1)
+
+        assertTrue(repository.deleteCalls.isEmpty())
+        val call = repository.bulkCalls.single()
+        assertEquals(BulkAction.DELETE, call.action)
+        assertEquals(mapOf("c1" to "t1"), call.conversations)
+    }
+
+    @Test
+    fun `rows in a label view are single messages, so nothing is sent by thread`() = runTest {
+        val repository = FakeEmailRepository(
+            labelPageHandler = { _, _, _ -> Result.success(EmailPage(listOf(conversation("c1", "t1", 3)), 1)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+        viewModel.enterSelectionMode("c1")
+
+        viewModel.batchMarkAsRead()
+
+        assertTrue(repository.bulkCalls.single().conversations.isEmpty())
+        assertNull(repository.bulkCalls.single().folder)
     }
 }

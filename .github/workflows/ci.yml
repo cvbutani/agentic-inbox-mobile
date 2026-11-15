@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit tests and Android compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # commonTest on the local JVM (no emulator). iOS tests need macOS and are not run here.
+      - name: Unit tests
+        run: ./gradlew :sharedUI:testAndroidHostTest
+
+      - name: Compile the Android app
+        run: ./gradlew :androidApp:compileDebugKotlin
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: sharedUI/build/reports/tests
+          if-no-files-found: ignore

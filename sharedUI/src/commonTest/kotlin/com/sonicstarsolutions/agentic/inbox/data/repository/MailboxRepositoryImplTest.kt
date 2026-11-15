@@ -340,4 +340,35 @@ class MailboxRepositoryImplTest {
 
         assertTrue(dao.getAll().isEmpty())
     }
+
+    @Test
+    fun `getMailbox reads the mailbox's aliases from its settings`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"mb1","email":"a@example.dev","name":"mb1","settings":{"aliases":["sales@example.dev","help@example.dev",7]}}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
+
+        val mailbox = repository.getMailbox("mb1").getOrThrow()
+
+        assertEquals(listOf("sales@example.dev", "help@example.dev"), mailbox.aliases)
+    }
+
+    @Test
+    fun `a mailbox whose settings have no aliases has none`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"id":"mb1","email":"a@example.dev","name":"mb1","settings":{"fromName":"A"}}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val mailbox = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao()).getMailbox("mb1").getOrThrow()
+
+        assertTrue(mailbox.aliases.isEmpty())
+    }
 }

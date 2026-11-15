@@ -8,6 +8,11 @@ data class Mailbox(
      * present on the single-mailbox GET, never the list endpoint. Null until fetched at least
      * once; see [displayName] for the fallback callers should actually render. */
     val fromName: String? = null,
+    val signatureEnabled: Boolean = false,
+    val signatureText: String? = null,
+    val signatureHtml: String? = null,
+    /** Extra addresses this mailbox can send from; only present on the single-mailbox GET. */
+    val aliases: List<String> = emptyList(),
 )
 
 /** What to show for this mailbox everywhere a human-facing name is needed — the configured

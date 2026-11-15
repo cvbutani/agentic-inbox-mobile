@@ -1,20 +1,36 @@
 package com.sonicstarsolutions.agentic.inbox.testutil
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.BulkOutcome
 import com.sonicstarsolutions.agentic.inbox.domain.model.ComposeEmailRequest
 import com.sonicstarsolutions.agentic.inbox.domain.model.Credentials
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
+import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
+import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ConnectionRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.CredentialsRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ContactRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LiveUpdates
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.onStart
+import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
 import kotlinx.coroutines.CompletableDeferred
+import kotlin.time.Instant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
@@ -74,7 +90,12 @@ class FakeFolderRepository(
     var renameGate: CompletableDeferred<Unit>? = null
     var deleteGate: CompletableDeferred<Unit>? = null
 
-    override suspend fun getFolders(mailboxId: String): Result<List<Folder>> = result
+    var getFoldersCalls = 0
+
+    override suspend fun getFolders(mailboxId: String): Result<List<Folder>> {
+        getFoldersCalls++
+        return result
+    }
 
     override suspend fun createFolder(mailboxId: String, name: String): Result<Folder> {
         createCalls += mailboxId to name
@@ -130,6 +151,27 @@ class FakeMailboxRepository(
 
     override suspend fun getMailbox(mailboxId: String): Result<Mailbox> = getMailboxResult(mailboxId)
 
+    var settingsResult: Result<MailboxSettings> = Result.success(MailboxSettings())
+    var settingsLoads: Int = 0
+
+    override suspend fun getMailboxSettings(mailboxId: String): Result<MailboxSettings> {
+        settingsLoads++
+        return settingsResult
+    }
+
+    /** Defaults to echoing what was saved, like the real Worker. */
+    var updateSettingsResult: (MailboxSettings) -> Result<MailboxSettings> = { Result.success(it) }
+    val updateSettingsCalls = mutableListOf<MailboxSettings>()
+
+    /** Holds [updateMailboxSettings] in flight, like [createGate]. */
+    var updateSettingsGate: CompletableDeferred<Unit>? = null
+
+    override suspend fun updateMailboxSettings(mailboxId: String, settings: MailboxSettings): Result<MailboxSettings> {
+        updateSettingsCalls += settings
+        updateSettingsGate?.await()
+        return updateSettingsResult(settings)
+    }
+
     var deleteResult: Result<Unit> = Result.success(Unit)
     val deleteCalls = mutableListOf<String>()
 
@@ -163,11 +205,26 @@ class FakeEmailRepository(
     var sendResult: Result<Unit> = Result.success(Unit),
     var replyResult: Result<Unit> = Result.success(Unit),
     var forwardResult: Result<Unit> = Result.success(Unit),
+    var labelPageHandler: (labelId: String, page: Int, limit: Int) -> Result<EmailPage> =
+        { _, _, _ -> Result.success(EmailPage(emptyList(), 0)) },
+    /** Decides each [bulkUpdate] outcome; by default every id succeeds. */
+    var bulkHandler: (action: BulkAction, ids: Collection<String>) -> BulkOutcome =
+        { _, ids -> BulkOutcome(succeeded = ids.toSet(), failed = emptySet()) },
 ) : EmailRepository {
     data class Call(val mailboxId: String, val folder: String, val page: Int, val limit: Int)
     data class SearchCall(val mailboxId: String, val query: SearchQuery, val page: Int, val limit: Int)
     data class MoveCall(val mailboxId: String, val emailId: String, val folderId: String)
     data class DeleteCall(val mailboxId: String, val emailId: String)
+    data class BulkCall(
+        val mailboxId: String,
+        val action: BulkAction,
+        val ids: Set<String>,
+        val folderId: String?,
+        val labelId: String? = null,
+        val conversations: Map<String, String> = emptyMap(),
+        val folder: String? = null,
+    )
+    data class LabelPageCall(val mailboxId: String, val labelId: String, val page: Int, val limit: Int)
     data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
     data class SetStarredCall(val mailboxId: String, val emailId: String, val starred: Boolean)
     data class MarkThreadReadCall(val mailboxId: String, val threadId: String)
@@ -179,6 +236,8 @@ class FakeEmailRepository(
     val searchCalls = mutableListOf<SearchCall>()
     val moveCalls = mutableListOf<MoveCall>()
     val deleteCalls = mutableListOf<DeleteCall>()
+    val bulkCalls = mutableListOf<BulkCall>()
+    val labelPageCalls = mutableListOf<LabelPageCall>()
     val setReadCalls = mutableListOf<SetReadCall>()
     val setStarredCalls = mutableListOf<SetStarredCall>()
     val markThreadReadCalls = mutableListOf<MarkThreadReadCall>()
@@ -216,6 +275,24 @@ class FakeEmailRepository(
         moveCalls += MoveCall(mailboxId, emailId, folderId)
         moveGate?.await()
         return moveResult
+    }
+
+    override suspend fun getEmailsByLabel(mailboxId: String, labelId: String, page: Int, limit: Int): Result<EmailPage> {
+        labelPageCalls += LabelPageCall(mailboxId, labelId, page, limit)
+        return labelPageHandler(labelId, page, limit)
+    }
+
+    override suspend fun bulkUpdate(
+        mailboxId: String,
+        action: BulkAction,
+        emailIds: Collection<String>,
+        folderId: String?,
+        labelId: String?,
+        conversations: Map<String, String>,
+        folder: String?,
+    ): BulkOutcome {
+        bulkCalls += BulkCall(mailboxId, action, emailIds.toSet(), folderId, labelId, conversations, folder)
+        return bulkHandler(action, emailIds)
     }
 
     override suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit> {
@@ -309,4 +386,101 @@ class FakeAttachmentOpener : AttachmentOpener {
         shareCalls += OpenCall(path, mimeType)
         return Result.success(Unit)
     }
+}
+
+class FakeLabelRepository(
+    var labelsResult: Result<List<Label>> = Result.success(emptyList()),
+    var createResult: (name: String, color: String) -> Result<Label> =
+        { name, color -> Result.success(Label(id = name.lowercase(), name = name, color = color)) },
+    var updateResult: (id: String, name: String?, color: String?) -> Result<Label> =
+        { id, name, color -> Result.success(Label(id = id, name = name ?: id, color = color ?: "slate")) },
+    var deleteResult: Result<Unit> = Result.success(Unit),
+) : LabelRepository {
+    val createCalls = mutableListOf<Pair<String, String>>()
+    val updateCalls = mutableListOf<Triple<String, String?, String?>>()
+    val deleteCalls = mutableListOf<String>()
+
+    var getLabelsCalls = 0
+
+    override suspend fun getLabels(mailboxId: String): Result<List<Label>> {
+        getLabelsCalls++
+        return labelsResult
+    }
+
+    override suspend fun createLabel(mailboxId: String, name: String, color: String): Result<Label> {
+        createCalls += name to color
+        return createResult(name, color)
+    }
+
+    override suspend fun updateLabel(mailboxId: String, labelId: String, name: String?, color: String?): Result<Label> {
+        updateCalls += Triple(labelId, name, color)
+        return updateResult(labelId, name, color)
+    }
+
+    override suspend fun deleteLabel(mailboxId: String, labelId: String): Result<Unit> {
+        deleteCalls += labelId
+        return deleteResult
+    }
+}
+
+class FakeScheduleRepository(
+    var scheduleResult: Result<Unit> = Result.success(Unit),
+    var scheduledResult: Result<List<ScheduledEmail>> = Result.success(emptyList()),
+    var cancelResult: Result<Unit> = Result.success(Unit),
+) : ScheduleRepository {
+    data class ScheduleCall(
+        val mailboxId: String,
+        val request: ComposeEmailRequest,
+        val kind: ScheduleKind,
+        val originalEmailId: String?,
+        val sendAt: Instant,
+    )
+
+    val scheduleCalls = mutableListOf<ScheduleCall>()
+    val cancelCalls = mutableListOf<String>()
+    var getScheduledCalls = 0
+
+    override suspend fun schedule(
+        mailboxId: String,
+        request: ComposeEmailRequest,
+        kind: ScheduleKind,
+        originalEmailId: String?,
+        sendAt: Instant,
+    ): Result<Unit> {
+        scheduleCalls += ScheduleCall(mailboxId, request, kind, originalEmailId, sendAt)
+        return scheduleResult
+    }
+
+    override suspend fun getScheduled(mailboxId: String): Result<List<ScheduledEmail>> {
+        getScheduledCalls++
+        return scheduledResult
+    }
+
+    override suspend fun cancel(mailboxId: String, scheduledId: String): Result<Unit> {
+        cancelCalls += scheduledId
+        return cancelResult
+    }
+}
+
+class FakeContactRepository(
+    var handler: (query: String) -> Result<List<Contact>> = { Result.success(emptyList()) },
+) : ContactRepository {
+    val queries = mutableListOf<String>()
+
+    override suspend fun search(mailboxId: String, query: String, limit: Int): Result<List<Contact>> {
+        queries += query
+        return handler(query)
+    }
+}
+
+/** Live updates the test drives by hand: [emit] sends a notice to whoever is collecting. */
+class FakeLiveUpdates : LiveUpdates {
+    private val flow = MutableSharedFlow<LiveScope>(extraBufferCapacity = 16)
+    var collectors = 0
+        private set
+
+    override fun changes(mailboxId: String): Flow<LiveScope> = flow
+        .onStart { collectors++ }
+
+    suspend fun emit(scope: LiveScope) = flow.emit(scope)
 }

@@ -16,12 +16,20 @@ data class PrefilledFields(
  * forwarded — pure and independent of ComposeViewModel so it's directly testable. */
 object ComposePrefill {
 
-    fun forReply(original: EmailDetail, replyAll: Boolean, ownEmail: String): PrefilledFields {
+    fun forReply(
+        original: EmailDetail,
+        replyAll: Boolean,
+        ownEmail: String,
+        /** The mailbox's other addresses: they count as "me" just like [ownEmail]. */
+        aliases: List<String> = emptyList(),
+        signature: String? = null,
+    ): PrefilledFields {
         val senderAddress = EmailAddressUtils.extractAddress(original.sender)
         // If the mailbox itself sent this message (e.g. it's the most recent message in the
         // thread, waiting on a reply), "Reply" should address it back to the original
         // recipient(s), not to the mailbox's own address.
-        val sentByMailbox = senderAddress.equals(ownEmail, ignoreCase = true)
+        val ownAddresses = (listOf(ownEmail) + aliases).map { it.lowercase() }.toSet()
+        val sentByMailbox = senderAddress.lowercase() in ownAddresses
         val toAddresses = if (sentByMailbox) {
             EmailAddressUtils.parseAddressList(original.recipient).ifEmpty { listOf(senderAddress) }
         } else {
@@ -32,7 +40,7 @@ object ComposePrefill {
             val allParties = EmailAddressUtils.parseAddressList(original.recipient) +
                 EmailAddressUtils.parseAddressList(original.cc.orEmpty()) +
                 listOf(senderAddress)
-            val excluded = (toAddresses.map { it.lowercase() } + ownEmail.lowercase()).toSet()
+            val excluded = toAddresses.map { it.lowercase() }.toSet() + ownAddresses
             allParties.filterNot { it.lowercase() in excluded }.distinct()
         } else {
             emptyList()
@@ -42,15 +50,15 @@ object ComposePrefill {
             to = toAddresses.joinToString(", "),
             cc = cc.joinToString(", "),
             subject = withPrefix(original.subject, "Re:"),
-            body = quoteOriginal(original),
+            body = quoteOriginal(original, signature),
         )
     }
 
-    fun forForward(original: EmailDetail): PrefilledFields = PrefilledFields(
+    fun forForward(original: EmailDetail, signature: String? = null): PrefilledFields = PrefilledFields(
         to = "",
         cc = "",
         subject = withPrefix(original.subject, "Fwd:"),
-        body = quoteOriginal(original),
+        body = quoteOriginal(original, signature),
     )
 
     private fun withPrefix(subject: String, prefix: String): String {
@@ -58,11 +66,12 @@ object ComposePrefill {
         return if (trimmed.startsWith(prefix, ignoreCase = true)) trimmed else "$prefix $trimmed"
     }
 
-    private fun quoteOriginal(original: EmailDetail): String {
+    private fun quoteOriginal(original: EmailDetail, signature: String? = null): String {
         // toEditableText, not toPlainText: the quote lands in the composer's editor, where the
         // original's paragraphs should survive rather than collapse into one line.
         val plainBody = HtmlTextExtractor.toEditableText(original.body.orEmpty())
-        return """
+        val sigBlock = if (!signature.isNullOrBlank()) "\n\n-- \n$signature" else ""
+        return """$sigBlock
 
 
             ---------- Original message ----------
