@@ -102,7 +102,7 @@ Phase 0-1: about 2-3 days (Phase 1 includes the deletions). Phase 3 items 1, 3, 
 | 3.3 Aliases and From picker | done | feat(aliases): manage aliases and send from them |
 | 3.4 Send later | done | feat(send-later): schedule messages and manage the queue |
 | 3.5 Recipient autocomplete | done | feat(compose): suggest recipients from past correspondents |
-| 3.6 Live updates | not started | |
+| 3.6 Live updates | done | feat(live): refresh the inbox and scheduled queue as the server changes |
 | 3.7 Search grouped by conversation, threaded list | not started | |
 
 Verified live against a local public instance: `POST …/emails/bulk` accepts Mobile's body, rejects more than 200 ids with a 400,

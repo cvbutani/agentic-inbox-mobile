@@ -10,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
@@ -24,10 +25,14 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveLiveUpdatesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -108,6 +113,7 @@ class InboxViewModel(
     private val createLabelUseCase: CreateLabelUseCase,
     private val updateLabelUseCase: UpdateLabelUseCase,
     private val deleteLabelUseCase: DeleteLabelUseCase,
+    private val observeLiveUpdates: ObserveLiveUpdatesUseCase,
     private val observeDraftsUseCase: ObserveDraftsUseCase,
     private val deleteDraftUseCase: DeleteDraftUseCase,
     /**
@@ -164,6 +170,9 @@ class InboxViewModel(
         const val UNDO_WINDOW_MILLIS: Long = 6_000
 
         private const val PAGE_SIZE = 50
+
+        /** Notices tend to arrive in bursts (a bulk action touches many rows); one reload per burst. */
+        const val LIVE_DEBOUNCE_MILLIS: Long = 400
     }
 
     fun loadFirstPage() {
@@ -447,6 +456,46 @@ class InboxViewModel(
                         totalCount = current.totalCount + 1,
                         errorMessage = t.message ?: t::class.simpleName ?: "Failed to update",
                     )
+                }
+            }
+        }
+    }
+
+    // --- live updates -------------------------------------------------------------------------
+
+    /**
+     * Keeps the list current while the screen is on show. Runs until cancelled, so the screen
+     * ties it to its lifecycle: the server connection is open only while the inbox is visible, and
+     * each time it is reopened this first catches up on whatever changed in between.
+     */
+    @OptIn(FlowPreview::class)
+    suspend fun keepLive() {
+        refreshQuietly()
+        observeLiveUpdates(mailboxId)
+            .filter { it != LiveScope.SCHEDULED }
+            .debounce(LIVE_DEBOUNCE_MILLIS)
+            .collect { refreshQuietly() }
+    }
+
+    /**
+     * Reloads what the user is looking at without any spinner or error: the first page, the
+     * folder counts and the label counts. It leaves the list alone when that would cost the user
+     * something — a swiped delete still waiting out its undo window, a load already in flight, or
+     * more pages scrolled through than a reload of page one would keep.
+     */
+    private suspend fun refreshQuietly() {
+        val current = _state.value
+        if (current.loading || current.refreshing || current.pendingDelete != null) return
+        loadFolders()
+        loadLabels()
+        if (current.page != 1) return
+        fetchPage(page = 1).onSuccess { page ->
+            // Only if nothing took over the list while the request was out.
+            _state.update { latest ->
+                if (latest.page == 1 && latest.pendingDelete == null && !latest.loading) {
+                    latest.copy(emails = page.emails, totalCount = page.totalCount)
+                } else {
+                    latest
                 }
             }
         }

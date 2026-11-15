@@ -3,6 +3,7 @@ package com.sonicstarsolutions.agentic.inbox.di
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CancelScheduledEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetScheduledEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveLiveUpdatesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateLabelUseCase
@@ -73,6 +74,7 @@ val useCaseModule = module {
     singleOf(::BulkUpdateEmailsUseCase)
     singleOf(::ScheduleEmailUseCase)
     singleOf(::SearchContactsUseCase)
+    singleOf(::ObserveLiveUpdatesUseCase)
     singleOf(::GetScheduledEmailsUseCase)
     singleOf(::CancelScheduledEmailUseCase)
     singleOf(::GetEmailsByLabelUseCase)

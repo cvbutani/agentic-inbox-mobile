@@ -5,6 +5,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledStatus
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CancelScheduledEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetScheduledEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveLiveUpdatesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeLiveUpdates
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeScheduleRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -40,9 +45,10 @@ class ScheduledViewModelTest {
         subject = "Subject $id",
     )
 
-    private fun buildViewModel(repository: FakeScheduleRepository) = ScheduledViewModel(
+    private fun buildViewModel(repository: FakeScheduleRepository, live: FakeLiveUpdates = FakeLiveUpdates()) = ScheduledViewModel(
         getScheduled = GetScheduledEmailsUseCase(repository),
         cancelScheduled = CancelScheduledEmailUseCase(repository),
+        observeLiveUpdates = ObserveLiveUpdatesUseCase(live),
         mailboxId = "mb1",
     )
 
@@ -127,5 +133,51 @@ class ScheduledViewModelTest {
 
         assertEquals(listOf("a", "b"), viewModel.state.value.items.map { it.id })
         assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `a change to the scheduled queue reloads it`() = runTest {
+        val repository = FakeScheduleRepository(scheduledResult = Result.success(listOf(item("a"))))
+        val live = FakeLiveUpdates()
+        val viewModel = buildViewModel(repository, live)
+        backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+        repository.scheduledResult = Result.success(listOf(item("a"), item("b")))
+
+        live.emit(LiveScope.SCHEDULED)
+        advanceTimeBy(ScheduledViewModel.LIVE_DEBOUNCE_MILLIS + 1)
+
+        assertEquals(listOf("a", "b"), viewModel.state.value.items.map { it.id })
+    }
+
+    @Test
+    fun `a change that is only about emails or folders is ignored`() = runTest {
+        val repository = FakeScheduleRepository()
+        val live = FakeLiveUpdates()
+        val viewModel = buildViewModel(repository, live)
+        backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+        val before = repository.getScheduledCalls
+
+        live.emit(LiveScope.EMAILS)
+        live.emit(LiveScope.FOLDERS)
+        advanceTimeBy(ScheduledViewModel.LIVE_DEBOUNCE_MILLIS + 1)
+
+        assertEquals(before, repository.getScheduledCalls)
+    }
+
+    @Test
+    fun `an all-purpose notice reloads the queue too`() = runTest {
+        val repository = FakeScheduleRepository()
+        val live = FakeLiveUpdates()
+        val viewModel = buildViewModel(repository, live)
+        backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+        val before = repository.getScheduledCalls
+
+        live.emit(LiveScope.ALL)
+        advanceTimeBy(ScheduledViewModel.LIVE_DEBOUNCE_MILLIS + 1)
+
+        assertEquals(before + 1, repository.getScheduledCalls)
     }
 }

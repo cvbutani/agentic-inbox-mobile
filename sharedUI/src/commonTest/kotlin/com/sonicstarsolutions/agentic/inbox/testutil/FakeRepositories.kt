@@ -9,6 +9,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
@@ -21,6 +22,10 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ContactRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LiveUpdates
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.onStart
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
@@ -85,7 +90,12 @@ class FakeFolderRepository(
     var renameGate: CompletableDeferred<Unit>? = null
     var deleteGate: CompletableDeferred<Unit>? = null
 
-    override suspend fun getFolders(mailboxId: String): Result<List<Folder>> = result
+    var getFoldersCalls = 0
+
+    override suspend fun getFolders(mailboxId: String): Result<List<Folder>> {
+        getFoldersCalls++
+        return result
+    }
 
     override suspend fun createFolder(mailboxId: String, name: String): Result<Folder> {
         createCalls += mailboxId to name
@@ -386,7 +396,12 @@ class FakeLabelRepository(
     val updateCalls = mutableListOf<Triple<String, String?, String?>>()
     val deleteCalls = mutableListOf<String>()
 
-    override suspend fun getLabels(mailboxId: String): Result<List<Label>> = labelsResult
+    var getLabelsCalls = 0
+
+    override suspend fun getLabels(mailboxId: String): Result<List<Label>> {
+        getLabelsCalls++
+        return labelsResult
+    }
 
     override suspend fun createLabel(mailboxId: String, name: String, color: String): Result<Label> {
         createCalls += name to color
@@ -452,4 +467,16 @@ class FakeContactRepository(
         queries += query
         return handler(query)
     }
+}
+
+/** Live updates the test drives by hand: [emit] sends a notice to whoever is collecting. */
+class FakeLiveUpdates : LiveUpdates {
+    private val flow = MutableSharedFlow<LiveScope>(extraBufferCapacity = 16)
+    var collectors = 0
+        private set
+
+    override fun changes(mailboxId: String): Flow<LiveScope> = flow
+        .onStart { collectors++ }
+
+    suspend fun emit(scope: LiveScope) = flow.emit(scope)
 }

@@ -5,6 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CancelScheduledEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetScheduledEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveLiveUpdatesUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +29,7 @@ data class ScheduledUiState(
 class ScheduledViewModel(
     private val getScheduled: GetScheduledEmailsUseCase,
     private val cancelScheduled: CancelScheduledEmailUseCase,
+    private val observeLiveUpdates: ObserveLiveUpdatesUseCase,
     private val mailboxId: String,
 ) : ViewModel() {
 
@@ -70,5 +76,23 @@ class ScheduledViewModel(
 
     fun consumeMessage() {
         _state.update { it.copy(message = null) }
+    }
+
+    /**
+     * Keeps the queue current while the screen is on show: reloads whenever the server says the
+     * scheduled queue changed (a message was sent, failed, or cancelled elsewhere). Runs until
+     * cancelled, so the screen ties it to its lifecycle and the socket closes when it is hidden.
+     */
+    @OptIn(FlowPreview::class)
+    suspend fun keepLive() {
+        observeLiveUpdates(mailboxId)
+            .filter { it == LiveScope.SCHEDULED || it == LiveScope.ALL }
+            .debounce(LIVE_DEBOUNCE_MILLIS)
+            .collect { refresh() }
+    }
+
+    companion object {
+        /** Notices tend to arrive in bursts; one reload per burst is plenty. */
+        const val LIVE_DEBOUNCE_MILLIS: Long = 400
     }
 }

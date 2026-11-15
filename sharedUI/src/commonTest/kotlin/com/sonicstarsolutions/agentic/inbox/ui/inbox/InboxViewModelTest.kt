@@ -7,6 +7,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateLabelUseCase
@@ -21,6 +22,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetFoldersUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.MoveEmailUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveLiveUpdatesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDraftsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.RenameFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
@@ -28,12 +30,14 @@ import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeEmailRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeFolderRepository
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeLabelRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeLiveUpdates
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -80,6 +84,7 @@ class InboxViewModelTest {
         folderRepository: FakeFolderRepository = FakeFolderRepository(),
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
         labelRepository: FakeLabelRepository = FakeLabelRepository(),
+        liveUpdates: FakeLiveUpdates = FakeLiveUpdates(),
     ): InboxViewModel = InboxViewModel(
         getEmails = GetEmailsUseCase(repository),
         getFolders = GetFoldersUseCase(folderRepository),
@@ -95,6 +100,7 @@ class InboxViewModelTest {
         createLabelUseCase = CreateLabelUseCase(labelRepository),
         updateLabelUseCase = UpdateLabelUseCase(labelRepository),
         deleteLabelUseCase = DeleteLabelUseCase(labelRepository),
+        observeLiveUpdates = ObserveLiveUpdatesUseCase(liveUpdates),
         observeDraftsUseCase = ObserveDraftsUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
         // Stands in for the app-lifetime scope; shares the test's virtual clock so the undo
@@ -1115,5 +1121,172 @@ class InboxViewModelTest {
 
         assertEquals(listOf("e2"), viewModel.state.value.emails.map { it.id })
         assertEquals(1, viewModel.state.value.totalCount)
+    }
+
+    // --- live updates ----------------------------------------------------------------------
+
+    private val tick get() = InboxViewModel.LIVE_DEBOUNCE_MILLIS + 1
+
+    private fun TestScope.listening(
+        repository: FakeEmailRepository,
+        live: FakeLiveUpdates = FakeLiveUpdates(),
+        folders: FakeFolderRepository = FakeFolderRepository(),
+        labels: FakeLabelRepository = FakeLabelRepository(),
+    ): InboxViewModel {
+        val viewModel = buildViewModel(repository, folderRepository = folders, labelRepository = labels, liveUpdates = live)
+        backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+        return viewModel
+    }
+
+    @Test
+    fun `a change notice reloads the first page without showing a spinner`() = runTest {
+        var served = listOf(summary("old"))
+        val repository = FakeEmailRepository(handler = { _, _, _, _ -> Result.success(EmailPage(served, served.size)) })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        assertEquals(listOf("old"), viewModel.state.value.emails.map { it.id })
+
+        served = listOf(summary("new"), summary("old"))
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(listOf("new", "old"), viewModel.state.value.emails.map { it.id })
+        assertEquals(2, viewModel.state.value.totalCount)
+        assertFalse(viewModel.state.value.refreshing)
+        assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `a burst of notices causes one reload`() = runTest {
+        val repository = FakeEmailRepository()
+        val live = FakeLiveUpdates()
+        listening(repository, live)
+        val before = repository.calls.size
+
+        repeat(5) { live.emit(LiveScope.EMAILS); advanceTimeBy(InboxViewModel.LIVE_DEBOUNCE_MILLIS / 5) }
+        advanceTimeBy(tick)
+
+        assertEquals(before + 1, repository.calls.size)
+    }
+
+    @Test
+    fun `a change to the scheduled queue does not reload the inbox`() = runTest {
+        val repository = FakeEmailRepository()
+        val live = FakeLiveUpdates()
+        listening(repository, live)
+        val before = repository.calls.size
+
+        live.emit(LiveScope.SCHEDULED)
+        advanceTimeBy(tick)
+
+        assertEquals(before, repository.calls.size)
+    }
+
+    @Test
+    fun `a notice also refreshes folder counts and label counts`() = runTest {
+        val folders = FakeFolderRepository()
+        val labels = FakeLabelRepository()
+        val live = FakeLiveUpdates()
+        listening(FakeEmailRepository(), live, folders, labels)
+        val (folderCalls, labelCalls) = folders.getFoldersCalls to labels.getLabelsCalls
+
+        live.emit(LiveScope.FOLDERS)
+        advanceTimeBy(tick)
+
+        assertEquals(folderCalls + 1, folders.getFoldersCalls)
+        assertEquals(labelCalls + 1, labels.getLabelsCalls)
+    }
+
+    @Test
+    fun `a notice while a swiped delete can still be undone leaves the list alone`() = runTest {
+        val repository = FakeEmailRepository(handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1"), summary("e2")), 2)) })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        viewModel.deleteEmail(summary("e1"))
+        val before = repository.calls.size
+
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(before, repository.calls.size)
+        assertEquals(listOf("e2"), viewModel.state.value.emails.map { it.id })
+    }
+
+    @Test
+    fun `when more than the first page is loaded the list is left to the user`() = runTest {
+        val repository = FakeEmailRepository(handler = { _, _, page, _ -> Result.success(EmailPage(listOf(summary("p$page")), totalCount = 2)) })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        viewModel.loadMore()
+        advanceUntilIdle()
+        val before = repository.calls.size
+
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        // Reloading page one would throw away the pages the user scrolled through.
+        assertEquals(before, repository.calls.size)
+        assertEquals(listOf("p1", "p2"), viewModel.state.value.emails.map { it.id })
+    }
+
+    @Test
+    fun `an open label view is reloaded through the label query`() = runTest {
+        val repository = FakeEmailRepository()
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+        viewModel.selectLabel(work)
+        val before = repository.labelPageCalls.size
+
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(before + 1, repository.labelPageCalls.size)
+    }
+
+    @Test
+    fun `a failed quiet reload keeps the list and shows no error`() = runTest {
+        var fail = false
+        val repository = FakeEmailRepository(handler = { _, _, _, _ ->
+            if (fail) Result.failure(RuntimeException("offline")) else Result.success(EmailPage(listOf(summary("a")), 1))
+        })
+        val live = FakeLiveUpdates()
+        val viewModel = listening(repository, live)
+
+        fail = true
+        live.emit(LiveScope.EMAILS)
+        advanceTimeBy(tick)
+
+        assertEquals(listOf("a"), viewModel.state.value.emails.map { it.id })
+        assertNull(viewModel.state.value.errorMessage)
+    }
+
+    @Test
+    fun `listening starts a connection and stopping it ends the connection`() = runTest {
+        val live = FakeLiveUpdates()
+        val viewModel = buildViewModel(FakeEmailRepository(), liveUpdates = live)
+        val job = backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+        assertEquals(1, live.collectors)
+
+        job.cancel()
+        advanceTimeBy(tick)
+
+        // A cancelled collector must not leave a reload running behind it.
+        assertTrue(job.isCancelled)
+    }
+
+    @Test
+    fun `coming back after the connection was closed catches up on what was missed`() = runTest {
+        val repository = FakeEmailRepository()
+        val viewModel = buildViewModel(repository)
+        advanceUntilIdle() // initial load done
+        val before = repository.calls.size
+
+        val job = backgroundScope.launch { viewModel.keepLive() }
+        advanceTimeBy(1)
+
+        assertEquals(before + 1, repository.calls.size)
+        job.cancel()
     }
 }

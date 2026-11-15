@@ -40,7 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledStatus
 import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
@@ -59,6 +62,11 @@ fun ScheduledScreen(
     viewModel: ScheduledViewModel = koinViewModel { parametersOf(mailboxId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // Live updates run only while the screen is visible: the socket opens on start, closes on stop.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { viewModel.keepLive() }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     var toCancel by remember { mutableStateOf<ScheduledEmail?>(null) }
 

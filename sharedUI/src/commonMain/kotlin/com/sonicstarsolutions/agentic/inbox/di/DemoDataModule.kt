@@ -23,6 +23,11 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.FolderRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ContactRepository
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LiveUpdates
+import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.awaitCancellation
 import com.sonicstarsolutions.agentic.inbox.domain.model.Contact
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
@@ -31,7 +36,6 @@ import kotlin.time.Instant
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -408,6 +412,7 @@ val demoRepositoryModule = module {
     single<LabelRepository> { DemoLabelRepository() }
     single<ScheduleRepository> { DemoScheduleRepository() }
     single<ContactRepository> { DemoContactRepository() }
+    single<LiveUpdates> { DemoLiveUpdates() }
     single<ThreadRepository> { DemoThreadRepository() }
     single<DraftRepository> { DemoDraftRepository() }
     single<AttachmentRepository> { DemoAttachmentRepository() }
@@ -482,4 +487,9 @@ class DemoContactRepository : ContactRepository {
 
     override suspend fun search(mailboxId: String, query: String, limit: Int): Result<List<Contact>> =
         Result.success(contacts.filter { it.address.contains(query.lowercase()) }.take(limit))
+}
+
+/** Demo mode has no server to notify it, so this never produces a change. */
+class DemoLiveUpdates : LiveUpdates {
+    override fun changes(mailboxId: String): Flow<LiveScope> = flow { awaitCancellation() }
 }

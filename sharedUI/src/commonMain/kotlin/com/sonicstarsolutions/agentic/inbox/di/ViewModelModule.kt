@@ -23,7 +23,7 @@ val viewModelModule = module {
     // the use case is injected. Destructure the ParametersHolder positionally.
     viewModel { (mailboxId: String, mailboxName: String) ->
         InboxViewModel(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
             mailboxId, mailboxName,
         )
     }
@@ -36,7 +36,7 @@ val viewModelModule = module {
             mailboxId, mode, emailId, threadId, draftId,
         )
     }
-    viewModel { (mailboxId: String) -> ScheduledViewModel(get(), get(), mailboxId) }
+    viewModel { (mailboxId: String) -> ScheduledViewModel(get(), get(), get(), mailboxId) }
     viewModel { (mailboxId: String) ->
         SearchViewModel(get(), get(), mailboxId)
     }
