@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
+import com.sonicstarsolutions.agentic.inbox.theme.airmail
 import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.HtmlTextExtractor
@@ -176,7 +177,7 @@ fun EmailListItem(
                                 imageVector = if (email.starred) Icons.Default.Star else Icons.Default.StarBorder,
                                 contentDescription = if (email.starred) "Unstar" else "Star",
                                 tint = if (email.starred) {
-                                    MaterialTheme.colorScheme.secondary
+                                    MaterialTheme.airmail.star
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },

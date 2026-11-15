@@ -76,6 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
+import com.sonicstarsolutions.agentic.inbox.theme.airmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
@@ -440,7 +441,7 @@ private fun MessageCard(
                             Icon(
                                 imageVector = if (message.starred) Icons.Default.Star else Icons.Default.StarBorder,
                                 contentDescription = if (message.starred) "Unstar" else "Star",
-                                tint = if (message.starred) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (message.starred) MaterialTheme.airmail.star else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp),
                             )
                         }
