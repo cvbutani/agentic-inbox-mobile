@@ -27,13 +27,15 @@ kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }
 
-// Only ever build/run instrumented against release, since that's the variant whose
-// startup/rendering profile actually ships to users.
+// Generate on whatever device or emulator is attached (API 28+), rather than a Gradle-managed one.
 baselineProfile {
     useConnectedDevices = true
 }
 
 dependencies {
     implementation(libs.androidx.benchmark.macro.junit4)
+    implementation(libs.androidx.test.ext.junit)
     implementation(libs.androidx.test.uiautomator)
+    // Serves the stub Worker the generator signs the app in to.
+    implementation(libs.okhttp.mockwebserver)
 }
