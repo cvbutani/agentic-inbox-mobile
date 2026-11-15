@@ -4,10 +4,9 @@ Conventions every screen must follow. All values reference Material 3 theme toke
 (`MaterialTheme.colorScheme` / `MaterialTheme.typography`) or the extended Airmail tokens below;
 never hardcode colors, alphas, or ad-hoc sizes.
 
-> **Status:** this is the target system. The code is being moved to it phase by phase, tracked in
-> [AIRMAIL_MIGRATION_PLAN.md](AIRMAIL_MIGRATION_PLAN.md). Until a phase lands, its screens still
-> follow the previous system (in git history before this change). New UI work follows this
-> document. The visual reference is [design/airmail-mock.html](../design/airmail-mock.html):
+> **Status:** phases 1 to 6 of [AIRMAIL_MIGRATION_PLAN.md](AIRMAIL_MIGRATION_PLAN.md) are
+> implemented; phase 7 (device walk on phone and tablet, iOS check, store screenshots) is still
+> open, and this note goes when it closes. New UI work follows this document. The visual reference is [design/airmail-mock.html](../design/airmail-mock.html):
 > every screen, phone and tablet, light and dark.
 
 ## Direction
