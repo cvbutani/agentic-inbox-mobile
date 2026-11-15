@@ -36,7 +36,7 @@ class EmailRepositoryImpl(
         limit: Int,
     ): Result<EmailPage> {
         val networkResult = safeApiCall {
-            val pageDto = api.getEmails(mailboxId, folder = folder, page = page, limit = limit)
+            val pageDto = api.getEmails(mailboxId, folder = folder, page = page, limit = limit, threaded = true)
             EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
         }
         // Only the first page is cached — it's what a folder screen shows on open/refresh, and is
@@ -72,6 +72,7 @@ class EmailRepositoryImpl(
                 isRead = query.isRead,
                 isStarred = query.isStarred,
                 hasAttachment = query.hasAttachment,
+                group = "thread",
                 page = page,
                 limit = limit,
             )
@@ -93,17 +94,25 @@ class EmailRepositoryImpl(
         emailIds: Collection<String>,
         folderId: String?,
         labelId: String?,
+        conversations: Map<String, String>,
+        folder: String?,
     ): BulkOutcome {
         val succeeded = mutableSetOf<String>()
         val failed = mutableSetOf<String>()
         for (chunk in emailIds.distinct().chunked(MAX_BULK_IDS)) {
+            // A row that stands for a conversation is sent as its thread, so every message in it
+            // (within the folder being viewed) is acted on — not just the row's latest message.
+            val threads = chunk.mapNotNull { conversations[it] }.distinct()
             val body = BulkRequestDto(
                 action = action.serverName,
-                ids = chunk,
+                ids = chunk.filter { it !in conversations },
+                threadIds = threads.takeIf { it.isNotEmpty() },
+                // The server needs the folder to scope thread targets, and rejects thread_ids without it.
+                folder = folder.takeIf { threads.isNotEmpty() },
                 folderId = folderId.takeIf { action == BulkAction.MOVE },
                 labelId = labelId.takeIf { action == BulkAction.LABEL || action == BulkAction.UNLABEL },
             )
-            // A chunk is all-or-nothing on the server, so its ids succeed or fail together.
+            // A chunk is all-or-nothing on the server, so its rows succeed or fail together.
             if (safeApiCall { api.bulkUpdate(mailboxId, body) }.isSuccess) succeeded += chunk else failed += chunk
         }
         return BulkOutcome(succeeded, failed)
@@ -159,6 +168,7 @@ private fun EmailMetadataDto.toDomain(): EmailSummary = EmailSummary(
     snippet = snippet,
     threadUnreadCount = threadUnreadCount,
     labels = labels.map { it.toDomain() },
+    threadCount = threadCount,
 )
 
 private fun EmailSummary.toEntity(mailboxId: String, folder: String): EmailEntity = EmailEntity(
@@ -175,6 +185,7 @@ private fun EmailSummary.toEntity(mailboxId: String, folder: String): EmailEntit
     snippet = snippet,
     threadUnreadCount = threadUnreadCount,
     labelsJson = labels.toJson(),
+    threadCount = threadCount,
 )
 
 private fun EmailEntity.toDomain(): EmailSummary = EmailSummary(
@@ -190,6 +201,7 @@ private fun EmailEntity.toDomain(): EmailSummary = EmailSummary(
     snippet = snippet,
     threadUnreadCount = threadUnreadCount,
     labels = labelsJson.toLabels(),
+    threadCount = threadCount,
 )
 
 /** The server rejects a bulk request with more ids than this. */

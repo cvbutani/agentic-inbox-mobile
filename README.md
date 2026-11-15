@@ -16,11 +16,14 @@ You point the app at your own deployment — mail, credentials, and cache stay b
 ## Features
 
 - **Mailboxes** — list, create (against your Worker's allowed domains), switch, delete
-- **Inbox** — threaded email list per folder, pagination, pull-to-refresh, swipe to archive/delete with undo, multi-select batch actions (read/unread, archive, delete)
+- **Inbox** — one row per conversation with its message count, pagination, pull-to-refresh, live updates as mail arrives, swipe to archive/delete with undo, multi-select batch actions (read/unread, archive, delete, label) that act on whole conversations
 - **Folders** — system folders (Inbox, Sent, Drafts, Archive, Spam, Trash) plus custom folders with create/rename/delete
 - **Conversation view** — expandable message cards, sanitized HTML rendering with remote-image blocking, star/read toggles, move to folder, attachments
-- **Compose** — new, reply, reply-all, forward; drafts save locally and resume in their original mode
-- **Search** — debounced search-as-you-type with filters (from, to, subject, date range, read/starred/attachment), removable filter chips, infinite scroll
+- **Compose** — new, reply, reply-all, forward; recipient suggestions from past correspondents; send from an alias; Send later; drafts save locally and resume in their original mode
+- **Labels** — coloured labels on rows, a drawer section to filter by, edit or delete them, and a picker to label a selection
+- **Scheduled** — see, and cancel, messages queued with Send later; the server sends them even with the phone off
+- **Aliases** — add or remove the extra addresses a mailbox receives at and sends from
+- **Search** — debounced search-as-you-type, results grouped by conversation, with filters (from, to, subject, date range, read/starred/attachment), removable filter chips, infinite scroll
 - **Offline cache** — Room-backed local store with optimistic UI for common actions
 - **Adaptive layouts** — list-detail split on tablets, responsive onboarding and mailbox grid, light/dark theme
 

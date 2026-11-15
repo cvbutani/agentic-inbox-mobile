@@ -14,5 +14,7 @@ class BulkUpdateEmailsUseCase(
         emailIds: Collection<String>,
         folderId: String? = null,
         labelId: String? = null,
-    ): BulkOutcome = repository.bulkUpdate(mailboxId, action, emailIds, folderId, labelId)
+        conversations: Map<String, String> = emptyMap(),
+        folder: String? = null,
+    ): BulkOutcome = repository.bulkUpdate(mailboxId, action, emailIds, folderId, labelId, conversations, folder)
 }

@@ -76,6 +76,8 @@ interface AgenticInboxApi {
         @Query("limit") limit: Int? = null,
         @Query("sortColumn") sortColumn: String? = null,
         @Query("sortDirection") sortDirection: String? = null,
+        /** One row per conversation, with its size and unread count, instead of one per message. */
+        @Query("threaded") threaded: Boolean? = null,
     ): EmailPageDto
 
     // Same path as getEmails: with `label` the server lists that label's emails across folders.
@@ -230,6 +232,8 @@ interface AgenticInboxApi {
         @Query("is_read") isRead: Boolean? = null,
         @Query("is_starred") isStarred: Boolean? = null,
         @Query("has_attachment") hasAttachment: Boolean? = null,
+        /** `thread`: collapse the matches of one conversation into a single row. */
+        @Query("group") group: String? = null,
         @Query("page") page: Int? = null,
         @Query("limit") limit: Int? = null,
     ): EmailPageDto

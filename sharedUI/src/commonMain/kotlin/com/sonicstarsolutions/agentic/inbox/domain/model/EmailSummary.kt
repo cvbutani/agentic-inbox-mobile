@@ -15,6 +15,11 @@ data class EmailSummary(
     // unread messages in it even once its latest message is read, so the list must check both.
     val threadUnreadCount: Int = 0,
     val labels: List<Label> = emptyList(),
+    /** How many messages the row stands for: more than 1 means it is a whole conversation. */
+    val threadCount: Int = 1,
 ) {
     fun isUnread(): Boolean = !read || threadUnreadCount > 0
 }
+
+/** True when this row is a whole conversation (several messages), not a single message. */
+val EmailSummary.isConversation: Boolean get() = threadCount > 1 && !threadId.isNullOrBlank()

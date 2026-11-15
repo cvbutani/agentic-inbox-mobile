@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -95,8 +97,18 @@ fun EmailListItem(
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = contentWeight),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f, fill = email.threadCount <= 1),
                     )
+                    // A conversation row stands for several messages: say how many, as plain muted
+                    // text like the drawer's unread counts.
+                    if (email.threadCount > 1) {
+                        Text(
+                            text = email.threadCount.toString(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f).semantics { contentDescription = "${email.threadCount} messages" },
+                        )
+                    }
                     Text(
                         text = EmailTimeFormatter.format(email.date),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = contentWeight),

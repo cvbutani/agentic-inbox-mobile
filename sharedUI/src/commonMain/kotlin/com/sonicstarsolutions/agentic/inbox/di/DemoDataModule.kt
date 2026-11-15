@@ -334,6 +334,8 @@ class DemoEmailRepository : EmailRepository {
         emailIds: Collection<String>,
         folderId: String?,
         labelId: String?,
+        conversations: Map<String, String>,
+        folder: String?,
     ): BulkOutcome {
         for (id in emailIds) {
             when (action) {

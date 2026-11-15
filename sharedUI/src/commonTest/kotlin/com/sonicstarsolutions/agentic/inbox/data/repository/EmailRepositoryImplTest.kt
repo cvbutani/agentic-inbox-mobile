@@ -26,6 +26,9 @@ import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -811,5 +814,100 @@ class EmailRepositoryImplTest {
 
         assertTrue(dao.getForFolder("mb1", "inbox").isEmpty())
         assertTrue(dao.getForFolder("mb2", "sent").isEmpty())
+    }
+
+    // --- conversations ---------------------------------------------------------------------
+
+    private val threadedPage = """
+        {"emails":[
+          {"id":"e2","subject":"Plans","sender":"a@x.dev","recipient":"me@x.dev","date":"2026-01-02T00:00:00Z","thread_id":"t1",
+           "thread_count":3,"thread_unread_count":1,"participants":"a@x.dev, me@x.dev"},
+          {"id":"e9","subject":"Solo","sender":"b@x.dev","recipient":"me@x.dev","date":"2026-01-01T00:00:00Z","thread_id":"t9"}
+        ],"totalCount":2}
+    """.trimIndent()
+
+    private fun okJson(body: String) = MockEngine { respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json")) }
+
+    @Test
+    fun `a folder list asks the server for one row per conversation`() = runTest {
+        val engine = okJson(threadedPage)
+
+        EmailRepositoryImpl(apiFor(engine), FakeEmailDao()).getEmails("mb1", "inbox", page = 1, limit = 25)
+
+        assertEquals("true", engine.requestHistory.single().url.parameters["threaded"])
+    }
+
+    @Test
+    fun `the conversation size and unread count reach the row`() = runTest {
+        val page = EmailRepositoryImpl(apiFor(okJson(threadedPage)), FakeEmailDao()).getEmails("mb1", "inbox", 1, 25).getOrThrow()
+
+        val (conversation, solo) = page.emails
+        assertEquals(3, conversation.threadCount)
+        assertEquals(1, conversation.threadUnreadCount)
+        assertTrue(conversation.isUnread() || conversation.read)
+        assertEquals(1, solo.threadCount)
+    }
+
+    @Test
+    fun `conversation size survives the offline cache`() = runTest {
+        var online = true
+        val engine = MockEngine {
+            if (online) respond(threadedPage, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            else respond("", HttpStatusCode.InternalServerError)
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+        repository.getEmails("mb1", "inbox", 1, 25)
+
+        online = false
+        val cached = repository.getEmails("mb1", "inbox", 1, 25).getOrThrow()
+
+        assertEquals(listOf(3, 1), cached.emails.sortedByDescending { it.date }.map { it.threadCount })
+    }
+
+    @Test
+    fun `search groups its results by conversation`() = runTest {
+        val engine = okJson(threadedPage)
+
+        EmailRepositoryImpl(apiFor(engine), FakeEmailDao()).search("mb1", SearchQuery(query = "plans"), page = 1, limit = 25)
+
+        assertEquals("thread", engine.requestHistory.single().url.parameters["group"])
+    }
+
+    @Test
+    fun `bulkUpdate sends conversation rows by thread and the rest by id`() = runTest {
+        val engine = bulkEngine()
+
+        EmailRepositoryImpl(apiFor(engine), FakeEmailDao()).bulkUpdate(
+            "mb1", BulkAction.MOVE, listOf("e2", "e9"),
+            folderId = "archive",
+            conversations = mapOf("e2" to "t1"),
+            folder = "inbox",
+        )
+
+        val body = Json.parseToJsonElement(bodyOf(engine.requestHistory.single())).jsonObject
+        assertEquals(listOf("e9"), body["ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("t1"), body["thread_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("inbox", body["folder"]!!.jsonPrimitive.content)
+        assertEquals("archive", body["folderId"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `without conversations the request carries no thread fields`() = runTest {
+        val engine = bulkEngine()
+
+        EmailRepositoryImpl(apiFor(engine), FakeEmailDao()).bulkUpdate("mb1", BulkAction.READ, listOf("e1"), folder = "inbox")
+
+        val body = bodyOf(engine.requestHistory.single())
+        assertTrue("thread_ids" !in body && "\"folder\"" !in body, body)
+    }
+
+    @Test
+    fun `a conversation row's outcome is reported under the row's own id`() = runTest {
+        val engine = bulkEngine(HttpStatusCode.InternalServerError)
+
+        val outcome = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+            .bulkUpdate("mb1", BulkAction.DELETE, listOf("e2"), conversations = mapOf("e2" to "t1"), folder = "inbox")
+
+        assertEquals(setOf("e2"), outcome.failed)
     }
 }

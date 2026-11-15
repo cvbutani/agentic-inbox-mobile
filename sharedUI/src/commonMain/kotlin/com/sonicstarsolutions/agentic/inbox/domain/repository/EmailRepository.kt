@@ -26,13 +26,17 @@ interface EmailRepository {
 
     suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit>
     /** Applies [action] to every id in as few requests as the server allows. Never throws: ids
-     * that could not be updated come back in [BulkOutcome.failed]. [folderId] is the target of a move and [labelId] the label for LABEL/UNLABEL. */
+     * that could not be updated come back in [BulkOutcome.failed], under the row's id.
+     * [conversations] maps a row id to its thread id for rows that stand for a whole conversation:
+     * those are acted on by thread (every message of it in [folder], the list being viewed). [folderId] is the target of a move and [labelId] the label for LABEL/UNLABEL. */
     suspend fun bulkUpdate(
         mailboxId: String,
         action: BulkAction,
         emailIds: Collection<String>,
         folderId: String? = null,
         labelId: String? = null,
+        conversations: Map<String, String> = emptyMap(),
+        folder: String? = null,
     ): BulkOutcome
 
     suspend fun deleteEmail(mailboxId: String, emailId: String): Result<Unit>

@@ -10,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
+import com.sonicstarsolutions.agentic.inbox.domain.model.isConversation
 import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.BulkUpdateEmailsUseCase
@@ -375,7 +376,11 @@ class InboxViewModel(
     }
 
     fun archiveEmail(email: EmailSummary) = removeOptimistically(email) {
-        moveEmailUseCase(mailboxId, email.id, SystemFolders.ARCHIVE)
+        if (email.isConversation && _state.value.currentLabel == null) {
+            bulkOne(BulkAction.MOVE, email, SystemFolders.ARCHIVE)
+        } else {
+            moveEmailUseCase(mailboxId, email.id, SystemFolders.ARCHIVE)
+        }
     }
 
     /**
@@ -425,7 +430,12 @@ class InboxViewModel(
         val pending = _state.value.pendingDelete ?: return
         _state.update { it.copy(pendingDelete = null) }
         externalScope.launch {
-            deleteEmailUseCase(mailboxId, pending.email.id).onFailure { t ->
+            val result = if (pending.email.isConversation && _state.value.currentLabel == null) {
+                bulkOne(BulkAction.DELETE, pending.email)
+            } else {
+                deleteEmailUseCase(mailboxId, pending.email.id)
+            }
+            result.onFailure { t ->
                 _state.update { current ->
                     val restored = current.emails.toMutableList()
                         .apply { add(pending.originalIndex.coerceAtMost(size), pending.email) }
@@ -459,6 +469,33 @@ class InboxViewModel(
                 }
             }
         }
+    }
+
+    // --- conversations ------------------------------------------------------------------------
+
+    /**
+     * Row id → thread id for the rows among [rows] that stand for a whole conversation, so a
+     * bulk action reaches every message in it and not just the row's latest. Rows from a label
+     * view are single messages, so they never count.
+     */
+    private fun conversationsAmong(rows: Collection<EmailSummary>): Map<String, String> =
+        if (_state.value.currentLabel != null) {
+            emptyMap()
+        } else {
+            rows.filter { it.isConversation }.associate { it.id to it.threadId!! }
+        }
+
+    /** The folder being listed, which scopes a thread target; null in a label view. */
+    private fun folderScope(): String? = _state.value.currentFolder.id.takeIf { _state.value.currentLabel == null }
+
+    /** Applies [action] to one row, as its whole conversation when it is one. */
+    private suspend fun bulkOne(action: BulkAction, email: EmailSummary, folderId: String? = null): Result<Unit> {
+        val outcome = bulkUpdateEmails(
+            mailboxId, action, listOf(email.id), folderId,
+            conversations = conversationsAmong(listOf(email)),
+            folder = folderScope(),
+        )
+        return if (outcome.failed.isEmpty()) Result.success(Unit) else Result.failure(RuntimeException("Couldn't update the conversation"))
     }
 
     // --- live updates -------------------------------------------------------------------------
@@ -635,6 +672,8 @@ class InboxViewModel(
     fun applyLabelChanges(changes: Map<String, Boolean>) {
         val ids = _state.value.selectedEmailIds
         if (ids.isEmpty()) return
+        val conversations = conversationsAmong(_state.value.emails.filter { it.id in ids })
+        val folder = folderScope()
         if (changes.isEmpty()) {
             clearSelection()
             return
@@ -642,7 +681,7 @@ class InboxViewModel(
         viewModelScope.launch {
             val results = changes.map { (labelId, add) ->
                 val action = if (add) BulkAction.LABEL else BulkAction.UNLABEL
-                LabelChangeResult(labelId, add, bulkUpdateEmails(mailboxId, action, ids, labelId = labelId))
+                LabelChangeResult(labelId, add, bulkUpdateEmails(mailboxId, action, ids, labelId = labelId, conversations = conversations, folder = folder))
             }
             _state.update { current ->
                 val known = current.labels.associateBy { it.id }
@@ -711,8 +750,10 @@ class InboxViewModel(
     private fun batchRemove(action: BulkAction, folderId: String? = null) {
         val ids = _state.value.selectedEmailIds
         if (ids.isEmpty()) return
+        val conversations = conversationsAmong(_state.value.emails.filter { it.id in ids })
+        val folder = folderScope()
         viewModelScope.launch {
-            val outcome = bulkUpdateEmails(mailboxId, action, ids, folderId)
+            val outcome = bulkUpdateEmails(mailboxId, action, ids, folderId, conversations = conversations, folder = folder)
             _state.update { current ->
                 current.copy(
                     emails = current.emails.filterNot { it.id in outcome.succeeded },
@@ -728,8 +769,10 @@ class InboxViewModel(
     private fun batchMarkRead(read: Boolean) {
         val ids = _state.value.selectedEmailIds
         if (ids.isEmpty()) return
+        val conversations = conversationsAmong(_state.value.emails.filter { it.id in ids })
+        val folder = folderScope()
         viewModelScope.launch {
-            val outcome = bulkUpdateEmails(mailboxId, if (read) BulkAction.READ else BulkAction.UNREAD, ids)
+            val outcome = bulkUpdateEmails(mailboxId, if (read) BulkAction.READ else BulkAction.UNREAD, ids, conversations = conversations, folder = folder)
             _state.update { current ->
                 current.copy(
                     emails = current.emails.map { if (it.id in outcome.succeeded) it.copy(read = read) else it },

@@ -221,6 +221,8 @@ class FakeEmailRepository(
         val ids: Set<String>,
         val folderId: String?,
         val labelId: String? = null,
+        val conversations: Map<String, String> = emptyMap(),
+        val folder: String? = null,
     )
     data class LabelPageCall(val mailboxId: String, val labelId: String, val page: Int, val limit: Int)
     data class SetReadCall(val mailboxId: String, val emailId: String, val read: Boolean)
@@ -286,8 +288,10 @@ class FakeEmailRepository(
         emailIds: Collection<String>,
         folderId: String?,
         labelId: String?,
+        conversations: Map<String, String>,
+        folder: String?,
     ): BulkOutcome {
-        bulkCalls += BulkCall(mailboxId, action, emailIds.toSet(), folderId, labelId)
+        bulkCalls += BulkCall(mailboxId, action, emailIds.toSet(), folderId, labelId, conversations, folder)
         return bulkHandler(action, emailIds)
     }
 

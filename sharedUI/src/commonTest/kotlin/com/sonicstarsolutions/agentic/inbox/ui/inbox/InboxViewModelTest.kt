@@ -812,7 +812,7 @@ class InboxViewModelTest {
         viewModel.batchArchive()
 
         assertEquals(
-            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.MOVE, setOf("e1", "e2"), SystemFolders.ARCHIVE)),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.MOVE, setOf("e1", "e2"), SystemFolders.ARCHIVE, folder = "inbox")),
             repository.bulkCalls,
         )
         assertTrue(repository.moveCalls.isEmpty(), "per-email moves must not be used")
@@ -861,7 +861,7 @@ class InboxViewModelTest {
         viewModel.batchDelete()
 
         assertEquals(
-            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.DELETE, setOf("e1", "e2"), null)),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.DELETE, setOf("e1", "e2"), null, folder = "inbox")),
             repository.bulkCalls,
         )
         assertTrue(repository.deleteCalls.isEmpty(), "per-email deletes must not be used")
@@ -878,7 +878,7 @@ class InboxViewModelTest {
         viewModel.batchMarkAsRead()
 
         assertEquals(
-            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.READ, setOf("e1", "e2"), null)),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.READ, setOf("e1", "e2"), null, folder = "inbox")),
             repository.bulkCalls,
         )
         assertTrue(viewModel.state.value.emails.all { it.read })
@@ -894,7 +894,7 @@ class InboxViewModelTest {
         viewModel.batchMarkAsUnread()
 
         assertEquals(
-            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.UNREAD, setOf("e1", "e2"), null)),
+            listOf(FakeEmailRepository.BulkCall("mb1", BulkAction.UNREAD, setOf("e1", "e2"), null, folder = "inbox")),
             repository.bulkCalls,
         )
         assertTrue(viewModel.state.value.emails.none { it.read })
@@ -1082,8 +1082,8 @@ class InboxViewModelTest {
 
         assertEquals(
             setOf(
-                FakeEmailRepository.BulkCall("mb1", BulkAction.LABEL, setOf("e1", "e2"), null, "work"),
-                FakeEmailRepository.BulkCall("mb1", BulkAction.UNLABEL, setOf("e1", "e2"), null, "fun"),
+                FakeEmailRepository.BulkCall("mb1", BulkAction.LABEL, setOf("e1", "e2"), null, "work", folder = "inbox"),
+                FakeEmailRepository.BulkCall("mb1", BulkAction.UNLABEL, setOf("e1", "e2"), null, "fun", folder = "inbox"),
             ),
             repository.bulkCalls.toSet(),
         )
@@ -1288,5 +1288,110 @@ class InboxViewModelTest {
 
         assertEquals(before + 1, repository.calls.size)
         job.cancel()
+    }
+
+    // --- conversations ---------------------------------------------------------------------
+
+    private fun conversation(id: String, thread: String, count: Int) = summary(id).copy(threadId = thread, threadCount = count)
+
+    private fun TestScope.conversationInbox(repository: FakeEmailRepository = inboxOf(conversation("c1", "t1", 3), summary("s1"))) = buildViewModel(repository)
+
+    private fun inboxOf(vararg emails: EmailSummary) =
+        FakeEmailRepository(handler = { _, _, _, _ -> Result.success(EmailPage(emails.toList(), emails.size)) })
+
+    @Test
+    fun `batch archive sends a conversation row by thread and a single message by id`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 3), summary("s1"))
+        val viewModel = buildViewModel(repository)
+        viewModel.enterSelectionMode("c1")
+        viewModel.toggleSelection("s1")
+
+        viewModel.batchArchive()
+
+        val call = repository.bulkCalls.single()
+        assertEquals(setOf("c1", "s1"), call.ids)
+        assertEquals(mapOf("c1" to "t1"), call.conversations)
+        assertEquals("inbox", call.folder)
+        assertEquals(SystemFolders.ARCHIVE, call.folderId)
+    }
+
+    @Test
+    fun `batch mark read covers the whole conversation`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 2))
+        val viewModel = buildViewModel(repository)
+        viewModel.enterSelectionMode("c1")
+
+        viewModel.batchMarkAsRead()
+
+        assertEquals(mapOf("c1" to "t1"), repository.bulkCalls.single().conversations)
+    }
+
+    @Test
+    fun `swiping a conversation to archive moves the whole conversation`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 3))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.archiveEmail(conversation("c1", "t1", 3))
+
+        assertTrue(repository.moveCalls.isEmpty(), "a lone message move would leave the rest of the conversation behind")
+        val call = repository.bulkCalls.single()
+        assertEquals(BulkAction.MOVE, call.action)
+        assertEquals(mapOf("c1" to "t1"), call.conversations)
+        assertEquals(SystemFolders.ARCHIVE, call.folderId)
+        assertTrue(viewModel.state.value.emails.none { it.id == "c1" })
+    }
+
+    @Test
+    fun `swiping a single message to archive still moves just that message`() = runTest {
+        val repository = inboxOf(summary("s1"))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.archiveEmail(summary("s1"))
+
+        assertEquals(listOf(FakeEmailRepository.MoveCall("mb1", "s1", SystemFolders.ARCHIVE)), repository.moveCalls)
+        assertTrue(repository.bulkCalls.isEmpty())
+    }
+
+    @Test
+    fun `a failed conversation archive puts the row back`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(conversation("c1", "t1", 3)), 1)) },
+            bulkHandler = { _, ids -> BulkOutcome(emptySet(), ids.toSet()) },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.archiveEmail(conversation("c1", "t1", 3))
+
+        assertEquals(listOf("c1"), viewModel.state.value.emails.map { it.id })
+        assertTrue(viewModel.state.value.errorMessage != null)
+    }
+
+    @Test
+    fun `a swipe-deleted conversation is deleted as a whole once the undo window passes`() = runTest {
+        val repository = inboxOf(conversation("c1", "t1", 3))
+        val viewModel = buildViewModel(repository)
+
+        viewModel.deleteEmail(conversation("c1", "t1", 3))
+        advanceTimeBy(InboxViewModel.UNDO_WINDOW_MILLIS + 1)
+
+        assertTrue(repository.deleteCalls.isEmpty())
+        val call = repository.bulkCalls.single()
+        assertEquals(BulkAction.DELETE, call.action)
+        assertEquals(mapOf("c1" to "t1"), call.conversations)
+    }
+
+    @Test
+    fun `rows in a label view are single messages, so nothing is sent by thread`() = runTest {
+        val repository = FakeEmailRepository(
+            labelPageHandler = { _, _, _ -> Result.success(EmailPage(listOf(conversation("c1", "t1", 3)), 1)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.selectLabel(work)
+        viewModel.enterSelectionMode("c1")
+
+        viewModel.batchMarkAsRead()
+
+        assertTrue(repository.bulkCalls.single().conversations.isEmpty())
+        assertNull(repository.bulkCalls.single().folder)
     }
 }
