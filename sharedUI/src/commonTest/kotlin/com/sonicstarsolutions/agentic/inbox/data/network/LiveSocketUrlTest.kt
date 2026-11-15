@@ -16,6 +16,7 @@ class LiveSocketUrlTest {
 
     @Test
     fun `http becomes a plain websocket`() {
+        // nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket
         assertEquals("ws://10.0.2.2:8787/api/v1/mailboxes/a@b.dev/events", liveSocketUrl("http://10.0.2.2:8787", "a@b.dev"))
     }
 

@@ -31,6 +31,9 @@ internal fun liveSocketUrl(baseUrl: String, mailboxId: String): String? {
     if (base.isEmpty()) return null
     val socketBase = when {
         base.startsWith("https://", ignoreCase = true) -> "wss://" + base.substring("https://".length)
+        // Cleartext only when the user explicitly configured an http:// base URL (local dev worker,
+        // emulator 10.0.2.2); the socket mirrors the scheme the REST calls already use.
+        // nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket
         base.startsWith("http://", ignoreCase = true) -> "ws://" + base.substring("http://".length)
         else -> return null
     }
