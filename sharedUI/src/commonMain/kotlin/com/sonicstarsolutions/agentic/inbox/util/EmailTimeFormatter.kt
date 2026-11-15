@@ -14,8 +14,8 @@ import kotlin.time.Instant
  * week. Shared by the inbox list and the thread header so both screens speak one time language.
  */
 object EmailTimeFormatter {
-    private val WEEKDAY_NAMES = arrayOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-    private val MONTH_ABBREVIATIONS = arrayOf(
+    internal val WEEKDAY_NAMES = arrayOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    internal val MONTH_ABBREVIATIONS = arrayOf(
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     )
@@ -40,6 +40,19 @@ object EmailTimeFormatter {
                 }
             }
         }
+    } catch (e: Exception) {
+        dateString.take(10)
+    }
+
+    /**
+     * The clock time alone ("8:15 AM"), for rows that sit under a day header: the header already
+     * says which day, so repeating it on every row is noise. Rows with no header use [format].
+     */
+    fun formatClock(
+        dateString: String,
+        zone: TimeZone = TimeZone.currentSystemDefault(),
+    ): String = try {
+        formatClockTime(Instant.parse(dateString), zone)
     } catch (e: Exception) {
         dateString.take(10)
     }

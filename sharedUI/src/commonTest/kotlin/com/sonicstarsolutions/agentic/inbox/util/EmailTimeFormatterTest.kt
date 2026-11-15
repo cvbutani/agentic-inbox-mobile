@@ -87,6 +87,30 @@ class EmailTimeFormatterTest {
         assertEquals("not-a-date", EmailTimeFormatter.format("not-a-date-string", Instant.parse("2026-01-05T10:00:00Z"), utc))
     }
 
+    // -- formatClock: rows under a day header carry the day there, so only the time shows -----
+
+    @Test
+    fun `formatClock shows the clock time alone for a message from today`() {
+        assertEquals("8:15 AM", EmailTimeFormatter.formatClock("2026-07-17T08:15:00Z", utc))
+    }
+
+    @Test
+    fun `formatClock never adds a day or date, however old the message is`() {
+        assertEquals("3:00 PM", EmailTimeFormatter.formatClock("2019-03-02T15:00:00Z", utc))
+        assertEquals("12:00 AM", EmailTimeFormatter.formatClock("2026-01-01T00:00:00Z", utc))
+        assertEquals("12:00 PM", EmailTimeFormatter.formatClock("2026-01-01T12:00:00Z", utc))
+    }
+
+    @Test
+    fun `formatClock uses the given time zone`() {
+        assertEquals("12:30 AM", EmailTimeFormatter.formatClock("2026-07-16T15:30:00Z", TimeZone.of("Asia/Tokyo")))
+    }
+
+    @Test
+    fun `formatClock falls back to the first 10 characters of an unparseable string`() {
+        assertEquals("not-a-date", EmailTimeFormatter.formatClock("not-a-date-string", utc))
+    }
+
     // -- formatAbsolute: the full date-and-time line on an expanded thread message ----------
 
     @Test

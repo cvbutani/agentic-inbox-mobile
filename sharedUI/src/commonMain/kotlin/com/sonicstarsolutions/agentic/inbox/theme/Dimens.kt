@@ -17,5 +17,18 @@ object ListRowDimens {
     val textEdge = horizontalPadding + avatarSize + contentGap
 }
 
+/** The airmail band and its stripe geometry (docs/DESIGN_SYSTEM.md, "AirmailBand"). The postmark
+ * is the same 40dp as [ListRowDimens.avatarSize], so it fills the leading slot exactly. */
+object AirmailDimens {
+    val bandHeight = 6.dp
+    val bandNavyStripe = 12.dp
+    val bandRedStripe = 12.dp
+    val bandGap = 6.dp
+    val postmarkStroke = 1.5.dp
+
+    /** One full pattern: navy, gap, red, gap. The band slides by exactly this per cycle. */
+    val bandPeriod = bandNavyStripe + bandGap + bandRedStripe + bandGap
+}
+
 /** Accessibility floor from docs/DESIGN_SYSTEM.md — touch targets never shrink below this. */
 val MinTouchTarget = 48.dp
