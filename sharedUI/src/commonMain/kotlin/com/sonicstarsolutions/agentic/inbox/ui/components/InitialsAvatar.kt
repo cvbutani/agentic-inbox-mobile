@@ -24,7 +24,7 @@ import kotlin.math.absoluteValue
 fun InitialsAvatar(
     name: String,
     modifier: Modifier = Modifier,
-    textStyle: TextStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+    textStyle: TextStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
 ) {
     val (initials, backgroundColor, contentColor) = remember(name) {
         val initials = name

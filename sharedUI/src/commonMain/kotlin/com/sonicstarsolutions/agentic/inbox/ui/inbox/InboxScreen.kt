@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Drafts
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.MarkEmailUnread
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
@@ -71,6 +74,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -78,7 +82,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -90,18 +94,25 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
 import com.sonicstarsolutions.agentic.inbox.domain.model.Label
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
+import com.sonicstarsolutions.agentic.inbox.ui.components.DayHeader
 import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
+import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
+import com.sonicstarsolutions.agentic.inbox.ui.components.TopBarWithBand
 import com.sonicstarsolutions.agentic.inbox.ui.components.folderIcon
 import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
+import com.sonicstarsolutions.agentic.inbox.util.EmailDayGrouper
+import com.sonicstarsolutions.agentic.inbox.util.EmailTimeFormatter
 import com.sonicstarsolutions.agentic.inbox.util.InfiniteScrollUtils
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun InboxScreen(
     mailboxId: String,
@@ -130,6 +141,17 @@ fun InboxScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val visibleDrafts = if (state.showingDrafts) state.drafts else emptyList()
     val listState = rememberLazyListState()
+    // Grouped here, not in the composable tree: remembered on the list, with "today" read once
+    // per list change. The grouper is pure and unit-tested.
+    val timeZone = remember { TimeZone.currentSystemDefault() }
+    val dayGroups = remember(state.emails) {
+        EmailDayGrouper.group(
+            items = state.emails,
+            instantOf = { EmailDayGrouper.instantOrEpoch(it.date) },
+            now = Clock.System.now(),
+            zone = timeZone,
+        )
+    }
 
     // Infinite scroll: fetch the next page when the last visible row closes in on the list end.
     // totalItemsCount counts everything the LazyColumn renders — drafts, emails, and the trailing
@@ -387,6 +409,12 @@ fun InboxScreen(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
+              // The airmail band is the screen's progress line: it slides while a refresh or the
+              // first page is in flight, and hides and returns with the bar.
+              TopBarWithBand(
+                bandActive = state.refreshing || state.loading,
+                scrollBehavior = scrollBehavior,
+              ) {
                 // Crossfade rather than a hard swap: entering selection is a mode change on the
                 // same screen, so the bar should morph, not blink.
                 Crossfade(targetState = state.selectionMode) { selecting ->
@@ -406,8 +434,8 @@ fun InboxScreen(
                         title = {
                             Text(
                                 text = state.currentLabel?.name ?: state.currentFolder.name,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         },
                         navigationIcon = {
@@ -425,12 +453,14 @@ fun InboxScreen(
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            scrolledContainerColor = MaterialTheme.colorScheme.surface,
                         ),
                         scrollBehavior = scrollBehavior,
                     )
                 }
                 }
+              }
             },
             floatingActionButton = {
                 if (!state.selectionMode) {
@@ -464,63 +494,20 @@ fun InboxScreen(
                         }
                     }
 
-                    state.errorMessage != null && state.emails.isEmpty() -> Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp)
-                            .verticalScroll(rememberScrollState()),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            Text(
-                                text = state.errorMessage!!,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                text = "Pull down to retry",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    }
+                    state.errorMessage != null && state.emails.isEmpty() -> StatusPane(
+                        icon = Icons.Default.ErrorOutline,
+                        title = "Couldn't load ${state.currentLabel?.name ?: state.currentFolder.name}",
+                        detail = state.errorMessage,
+                        action = {
+                            Button(onClick = { viewModel.onRefresh() }) { Text("Retry") }
+                        },
+                    )
 
-                    state.emails.isEmpty() && visibleDrafts.isEmpty() -> Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp)
-                            .verticalScroll(rememberScrollState()),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Inbox,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.size(64.dp),
-                            )
-                            Text(
-                                text = "No emails in ${state.currentLabel?.name ?: state.currentFolder.name}",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "Pull down to refresh",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
+                    state.emails.isEmpty() && visibleDrafts.isEmpty() -> StatusPane(
+                        icon = Icons.Default.Inbox,
+                        title = "No emails in ${state.currentLabel?.name ?: state.currentFolder.name}",
+                        detail = "Pull down to refresh",
+                    )
 
                     else -> LazyColumn(
                         state = listState,
@@ -528,6 +515,7 @@ fun InboxScreen(
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                         contentPadding = PaddingValues(0.dp),
                     ) {
+                        // Drafts stay above the day groups, ungrouped.
                         items(visibleDrafts, key = { "draft-${it.id}" }) { draft ->
                             Column(modifier = Modifier.animateItem()) {
                                 DraftListItem(
@@ -542,11 +530,23 @@ fun InboxScreen(
                             }
                         }
 
-                        items(state.emails, key = { it.id }) { email ->
-                            Column(modifier = Modifier.animateItem()) {
-                            val emailItem: @Composable () -> Unit = {
-                                EmailListItem(
+                        dayGroups.forEach { group ->
+                            // Headers are keyed by date; the surface behind them lets rows pass under.
+                            stickyHeader(key = "day-${group.date}", contentType = "day-header") {
+                                DayHeader(
+                                    group = group,
+                                    unreadCount = group.items.count { it.isUnread() },
+                                )
+                            }
+                            items(group.items, key = { it.id }, contentType = { "email" }) { email ->
+                                SwipeableEmailRow(
                                     email = email,
+                                    selectionMode = state.selectionMode,
+                                    selected = if (state.selectionMode) {
+                                        email.id in state.selectedEmailIds
+                                    } else {
+                                        email.id == openEmailId
+                                    },
                                     onClick = {
                                         if (state.selectionMode) viewModel.toggleSelection(email.id) else onEmailSelected(email)
                                     },
@@ -554,42 +554,10 @@ fun InboxScreen(
                                         if (!state.selectionMode) viewModel.enterSelectionMode(email.id)
                                     },
                                     onToggleStarred = { viewModel.toggleStarred(email) },
-                                    selectionMode = state.selectionMode,
-                                    selected = if (state.selectionMode) {
-                                        email.id in state.selectedEmailIds
-                                    } else {
-                                        email.id == openEmailId
-                                    },
+                                    onArchive = { viewModel.archiveEmail(email) },
+                                    onDelete = { viewModel.deleteEmail(email) },
+                                    modifier = Modifier.animateItem(),
                                 )
-                            }
-                            if (state.selectionMode) {
-                                emailItem()
-                            } else {
-                                val dismissState = rememberSwipeToDismissBoxState(
-                                    confirmValueChange = { value ->
-                                        when (value) {
-                                            SwipeToDismissBoxValue.StartToEnd -> {
-                                                viewModel.archiveEmail(email)
-                                                true
-                                            }
-                                            SwipeToDismissBoxValue.EndToStart -> {
-                                                viewModel.deleteEmail(email)
-                                                true
-                                            }
-                                            SwipeToDismissBoxValue.Settled -> false
-                                        }
-                                    },
-                                )
-                                SwipeToDismissBox(
-                                    state = dismissState,
-                                    backgroundContent = { SwipeActionBackground(dismissState.targetValue) },
-                                    content = { emailItem() },
-                                )
-                            }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = ListRowDimens.textEdge),
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
                             }
                         }
 
@@ -617,6 +585,68 @@ fun InboxScreen(
     }
 }
 
+/** One inbox row with its divider: a swipe to archive (right) or delete (left) while browsing, and
+ * the plain row while selecting, when a swipe would fight the tap-to-select. Rows under a day
+ * header show the clock time only; the header carries the day. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeableEmailRow(
+    email: EmailSummary,
+    selectionMode: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onToggleStarred: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        val timeText = remember(email.date) { EmailTimeFormatter.formatClock(email.date) }
+        val emailItem: @Composable () -> Unit = {
+            EmailListItem(
+                email = email,
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onToggleStarred = onToggleStarred,
+                selectionMode = selectionMode,
+                selected = selected,
+                timeText = timeText,
+            )
+        }
+        if (selectionMode) {
+            emailItem()
+        } else {
+            val currentOnArchive by rememberUpdatedState(onArchive)
+            val currentOnDelete by rememberUpdatedState(onDelete)
+            val dismissState = rememberSwipeToDismissBoxState(
+                confirmValueChange = { value ->
+                    when (value) {
+                        SwipeToDismissBoxValue.StartToEnd -> {
+                            currentOnArchive()
+                            true
+                        }
+                        SwipeToDismissBoxValue.EndToStart -> {
+                            currentOnDelete()
+                            true
+                        }
+                        SwipeToDismissBoxValue.Settled -> false
+                    }
+                },
+            )
+            SwipeToDismissBox(
+                state = dismissState,
+                backgroundContent = { SwipeActionBackground(dismissState.targetValue) },
+                content = { emailItem() },
+            )
+        }
+        HorizontalDivider(
+            modifier = Modifier.padding(start = ListRowDimens.textEdge),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SelectionTopAppBar(
@@ -637,11 +667,7 @@ private fun SelectionTopAppBar(
             }
         },
         actions = {
-            // Three visible actions is the parse-at-a-glance ceiling; read/unread live in the
-            // overflow where their labels do the explaining.
-            IconButton(onClick = onSelectAll) {
-                Icon(Icons.Default.SelectAll, contentDescription = "Select all")
-            }
+            // Archive, Delete, overflow: the overflow's labels explain the rest.
             IconButton(onClick = onArchive) {
                 Icon(Icons.Default.Archive, contentDescription = "Archive")
             }
@@ -654,6 +680,11 @@ private fun SelectionTopAppBar(
                     Icon(Icons.Default.MoreVert, contentDescription = "More actions")
                 }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(Icons.Default.SelectAll, contentDescription = null) },
+                        text = { Text("Select all") },
+                        onClick = { showMenu = false; onSelectAll() },
+                    )
                     DropdownMenuItem(
                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
                         text = { Text("Label as…") },
@@ -673,7 +704,7 @@ private fun SelectionTopAppBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
         ),
     )
 }
@@ -737,13 +768,14 @@ private fun FolderDrawerContent(
                 )
             }
 
+            // Spacing, not dividers, separates the drawer's groups; the one rule sits above
+            // Scheduled / Settings, where the destinations change kind.
             if (customFolders.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 Text(
                     text = "Folders",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 16.dp, bottom = 4.dp),
                 )
                 customFolders.forEach { folder ->
                     FolderDrawerItem(
@@ -756,8 +788,6 @@ private fun FolderDrawerContent(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
             NavigationDrawerItem(
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 label = { Text("New folder") },
@@ -765,8 +795,6 @@ private fun FolderDrawerContent(
                 onClick = onCreateFolder,
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             LabelDrawerSection(
                 labels = labels,

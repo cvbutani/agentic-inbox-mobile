@@ -56,6 +56,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.ui.components.AirmailBand
 import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -101,16 +102,25 @@ private fun CompactOnboarding(state: OnboardingUiState, viewModel: OnboardingVie
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .verticalScroll(rememberScrollState())
-            .imePadding()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+            .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        BrandMark(size = 56.dp)
-        Headline(centred = false)
-        ConnectionForm(state = state, viewModel = viewModel)
-        PrivacyNote()
+        // The band sits across the top, under the status bar, and slides while the connection
+        // is being checked.
+        AirmailBand(active = state.validating)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            BrandMark(size = 56.dp)
+            Headline(centred = false)
+            ConnectionForm(state = state, viewModel = viewModel)
+            PrivacyNote()
+        }
     }
 }
 
@@ -118,20 +128,27 @@ private fun CompactOnboarding(state: OnboardingUiState, viewModel: OnboardingVie
  * deliberate panel rather than a phone layout stretched to fit. */
 @Composable
 private fun MediumOnboarding(state: OnboardingUiState, viewModel: OnboardingViewModel) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .verticalScroll(rememberScrollState())
-            .imePadding()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        contentAlignment = Alignment.Center,
+            .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        FormCard(modifier = Modifier.widthIn(max = FORM_MAX_WIDTH + 48.dp)) {
-            BrandMark(size = 56.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
-            Headline(centred = true)
-            ConnectionForm(state = state, viewModel = viewModel)
-            PrivacyNote(modifier = Modifier.align(Alignment.CenterHorizontally))
+        AirmailBand(active = state.validating)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            FormCard(modifier = Modifier.widthIn(max = FORM_MAX_WIDTH + 48.dp)) {
+                BrandMark(size = 56.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
+                Headline(centred = true)
+                ConnectionForm(state = state, viewModel = viewModel)
+                PrivacyNote(modifier = Modifier.align(Alignment.CenterHorizontally))
+            }
         }
     }
 }
@@ -144,6 +161,7 @@ private fun ExpandedOnboarding(state: OnboardingUiState, viewModel: OnboardingVi
         // Deliberately not inset: its background runs to the window edges, and the pane insets
         // its own content instead.
         HeroPane(
+            validating = state.validating,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxSize(),
@@ -175,32 +193,42 @@ private fun ExpandedOnboarding(state: OnboardingUiState, viewModel: OnboardingVi
 }
 
 @Composable
-private fun HeroPane(modifier: Modifier = Modifier) {
-    Surface(modifier = modifier, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Box(
+private fun HeroPane(validating: Boolean, modifier: Modifier = Modifier) {
+    val paper = MaterialTheme.colorScheme.surfaceContainerHigh
+    Surface(modifier = modifier, color = paper) {
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(48.dp),
-            contentAlignment = Alignment.Center,
+                .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            Column(
-                modifier = Modifier.widthIn(max = 420.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+            // The band runs across this pane's top; the form pane beside it has none, so the
+            // screen still carries exactly one.
+            AirmailBand(active = validating, paper = paper)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(48.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                BrandMark(size = 72.dp)
-                Text(
-                    text = "Agentic Inbox",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = "Your own mail, on your own Worker. Point the app at your deployment " +
-                        "and everything stays between this device and your Cloudflare account.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(
+                    modifier = Modifier.widthIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    BrandMark(size = 72.dp)
+                    Text(
+                        text = "Agentic Inbox",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Your own mail, on your own Worker. Point the app at your deployment " +
+                            "and everything stays between this device and your Cloudflare account.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

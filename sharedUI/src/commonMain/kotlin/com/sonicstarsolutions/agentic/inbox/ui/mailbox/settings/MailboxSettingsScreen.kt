@@ -9,8 +9,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -54,6 +56,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.ui.components.AppBarTitle
+import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -79,7 +83,7 @@ fun MailboxSettingsScreen(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { AppBarTitle("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -136,7 +140,8 @@ fun MailboxSettingsScreen(
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                // One divider in the screen: between the profile (name, signature) and the aliases.
+                Spacer(Modifier.height(8.dp))
                 SectionLabel("Signature")
                 SwitchRow(
                     label = "Add a signature to new messages",
@@ -240,8 +245,9 @@ private fun AliasesSection(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            InitialsAvatar(name = alias, modifier = Modifier.size(32.dp))
             Text(
                 text = alias,
                 style = MaterialTheme.typography.bodyLarge,

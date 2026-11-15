@@ -6,8 +6,40 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Color
 
-private val LightColorScheme = lightColorScheme(
+/**
+ * The three colors Material 3 has no role for: the two band stripes and the starred star.
+ * See "Extended Airmail tokens" in docs/DESIGN_SYSTEM.md for where each may be used.
+ */
+@Immutable
+internal data class AirmailColors(
+    val airmailNavy: Color,
+    val airmailRed: Color,
+    val star: Color,
+)
+
+internal val LightAirmailColors = AirmailColors(
+    airmailNavy = AirmailNavyLight,
+    airmailRed = AirmailRedLight,
+    star = StarLight,
+)
+
+internal val DarkAirmailColors = AirmailColors(
+    airmailNavy = AirmailNavyDark,
+    airmailRed = AirmailRedDark,
+    star = StarDark,
+)
+
+internal val LocalAirmailColors = staticCompositionLocalOf { LightAirmailColors }
+
+/** `MaterialTheme.airmail.star`: the extended tokens next to `MaterialTheme.colorScheme`. */
+internal val MaterialTheme.airmail: AirmailColors
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalAirmailColors.current
+
+internal val LightColorScheme = lightColorScheme(
     primary = PrimaryLight,
     onPrimary = OnPrimaryLight,
     primaryContainer = PrimaryContainerLight,
@@ -45,7 +77,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerHighest = SurfaceContainerHighestLight,
 )
 
-private val DarkColorScheme = darkColorScheme(
+internal val DarkColorScheme = darkColorScheme(
     primary = PrimaryDark,
     onPrimary = OnPrimaryDark,
     primaryContainer = PrimaryContainerDark,
@@ -93,7 +125,8 @@ internal fun AppTheme(
     val systemIsDark = isSystemInDarkTheme()
     val isDarkState = remember(systemIsDark) { mutableStateOf(systemIsDark) }
     CompositionLocalProvider(
-        LocalThemeIsDark provides isDarkState
+        LocalThemeIsDark provides isDarkState,
+        LocalAirmailColors provides if (isDarkState.value) DarkAirmailColors else LightAirmailColors,
     ) {
         val isDark by isDarkState
         onThemeChanged(!isDark)

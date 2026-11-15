@@ -1,7 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.ui.scheduled
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -47,8 +46,13 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledStatus
 import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
+import com.sonicstarsolutions.agentic.inbox.ui.components.AppBarTitle
+import com.sonicstarsolutions.agentic.inbox.ui.components.Postmark
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
+import com.sonicstarsolutions.agentic.inbox.util.EmailDayGrouper
 import com.sonicstarsolutions.agentic.inbox.util.ScheduleTimeFormatter
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -96,7 +100,7 @@ fun ScheduledScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Scheduled") },
+                title = { AppBarTitle("Scheduled") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
@@ -141,22 +145,11 @@ private fun ScheduledRow(item: ScheduledEmail, onCancel: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(ListRowDimens.contentGap),
         verticalAlignment = Alignment.Top,
     ) {
-        // Error container for a failed send, otherwise the neutral container: failure is the one
-        // state worth a colour here.
-        Surface(
-            shape = CircleShape,
-            color = if (failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.size(ListRowDimens.avatarSize),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = if (failed) Icons.Default.ErrorOutline else Icons.Default.Schedule,
-                    contentDescription = null,
-                    tint = if (failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+        // The postmark carries the day this message will be posted.
+        val sendDay = remember(item.sendAt) {
+            EmailDayGrouper.instantOrEpoch(item.sendAt).toLocalDateTime(TimeZone.currentSystemDefault()).date
         }
+        Postmark(sendDay)
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(ListRowDimens.lineGap)) {
             Text(
                 text = item.to.ifBlank { "(no recipient)" },
@@ -170,11 +163,7 @@ private fun ScheduledRow(item: ScheduledEmail, onCancel: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = statusLine(item),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            StatusChip(item)
             if (failed && !item.error.isNullOrBlank()) {
                 Text(
                     text = item.error,
@@ -191,6 +180,33 @@ private fun ScheduledRow(item: ScheduledEmail, onCancel: () -> Unit) {
                 Icon(Icons.Default.Close, contentDescription = "Cancel scheduled message", modifier = Modifier.size(20.dp))
             }
         }
+    }
+}
+
+/** Where the message stands: amber for waiting on its time, red only for a failed send, and plain
+ * navy text while it is going out right now. Always text, never color alone. */
+@Composable
+private fun StatusChip(item: ScheduledEmail) {
+    val text = statusLine(item)
+    if (item.status == ScheduledStatus.SENDING) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        return
+    }
+    val failed = item.status == ScheduledStatus.FAILED
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (failed) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (failed) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
     }
 }
 

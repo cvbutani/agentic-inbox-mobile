@@ -20,10 +20,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -40,6 +36,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,7 +68,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.displayName
+import com.sonicstarsolutions.agentic.inbox.theme.ListRowDimens
 import com.sonicstarsolutions.agentic.inbox.ui.WindowWidthClass
+import com.sonicstarsolutions.agentic.inbox.ui.components.AppBarTitle
 import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
@@ -79,9 +78,9 @@ import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
 import com.sonicstarsolutions.agentic.inbox.ui.windowWidthClassFor
 import org.koin.compose.viewmodel.koinViewModel
 
-/** Content stops growing past this width on tablets — a grid of cards spaced across a full
- * landscape tablet width reads as sparse, not spacious. */
-private val CONTENT_MAX_WIDTH = 960.dp
+/** Content stops growing past this width on tablets — a list row stretched across a full
+ * landscape tablet puts a mailbox's name and its menu a metre apart. */
+private val CONTENT_MAX_WIDTH = 720.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -177,14 +176,14 @@ fun MailboxPickerScreen(
             modifier = Modifier.fillMaxSize(),
             topBar = {
                 TopAppBar(
-                    title = { Text("Mailboxes") },
+                    title = { AppBarTitle("Mailboxes") },
                     actions = {
                         IconButton(onClick = { showSignOutDialog = true }) {
                             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                        containerColor = MaterialTheme.colorScheme.surface,
                     ),
                 )
             },
@@ -202,8 +201,6 @@ fun MailboxPickerScreen(
                     .padding(contentPadding)
                     .padding(scaffoldPadding),
             ) {
-                val horizontalPadding = if (widthClass == WindowWidthClass.COMPACT) 16.dp else 24.dp
-
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                     MailboxPickerContent(
                         state = state,
@@ -223,8 +220,7 @@ fun MailboxPickerScreen(
                                     // rather than a phone layout stretched to fit.
                                     Modifier.widthIn(max = CONTENT_MAX_WIDTH)
                                 },
-                            )
-                            .padding(horizontal = horizontalPadding),
+                            ),
                     )
                 }
             }
@@ -246,18 +242,13 @@ private fun MailboxPickerContent(
     when {
         // Skeleton cards on the same grid as real mailboxes — the screen looks like itself
         // while loading instead of showing a bare spinner.
-        state.loading && state.mailboxes.isEmpty() -> Column(
-            modifier = modifier.padding(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            repeat(2) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                ) {
-                    SkeletonEmailRow()
-                }
+        state.loading && state.mailboxes.isEmpty() -> Column(modifier = modifier) {
+            repeat(3) {
+                SkeletonEmailRow()
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = ListRowDimens.textEdge),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
             }
         }
 
@@ -286,16 +277,17 @@ private fun MailboxPickerContent(
             }
         }
 
-        // On a phone a single grouped column reads better than a grid — sticky domain headers
-        // give the list structure without asking the user to expand/collapse anything.
-        widthClass == WindowWidthClass.COMPACT -> PullToRefreshBox(
+        // One grouped column at every width: sticky domain titles give the list structure, and
+        // each mailbox is a row on the same 72dp grid as mail. On a wide window the column is
+        // capped and centered by the caller.
+        else -> PullToRefreshBox(
             isRefreshing = state.loading,
             onRefresh = onRefresh,
             modifier = modifier,
         ) {
             LazyColumn(
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                // Bottom room so the last row can scroll clear of the New mailbox button.
+                contentPadding = PaddingValues(bottom = 88.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 groupMailboxesByDomain(state.mailboxes).forEach { (domain, mailboxesInDomain) ->
@@ -303,36 +295,13 @@ private fun MailboxPickerContent(
                         DomainHeader(domain)
                     }
                     items(mailboxesInDomain, key = { it.id }) { mailbox ->
-                        MailboxCard(
+                        MailboxRow(
                             mailbox = mailbox,
                             onClick = { onMailboxSelected(mailbox.id, mailbox.displayName) },
                             onDelete = { onDeleteRequested(mailbox) },
                             modifier = Modifier.animateItem(),
                         )
                     }
-                }
-            }
-        }
-
-        else -> PullToRefreshBox(
-            isRefreshing = state.loading,
-            onRefresh = onRefresh,
-            modifier = modifier,
-        ) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 280.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(state.mailboxes, key = { it.id }) { mailbox ->
-                    MailboxCard(
-                        mailbox = mailbox,
-                        onClick = { onMailboxSelected(mailbox.id, mailbox.displayName) },
-                        onDelete = { onDeleteRequested(mailbox) },
-                        modifier = Modifier.animateItem(),
-                    )
                 }
             }
         }
@@ -348,26 +317,28 @@ internal fun groupMailboxesByDomain(mailboxes: List<Mailbox>): List<Pair<String,
         .toList()
         .sortedBy { (domain, _) -> domain }
 
+/** A domain's group title, on the 16dp edge. Opaque: a sticky header needs a solid background or
+ * the rows scrolling underneath it show through. */
 @Composable
 private fun DomainHeader(domain: String, modifier: Modifier = Modifier) {
-    // Opaque, matching the surrounding Surface — a sticky header needs a solid background or
-    // the list scrolling underneath it shows through.
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
     ) {
         Text(
             text = domain,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
         )
     }
 }
 
+/** One mailbox on the shared 72dp list grid: avatar in the 40dp slot, text from the 72dp edge,
+ * and a divider inset to match. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MailboxCard(
+private fun MailboxRow(
     mailbox: Mailbox,
     onClick: () -> Unit,
     onDelete: () -> Unit,
@@ -375,24 +346,19 @@ private fun MailboxCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
-    // Tonal, not elevated: this was the only drop shadow in the app — every other container
-    // is a flat tonal surface.
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = { showMenu = true }),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
+    Column(modifier = modifier) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onClick, onLongClick = { showMenu = true })
+                .padding(horizontal = ListRowDimens.horizontalPadding, vertical = ListRowDimens.verticalPadding),
+            horizontalArrangement = Arrangement.spacedBy(ListRowDimens.contentGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            InitialsAvatar(name = mailbox.displayName, modifier = Modifier.size(40.dp))
+            InitialsAvatar(name = mailbox.displayName, modifier = Modifier.size(ListRowDimens.avatarSize))
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(ListRowDimens.lineGap),
             ) {
                 Text(mailbox.displayName, style = MaterialTheme.typography.titleMedium)
                 // A mailbox with no display name falls back to its address — repeating the
@@ -428,6 +394,10 @@ private fun MailboxCard(
                 }
             }
         }
+        HorizontalDivider(
+            modifier = Modifier.padding(start = ListRowDimens.textEdge),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
     }
 }
 

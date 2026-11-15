@@ -193,7 +193,7 @@ fun SearchScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    containerColor = MaterialTheme.colorScheme.surface,
                 ),
             )
         },
@@ -320,6 +320,11 @@ private fun ActiveFilterChips(
                     viewModel.search()
                 },
                 label = { Text(chip.label) },
+                colors = InputChipDefaults.inputChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    selectedTrailingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                ),
                 trailingIcon = {
                     Icon(
                         imageVector = Icons.Default.Close,
