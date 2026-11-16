@@ -85,7 +85,20 @@ data class InboxUiState(
     /** Domain-wide lists page by cursor, not page number: where the next page starts, or null
      * when the last page has been loaded. */
     val nextCursor: String? = null,
+    /** Local filter: show only unread rows of what is loaded. Never changes what is fetched. */
+    val unreadOnly: Boolean = false,
+    /** Local filter: show only rows carrying this label, within the folder being listed. */
+    val labelFilter: Label? = null,
 ) {
+    /** True while either local filter hides rows. */
+    val filtering: Boolean get() = unreadOnly || labelFilter != null
+
+    /** [emails] after the local filters — what the list actually draws. */
+    val visibleEmails: List<EmailSummary>
+        get() = if (!filtering) emails else emails.filter { email ->
+            (!unreadOnly || email.isUnread()) && (labelFilter == null || email.labels.any { it.id == labelFilter.id })
+        }
+
     /** In the Drafts folder the list shows local drafts above whatever the server reports for
      * that folder — drafts written here never sync (see [Draft]), so both have to be shown for
      * the folder to be honest about what's in it. */
@@ -197,6 +210,9 @@ class InboxViewModel(
 
         private const val PAGE_SIZE = 50
 
+        /** Rows a filtered list should hold before it stops fetching more pages on its own. */
+        private const val FILTERED_MIN_ROWS = 15
+
         /** Notices tend to arrive in bursts (a bulk action touches many rows); one reload per burst. */
         const val LIVE_DEBOUNCE_MILLIS: Long = 400
     }
@@ -207,6 +223,7 @@ class InboxViewModel(
             fetchPage(page = 1)
                 .onSuccess { page ->
                     _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
+                    fillFilteredList()
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
@@ -240,6 +257,7 @@ class InboxViewModel(
             fetchPage(page = 1)
                 .onSuccess { page ->
                     _state.update { it.copy(refreshing = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
+                    fillFilteredList()
                 }
                 .onFailure { t ->
                     _state.update { it.copy(refreshing = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to refresh") }
@@ -257,11 +275,36 @@ class InboxViewModel(
             fetchPage(page = nextPage)
                 .onSuccess { page ->
                     _state.update { it.copy(loading = false, emails = (it.emails + page.emails).distinctBy { e -> e.mailboxId to e.id }, totalCount = page.totalCount, nextCursor = page.nextCursor, page = nextPage) }
+                    fillFilteredList()
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load more") }
                 }
         }
+    }
+
+    // --- local filters ------------------------------------------------------------------------
+
+    /** Hides read rows among those already loaded. */
+    fun setUnreadOnly(enabled: Boolean) {
+        _state.update { it.copy(unreadOnly = enabled) }
+        fillFilteredList()
+    }
+
+    /** Narrows the listed folder to rows carrying [label]; null shows them all again. */
+    fun setLabelFilter(label: Label?) {
+        _state.update { it.copy(labelFilter = label) }
+        fillFilteredList()
+    }
+
+    /**
+     * A local filter can leave a nearly empty screen while more pages wait on the server, and an
+     * empty list never scrolls far enough to ask for them — so keep fetching until the filtered
+     * list has a screenful or the server has nothing left.
+     */
+    private fun fillFilteredList() {
+        val current = _state.value
+        if (current.filtering && current.visibleEmails.size < FILTERED_MIN_ROWS) loadMore()
     }
 
     fun selectFolder(folder: Folder) {
@@ -283,6 +326,7 @@ class InboxViewModel(
             fetchPage(page = 1)
                 .onSuccess { page ->
                     _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
+                    fillFilteredList()
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
@@ -632,6 +676,7 @@ class InboxViewModel(
         _state.update {
             it.copy(
                 currentLabel = label,
+                labelFilter = null,
                 emails = emptyList(),
                 totalCount = 0,
                 page = 1,
@@ -649,6 +694,7 @@ class InboxViewModel(
             fetchPage(page = 1)
                 .onSuccess { page ->
                     _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
+                    fillFilteredList()
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
@@ -702,6 +748,7 @@ class InboxViewModel(
                         current.copy(
                             labels = current.labels.map { if (it.id == label.id) renamed else it }.sortedBy { it.name.lowercase() },
                             currentLabel = if (current.currentLabel?.id == label.id) renamed else current.currentLabel,
+                            labelFilter = if (current.labelFilter?.id == label.id) renamed else current.labelFilter,
                             emails = current.emails.map { email ->
                                 email.copy(labels = email.labels.map { if (it.id == label.id) renamed.copy(count = 0) else it })
                             },
@@ -723,6 +770,7 @@ class InboxViewModel(
                     _state.update { current ->
                         current.copy(
                             labels = current.labels.filterNot { it.id == label.id },
+                            labelFilter = current.labelFilter?.takeUnless { it.id == label.id },
                             emails = current.emails.map { e -> e.copy(labels = e.labels.filterNot { it.id == label.id }) },
                         )
                     }
@@ -807,7 +855,7 @@ class InboxViewModel(
     }
 
     fun selectAll() {
-        _state.update { it.copy(selectedEmailIds = it.emails.map { email -> email.id }.toSet()) }
+        _state.update { it.copy(selectedEmailIds = it.visibleEmails.map { email -> email.id }.toSet()) }
     }
 
     fun clearSelection() {

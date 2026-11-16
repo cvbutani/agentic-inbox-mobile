@@ -51,14 +51,57 @@ class SearchViewModelTest {
         snippet = null,
     )
 
-    private fun buildViewModel(repository: FakeEmailRepository = FakeEmailRepository(), domain: String? = null): SearchViewModel =
+    private fun buildViewModel(
+        repository: FakeEmailRepository = FakeEmailRepository(),
+        domain: String? = null,
+        initialQuery: String = "",
+        initialFrom: String = "",
+    ): SearchViewModel =
         SearchViewModel(
             searchEmails = SearchEmailsUseCase(repository),
             searchDomainEmails = SearchDomainEmailsUseCase(repository),
             setEmailStarred = SetEmailStarredUseCase(repository),
             mailboxId = if (domain == null) "mb1" else "",
             domain = domain,
+            initialQuery = initialQuery,
+            initialFrom = initialFrom,
         )
+
+    @Test
+    fun `opening with a from address searches that sender straight away`() = runTest {
+        val repository = FakeEmailRepository(
+            searchHandler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("e1")), 1)) },
+        )
+
+        val viewModel = buildViewModel(repository, initialFrom = "dave@example.net")
+        advanceUntilIdle()
+
+        assertEquals("dave@example.net", viewModel.state.value.from)
+        assertEquals("dave@example.net", repository.searchCalls.single().query.from)
+        assertEquals(listOf("e1"), viewModel.state.value.results.map { it.id })
+        assertTrue(viewModel.state.value.hasSearched)
+    }
+
+    @Test
+    fun `opening with a query searches it straight away`() = runTest {
+        val repository = FakeEmailRepository()
+
+        val viewModel = buildViewModel(repository, initialQuery = "help@example.net")
+        advanceUntilIdle()
+
+        assertEquals("help@example.net", viewModel.state.value.queryText)
+        assertEquals("help@example.net", repository.searchCalls.single().query.query)
+    }
+
+    @Test
+    fun `opening with nothing to search for makes no request`() = runTest {
+        val repository = FakeEmailRepository()
+
+        buildViewModel(repository)
+        advanceUntilIdle()
+
+        assertTrue(repository.searchCalls.isEmpty())
+    }
 
     @Test
     fun `initial state is empty and not loading`() = runTest {

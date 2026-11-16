@@ -153,9 +153,9 @@ fun InboxScreen(
     // Grouped here, not in the composable tree: remembered on the list, with "today" read once
     // per list change. The grouper is pure and unit-tested.
     val timeZone = remember { TimeZone.currentSystemDefault() }
-    val dayGroups = remember(state.emails) {
+    val dayGroups = remember(state.emails, state.unreadOnly, state.labelFilter) {
         EmailDayGrouper.group(
-            items = state.emails,
+            items = state.visibleEmails,
             instantOf = { EmailDayGrouper.instantOrEpoch(it.date) },
             now = Clock.System.now(),
             zone = timeZone,
@@ -492,6 +492,19 @@ fun InboxScreen(
                     .fillMaxSize()
                     .padding(paddingValues),
             ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                // Hidden in a label's own view (already narrowed) and in selection mode (where the
+                // top bar is the action bar); the label chip also needs labels to choose from.
+                if (state.currentLabel == null && !state.selectionMode) {
+                    InboxFilterRow(
+                        unreadOnly = state.unreadOnly,
+                        onUnreadOnlyChange = viewModel::setUnreadOnly,
+                        labels = if (state.domain == null) state.labels else emptyList(),
+                        labelFilter = state.labelFilter,
+                        onLabelFilterChange = viewModel::setLabelFilter,
+                    )
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     // Skeleton rows on the same 72dp grid as real mail, so the app looks like
                     // itself while loading instead of looking empty.
@@ -511,6 +524,17 @@ fun InboxScreen(
                         detail = state.errorMessage,
                         action = {
                             Button(onClick = { viewModel.onRefresh() }) { Text("Retry") }
+                        },
+                    )
+
+                    state.filtering && state.visibleEmails.isEmpty() && visibleDrafts.isEmpty() && !state.loading -> StatusPane(
+                        icon = Icons.Default.Inbox,
+                        title = "No matching emails",
+                        detail = "Nothing loaded in ${state.currentFolder.name} fits the filters",
+                        action = {
+                            TextButton(onClick = { viewModel.setUnreadOnly(false); viewModel.setLabelFilter(null) }) {
+                                Text("Clear filters")
+                            }
                         },
                     )
 
@@ -592,6 +616,8 @@ fun InboxScreen(
                             }
                         }
                     }
+                }
+                }
                 }
             }
         }

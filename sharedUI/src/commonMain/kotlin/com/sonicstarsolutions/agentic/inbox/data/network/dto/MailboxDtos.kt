@@ -36,6 +36,17 @@ data class UpdateMailboxDto(
 )
 
 @Serializable
+data class DomainSettingsDto(
+    @SerialName("domain") val domain: String,
+    @SerialName("retentionDays") val retentionDays: Int,
+)
+
+@Serializable
+data class UpdateDomainSettingsDto(
+    @SerialName("retentionDays") val retentionDays: Int,
+)
+
+@Serializable
 data class FolderDto(
     @SerialName("id") val id: String,
     @SerialName("name") val name: String,

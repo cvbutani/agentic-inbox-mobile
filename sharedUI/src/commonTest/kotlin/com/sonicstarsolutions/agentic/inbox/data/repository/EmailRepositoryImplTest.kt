@@ -1053,4 +1053,20 @@ class EmailRepositoryImplTest {
         val offline = EmailRepositoryImpl(apiFor(MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }), dao)
         assertEquals("mb1", offline.getEmails("mb1", "inbox", page = 1, limit = 50).getOrThrow().emails.single().mailboxId)
     }
+
+    @Test
+    fun `a list row shows the sender name the server sends`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                content = """{"emails":[{"id":"e1","subject":"Hi","sender":"dave@example.net","sender_name":"Dave Lee","recipient":"me@example.dev","date":"2026-07-16T00:00:00Z"}],"totalCount":1}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        val page = repository.getEmails(mailboxId = "mb1", folder = "inbox", page = 1, limit = 25).getOrThrow()
+
+        assertEquals("Dave Lee <dave@example.net>", page.emails.single().sender)
+    }
 }

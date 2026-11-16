@@ -21,6 +21,8 @@ data class EmailDetail(
      * Null for a message that isn't a reply (or a from-scratch draft).
      */
     val inReplyTo: String? = null,
+    /** The Reply-To header as received (`Name <addr>`, comma-separated), when the sender set one. */
+    val replyTo: String? = null,
 )
 
 data class EmailAttachment(

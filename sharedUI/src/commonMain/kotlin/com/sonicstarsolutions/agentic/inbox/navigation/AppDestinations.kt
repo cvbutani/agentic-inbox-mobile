@@ -71,6 +71,10 @@ data class Search(
     val mailboxId: String,
     /** Set to search every mailbox on this domain instead of just [mailboxId]. */
     val domain: String? = null,
+    /** Text to search for on arrival (an address picked from a message). */
+    val initialQuery: String = "",
+    /** A sender address to filter on arrival. */
+    val initialFrom: String = "",
 ) : AppDestination
 
 /**

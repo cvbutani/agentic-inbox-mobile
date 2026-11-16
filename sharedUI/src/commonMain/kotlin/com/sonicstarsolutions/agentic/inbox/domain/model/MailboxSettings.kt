@@ -13,4 +13,9 @@ data class MailboxSettings(
     val signatureText: String = "",
     /** Extra addresses the mailbox receives mail at and can send from, lowercase. */
     val aliases: List<String> = emptyList(),
+    /**
+     * How many days the server keeps this mailbox's mail before deleting it. Null follows the
+     * domain's default; 0 keeps everything.
+     */
+    val retentionDays: Int? = null,
 )

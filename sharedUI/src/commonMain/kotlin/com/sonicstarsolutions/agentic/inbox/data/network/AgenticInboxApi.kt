@@ -5,7 +5,9 @@ import com.sonicstarsolutions.agentic.inbox.data.network.dto.BulkResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ConfigDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.ContactsResponseDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.DomainSettingsDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailFullDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateDomainSettingsDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.EmailPageDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.FolderNameDto
@@ -61,6 +63,15 @@ interface AgenticInboxApi {
         @Path("mailboxId") mailboxId: String,
         @Body body: UpdateMailboxDto,
     ): MailboxDto
+
+    @GET("/api/v1/domains/{domain}/settings")
+    suspend fun getDomainSettings(@Path("domain") domain: String): DomainSettingsDto
+
+    @PUT("/api/v1/domains/{domain}/settings")
+    suspend fun updateDomainSettings(
+        @Path("domain") domain: String,
+        @Body body: UpdateDomainSettingsDto,
+    ): DomainSettingsDto
 
     @DELETE("/api/v1/mailboxes/{mailboxId}")
     suspend fun deleteMailbox(@Path("mailboxId") mailboxId: String)

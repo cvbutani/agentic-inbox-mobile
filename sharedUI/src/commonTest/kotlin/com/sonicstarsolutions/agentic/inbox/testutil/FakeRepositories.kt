@@ -13,6 +13,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.LiveScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduleKind
 import com.sonicstarsolutions.agentic.inbox.domain.model.ScheduledEmail
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
+import com.sonicstarsolutions.agentic.inbox.domain.model.DomainSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.model.SystemFolders
@@ -191,6 +192,23 @@ class FakeMailboxRepository(
         deleteCalls += mailboxId
         deleteGate?.await()
         return deleteResult
+    }
+
+    var domainSettingsResult: Result<DomainSettings> = Result.success(DomainSettings(domain = "example.dev", retentionDays = 30))
+    val domainSettingsCalls = mutableListOf<String>()
+
+    override suspend fun getDomainSettings(domain: String): Result<DomainSettings> {
+        domainSettingsCalls += domain
+        return domainSettingsResult
+    }
+
+    /** Defaults to echoing what was saved, like the real Worker. */
+    var updateDomainResult: (String, Int) -> Result<DomainSettings> = { domain, days -> Result.success(DomainSettings(domain, days)) }
+    val updateDomainCalls = mutableListOf<Pair<String, Int>>()
+
+    override suspend fun updateDomainSettings(domain: String, retentionDays: Int): Result<DomainSettings> {
+        updateDomainCalls += domain to retentionDays
+        return updateDomainResult(domain, retentionDays)
     }
 
     var clearCacheCalled: Boolean = false

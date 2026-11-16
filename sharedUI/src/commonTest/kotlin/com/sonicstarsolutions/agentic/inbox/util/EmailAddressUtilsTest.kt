@@ -97,4 +97,86 @@ class EmailAddressUtilsTest {
             EmailAddressUtils.displayName("Alice <alice@example.dev>", ownEmail = "me@example.dev"),
         )
     }
+
+    // --- parseAddresses: one entry per person, keeping the name so it can be shown and searched ---
+
+    @Test
+    fun `parseAddresses keeps the name and the address of each entry`() {
+        assertEquals(
+            listOf(
+                EmailAddressUtils.Person(name = "Alice", address = "a@example.dev"),
+                EmailAddressUtils.Person(name = null, address = "b@example.dev"),
+            ),
+            EmailAddressUtils.parseAddresses("Alice <a@example.dev>, b@example.dev"),
+        )
+    }
+
+    @Test
+    fun `parseAddresses does not split a quoted name on its comma`() {
+        assertEquals(
+            listOf(
+                EmailAddressUtils.Person(name = "Lee, Dave", address = "dave@example.dev"),
+                EmailAddressUtils.Person(name = null, address = "x@example.dev"),
+            ),
+            EmailAddressUtils.parseAddresses("\"Lee, Dave\" <dave@example.dev>; x@example.dev"),
+        )
+    }
+
+    @Test
+    fun `parseAddresses on blank input is empty`() {
+        assertEquals(emptyList(), EmailAddressUtils.parseAddresses(null))
+        assertEquals(emptyList(), EmailAddressUtils.parseAddresses("  , ; "))
+    }
+
+    @Test
+    fun `a person is labelled by name when known and by address otherwise`() {
+        assertEquals("Alice", EmailAddressUtils.Person("Alice", "a@example.dev").label)
+        assertEquals("a@example.dev", EmailAddressUtils.Person(null, "a@example.dev").label)
+    }
+
+    // --- withName: folding the server's separate sender_name back into one header string ---
+
+    @Test
+    fun `withName builds a Name angle-address header`() {
+        assertEquals("Dave <dave@example.dev>", EmailAddressUtils.withName("dave@example.dev", "Dave"))
+    }
+
+    @Test
+    fun `withName quotes a name that has a comma`() {
+        assertEquals("\"Lee, Dave\" <dave@example.dev>", EmailAddressUtils.withName("dave@example.dev", "Lee, Dave"))
+    }
+
+    @Test
+    fun `withName leaves the address alone when there is no name`() {
+        assertEquals("dave@example.dev", EmailAddressUtils.withName("dave@example.dev", null))
+        assertEquals("dave@example.dev", EmailAddressUtils.withName("dave@example.dev", "  "))
+    }
+
+    @Test
+    fun `withName does not double up a sender that already carries a name`() {
+        assertEquals("Dave <dave@example.dev>", EmailAddressUtils.withName("Dave <dave@example.dev>", "Other"))
+    }
+
+    @Test
+    fun `displayName strips the quotes round a quoted name`() {
+        assertEquals("Lee, Dave", EmailAddressUtils.displayName("\"Lee, Dave\" <dave@example.dev>", ownEmail = null))
+    }
+
+    // --- senderLabel: what the From line shows ---
+
+    @Test
+    fun `senderLabel shows the name of your own message when there is one`() {
+        assertEquals("Me Myself", EmailAddressUtils.senderLabel("Me Myself <me@example.dev>", ownEmail = "me@example.dev"))
+    }
+
+    @Test
+    fun `senderLabel falls back to You for your own bare address`() {
+        assertEquals("You", EmailAddressUtils.senderLabel("me@example.dev", ownEmail = "me@example.dev"))
+    }
+
+    @Test
+    fun `senderLabel shows other people by name or address`() {
+        assertEquals("Alice", EmailAddressUtils.senderLabel("Alice <a@example.dev>", ownEmail = "me@example.dev"))
+        assertEquals("a@example.dev", EmailAddressUtils.senderLabel("a@example.dev", ownEmail = "me@example.dev"))
+    }
 }

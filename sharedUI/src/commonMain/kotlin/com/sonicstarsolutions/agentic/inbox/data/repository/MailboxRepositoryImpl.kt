@@ -6,7 +6,10 @@ import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.CreateMailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.MailboxDto
 import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.DomainSettingsDto
+import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateDomainSettingsDto
 import com.sonicstarsolutions.agentic.inbox.data.network.dto.UpdateMailboxDto
+import com.sonicstarsolutions.agentic.inbox.domain.model.DomainSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
@@ -62,6 +65,12 @@ class MailboxRepositoryImpl(
             saved.settings.asObject().toMailboxSettings()
         }
 
+    override suspend fun getDomainSettings(domain: String): Result<DomainSettings> =
+        safeApiCall { api.getDomainSettings(domain).toDomain() }
+
+    override suspend fun updateDomainSettings(domain: String, retentionDays: Int): Result<DomainSettings> =
+        safeApiCall { api.updateDomainSettings(domain, UpdateDomainSettingsDto(retentionDays)).toDomain() }
+
     override suspend fun deleteMailbox(mailboxId: String): Result<Unit> =
         safeApiCall { api.deleteMailbox(mailboxId) }
 
@@ -86,5 +95,7 @@ private fun MailboxDto.toDomain(): Mailbox {
 }
 
 private fun Mailbox.toEntity(): MailboxEntity = MailboxEntity(id = id, email = email, name = name, fromName = fromName)
+
+private fun DomainSettingsDto.toDomain(): DomainSettings = DomainSettings(domain = domain, retentionDays = retentionDays)
 
 private fun MailboxEntity.toDomain(): Mailbox = Mailbox(id = id, email = email, name = name, fromName = fromName)

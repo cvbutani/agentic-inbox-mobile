@@ -10,6 +10,8 @@ data class EmailMetadataDto(
     val id: String,
     val subject: String,
     val sender: String,
+    /** The From display name; the server keeps it apart from [sender], which is the bare address. */
+    @SerialName("sender_name") val senderName: String? = null,
     val recipient: String,
     val cc: String? = null,
     val bcc: String? = null,
@@ -42,6 +44,9 @@ data class EmailFullDto(
     val id: String,
     val subject: String,
     val sender: String,
+    @SerialName("sender_name") val senderName: String? = null,
+    /** The Reply-To header as received (`Name <addr>`, comma-separated); null when absent. */
+    @SerialName("reply_to") val replyTo: String? = null,
     val recipient: String,
     val cc: String? = null,
     val bcc: String? = null,

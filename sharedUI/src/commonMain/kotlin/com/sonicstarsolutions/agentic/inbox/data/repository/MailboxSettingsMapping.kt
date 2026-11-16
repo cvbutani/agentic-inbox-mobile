@@ -6,11 +6,15 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 private fun JsonObject?.string(key: String): String? =
     (this?.get(key) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
 
 private fun JsonObject?.boolean(key: String): Boolean? = (this?.get(key) as? JsonPrimitive)?.booleanOrNull
+
+/** A whole-number value; a string, fraction or null is not one. */
+private fun JsonObject?.int(key: String): Int? = (this?.get(key) as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
 
 private fun JsonObject?.obj(key: String): JsonObject? = this?.get(key) as? JsonObject
 
@@ -29,6 +33,7 @@ internal fun JsonObject?.toMailboxSettings(): MailboxSettings {
         signatureEnabled = signature.boolean("enabled") ?: false,
         signatureText = signature.string("text").orEmpty(),
         aliases = stringList("aliases"),
+        retentionDays = int("retentionDays"),
     )
 }
 
@@ -57,12 +62,15 @@ internal fun mergeMailboxSettings(existing: JsonObject?, edited: MailboxSettings
         "html" to JsonPrimitive(html),
     )
 
+    // A null retention means "follow the domain": the key is removed rather than stored as null.
+    val withoutRetention = if (edited.retentionDays == null) JsonObject(current.filterKeys { it != "retentionDays" }) else current
+    val retention = edited.retentionDays?.let { mapOf("retentionDays" to JsonPrimitive(it)) }.orEmpty()
     return JsonObject(
-        current + mapOf(
+        withoutRetention + mapOf(
             "fromName" to JsonPrimitive(edited.fromName),
             "signature" to mergedSignature,
             "aliases" to JsonArray(edited.aliases.map(::JsonPrimitive)),
-        ),
+        ) + retention,
     )
 }
 

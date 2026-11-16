@@ -2,8 +2,11 @@ package com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sonicstarsolutions.agentic.inbox.domain.model.DEFAULT_RETENTION_DAYS
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxSettingsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateDomainSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateMailboxSettingsUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,17 +27,30 @@ data class MailboxSettingsUiState(
     val saving: Boolean = false,
     /** One glanceable snackbar line — a save result, success or failure. */
     val message: String? = null,
+    /** The mailbox's domain, blank when the id has none (nothing to inherit from then). */
+    val domain: String = "",
+    /** The domain's default retention in days, once known; null until loaded or when it couldn't be. */
+    val domainRetentionDays: Int? = null,
+    val savingDomain: Boolean = false,
 ) {
     val dirty: Boolean get() = form != saved
+
+    /** Days this mailbox's mail is really kept: its own setting, else its domain's, else the
+     * server's default. 0 is forever. */
+    val effectiveRetentionDays: Int get() = form.retentionDays ?: domainRetentionDays ?: DEFAULT_RETENTION_DAYS
 }
 
 class MailboxSettingsViewModel(
     private val getSettings: GetMailboxSettingsUseCase,
     private val updateSettings: UpdateMailboxSettingsUseCase,
+    private val getDomainSettings: GetDomainSettingsUseCase,
+    private val updateDomainSettings: UpdateDomainSettingsUseCase,
     private val mailboxId: String,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(MailboxSettingsUiState())
+    private val domain = mailboxId.substringAfter('@', missingDelimiterValue = "").lowercase()
+
+    private val _state = MutableStateFlow(MailboxSettingsUiState(domain = domain))
     val state: StateFlow<MailboxSettingsUiState> = _state.asStateFlow()
 
     init {
@@ -47,6 +63,7 @@ class MailboxSettingsViewModel(
     }
 
     private fun load() {
+        loadDomainDefault()
         viewModelScope.launch {
             getSettings(mailboxId)
                 .onSuccess { settings ->
@@ -54,6 +71,37 @@ class MailboxSettingsViewModel(
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, loadError = t.message ?: "Couldn't load settings") }
+                }
+        }
+    }
+
+    /** Non-fatal: without it the screen just can't say what "use the domain default" resolves to. */
+    private fun loadDomainDefault() {
+        if (domain.isBlank()) return
+        viewModelScope.launch {
+            getDomainSettings(domain).onSuccess { settings ->
+                _state.update { it.copy(domainRetentionDays = settings.retentionDays) }
+            }
+        }
+    }
+
+    /** This mailbox's own retention in days (0 keeps everything); null follows the domain default. */
+    fun onRetentionChanged(days: Int?) = edit { it.copy(retentionDays = days) }
+
+    /** Sets the default for every mailbox on the domain. Saved at once, not with the mailbox form:
+     * it is a different setting, owned by the domain, and it reaches mailboxes besides this one. */
+    fun onDomainRetentionChosen(days: Int) {
+        if (domain.isBlank() || _state.value.savingDomain) return
+        _state.update { it.copy(savingDomain = true) }
+        viewModelScope.launch {
+            updateDomainSettings(domain, days)
+                .onSuccess { stored ->
+                    _state.update {
+                        it.copy(savingDomain = false, domainRetentionDays = stored.retentionDays, message = "Default for $domain saved")
+                    }
+                }
+                .onFailure { t ->
+                    _state.update { it.copy(savingDomain = false, message = t.message ?: "Couldn't save the domain default") }
                 }
         }
     }

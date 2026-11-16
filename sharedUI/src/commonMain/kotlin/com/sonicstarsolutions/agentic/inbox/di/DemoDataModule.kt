@@ -10,6 +10,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.Folder
+import com.sonicstarsolutions.agentic.inbox.domain.model.DomainSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
@@ -282,6 +283,13 @@ class DemoMailboxRepository : MailboxRepository {
     override suspend fun updateMailboxSettings(mailboxId: String, settings: MailboxSettings): Result<MailboxSettings> {
         this.settings = settings
         return Result.success(settings)
+    }
+    private var domainRetentionDays = 30
+    override suspend fun getDomainSettings(domain: String): Result<DomainSettings> =
+        Result.success(DomainSettings(domain, domainRetentionDays))
+    override suspend fun updateDomainSettings(domain: String, retentionDays: Int): Result<DomainSettings> {
+        domainRetentionDays = retentionDays
+        return Result.success(DomainSettings(domain, retentionDays))
     }
     override suspend fun clearCache() { /* nothing cached */ }
 }

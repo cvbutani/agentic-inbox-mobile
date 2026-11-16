@@ -1,8 +1,11 @@
 package com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings
 
 import com.sonicstarsolutions.agentic.inbox.data.network.ApiException
+import com.sonicstarsolutions.agentic.inbox.domain.model.DomainSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxSettingsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateDomainSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateMailboxSettingsUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository
 import kotlinx.coroutines.CompletableDeferred
@@ -49,6 +52,8 @@ class MailboxSettingsViewModelTest {
     ) = MailboxSettingsViewModel(
         getSettings = GetMailboxSettingsUseCase(repository),
         updateSettings = UpdateMailboxSettingsUseCase(repository),
+        getDomainSettings = GetDomainSettingsUseCase(repository),
+        updateDomainSettings = UpdateDomainSettingsUseCase(repository),
         mailboxId = mailboxId,
     )
 
@@ -271,5 +276,110 @@ class MailboxSettingsViewModelTest {
         viewModel.save()
 
         assertEquals(listOf("sales@example.dev"), repository.updateSettingsCalls.single().aliases)
+    }
+
+    // --- auto-delete (retention) ---------------------------------------------------------------
+
+    private val alice = "alice@example.dev"
+
+    @Test
+    fun `the domain's default retention is loaded beside the mailbox settings`() = runTest {
+        val repository = repository()
+        repository.domainSettingsResult = Result.success(DomainSettings("example.dev", 90))
+
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        assertEquals(listOf("example.dev"), repository.domainSettingsCalls)
+        assertEquals(90, viewModel.state.value.domainRetentionDays)
+    }
+
+    @Test
+    fun `a mailbox id without a domain asks for no domain settings`() = runTest {
+        val repository = repository()
+
+        buildViewModel(repository, mailboxId = "mb1")
+
+        assertTrue(repository.domainSettingsCalls.isEmpty())
+    }
+
+    @Test
+    fun `failing to load the domain default does not fail the screen`() = runTest {
+        val repository = repository()
+        repository.domainSettingsResult = Result.failure(RuntimeException("offline"))
+
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        assertNull(viewModel.state.value.loadError)
+        assertNull(viewModel.state.value.domainRetentionDays)
+    }
+
+    @Test
+    fun `choosing a retention for the mailbox is a dirty edit that save sends`() = runTest {
+        val repository = repository()
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        viewModel.onRetentionChanged(7)
+        assertTrue(viewModel.state.value.dirty)
+        viewModel.save()
+
+        assertEquals(7, repository.updateSettingsCalls.single().retentionDays)
+    }
+
+    @Test
+    fun `going back to the domain default saves a null retention`() = runTest {
+        val repository = repository(settings = Result.success(initial.copy(retentionDays = 7)))
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        viewModel.onRetentionChanged(null)
+        viewModel.save()
+
+        assertNull(repository.updateSettingsCalls.single().retentionDays)
+    }
+
+    @Test
+    fun `the effective retention is the mailbox's own then the domain's then 30`() = runTest {
+        val repository = repository()
+        repository.domainSettingsResult = Result.success(DomainSettings("example.dev", 90))
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        assertEquals(90, viewModel.state.value.effectiveRetentionDays)
+        viewModel.onRetentionChanged(7)
+        assertEquals(7, viewModel.state.value.effectiveRetentionDays)
+        viewModel.onRetentionChanged(0)
+        assertEquals(0, viewModel.state.value.effectiveRetentionDays)
+    }
+
+    @Test
+    fun `the effective retention is 30 days until anything says otherwise`() = runTest {
+        val repository = repository()
+        repository.domainSettingsResult = Result.failure(RuntimeException("offline"))
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        assertEquals(30, viewModel.state.value.effectiveRetentionDays)
+    }
+
+    @Test
+    fun `choosing a domain default saves it straight away`() = runTest {
+        val repository = repository()
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        viewModel.onDomainRetentionChosen(14)
+
+        assertEquals(listOf("example.dev" to 14), repository.updateDomainCalls)
+        assertEquals(14, viewModel.state.value.domainRetentionDays)
+        assertEquals("Default for example.dev saved", viewModel.state.value.message)
+        assertFalse(viewModel.state.value.dirty, "the domain default is not part of the mailbox form")
+    }
+
+    @Test
+    fun `a failed domain default save keeps the old default and says so`() = runTest {
+        val repository = repository()
+        repository.updateDomainResult = { _, _ -> Result.failure(RuntimeException("boom")) }
+        val viewModel = buildViewModel(repository, mailboxId = alice)
+
+        viewModel.onDomainRetentionChosen(14)
+
+        assertEquals(30, viewModel.state.value.domainRetentionDays)
+        assertEquals("boom", viewModel.state.value.message)
     }
 }

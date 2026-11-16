@@ -55,6 +55,10 @@ class SearchViewModel(
     private val mailboxId: String,
     /** Non-null to search every mailbox on this domain instead of just [mailboxId]. */
     private val domain: String? = null,
+    /** Text to search for as soon as the screen opens — e.g. an address picked from a message. */
+    initialQuery: String = "",
+    /** A sender to filter on as soon as the screen opens. */
+    initialFrom: String = "",
 ) : ViewModel() {
 
     /** One page: by number in a mailbox, by cursor across a domain. */
@@ -68,7 +72,7 @@ class SearchViewModel(
         private const val PAGE_SIZE = 50
     }
 
-    private val _state = MutableStateFlow(SearchUiState())
+    private val _state = MutableStateFlow(SearchUiState(queryText = initialQuery, from = initialFrom))
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
 
     /** The one in-flight (or debounce-pending) first-page search. Each new intent cancels the
@@ -78,6 +82,11 @@ class SearchViewModel(
     /** The query that produced the current [SearchUiState.results]. [loadMore] pages through
      * this — never the live field values, which the user may have edited since. */
     private var submittedQuery: SearchQuery? = null
+
+    init {
+        // Nothing seeded means nothing to search for: scheduleSearch would only reset an already fresh page.
+        if (initialQuery.isNotBlank() || initialFrom.isNotBlank()) scheduleSearch(debounce = false)
+    }
 
     fun onQueryChanged(value: String) {
         _state.update { it.copy(queryText = value, errorMessage = null) }
