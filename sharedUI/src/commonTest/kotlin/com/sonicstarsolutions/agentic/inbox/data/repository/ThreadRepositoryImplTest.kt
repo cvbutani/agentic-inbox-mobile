@@ -168,4 +168,38 @@ class ThreadRepositoryImplTest {
 
         assertTrue(result.isFailure)
     }
+
+    @Test
+    fun `getThread folds the sender name into the sender and carries reply_to`() = runTest {
+        val json = """
+            {
+                "id": "e1", "subject": "Hello", "sender": "dave@example.net", "sender_name": "Dave Lee",
+                "reply_to": "Support <help@example.net>", "recipient": "me@example.dev",
+                "date": "2026-07-16T00:00:00Z", "read": true, "thread_id": "t1", "folder_id": "inbox",
+                "body": "hi", "attachments": []
+            }
+        """.trimIndent()
+        val engine = MockEngine { _ ->
+            respond("[$json]", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val repository = ThreadRepositoryImpl(apiFor(engine))
+
+        val message = repository.getThread("mb1", "e1", "t1").getOrThrow().single()
+
+        assertEquals("Dave Lee <dave@example.net>", message.sender)
+        assertEquals("Support <help@example.net>", message.replyTo)
+    }
+
+    @Test
+    fun `getThread keeps a bare sender and no reply_to when the server sends neither`() = runTest {
+        val engine = MockEngine { _ ->
+            respond("[$emailJson]", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val repository = ThreadRepositoryImpl(apiFor(engine))
+
+        val message = repository.getThread("mb1", "e1", "t1").getOrThrow().single()
+
+        assertEquals("a@example.dev", message.sender)
+        assertEquals(null, message.replyTo)
+    }
 }

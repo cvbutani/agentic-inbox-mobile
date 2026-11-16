@@ -24,6 +24,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
 import com.sonicstarsolutions.agentic.inbox.domain.repository.EmailRepository
+import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 
 class EmailRepositoryImpl(
     private val api: AgenticInboxApi,
@@ -200,7 +201,7 @@ internal fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequest
 private fun EmailMetadataDto.toDomain(fallbackMailboxId: String = ""): EmailSummary = EmailSummary(
     id = id,
     subject = subject,
-    sender = sender,
+    sender = EmailAddressUtils.withName(sender, senderName),
     recipient = recipient,
     date = date,
     read = read,

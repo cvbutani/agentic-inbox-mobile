@@ -115,6 +115,12 @@ fun AppNavHost() {
                     onOpenEmailFullScreen = { mailboxId, emailId, threadId ->
                         navigator.goTo(EmailThread(mailboxId, emailId, threadId))
                     },
+                    onSearchFrom = { mailboxId, address ->
+                        navigator.goTo(Search(mailboxId = mailboxId, initialFrom = address))
+                    },
+                    onSearchFor = { mailboxId, text ->
+                        navigator.goTo(Search(mailboxId = mailboxId, initialQuery = text))
+                    },
                 )
             }
 
@@ -133,6 +139,8 @@ fun AppNavHost() {
                 SearchScreen(
                     mailboxId = key.mailboxId,
                     domain = key.domain,
+                    initialQuery = key.initialQuery,
+                    initialFrom = key.initialFrom,
                     onBack = { navigator.goBack() },
                     onEmailSelected = { email ->
                         navigator.goTo(EmailThread(email.mailboxId.ifBlank { key.mailboxId }, email.id, email.threadId))
@@ -157,6 +165,12 @@ fun AppNavHost() {
                     },
                     onEditDraft = { draftMessageId ->
                         navigator.goTo(Compose(key.mailboxId, ComposeMode.EDIT_DRAFT.name, draftMessageId, key.threadId))
+                    },
+                    onSearchFrom = { address ->
+                        navigator.goTo(Search(mailboxId = key.mailboxId, initialFrom = address))
+                    },
+                    onSearchFor = { text ->
+                        navigator.goTo(Search(mailboxId = key.mailboxId, initialQuery = text))
                     },
                 )
             }

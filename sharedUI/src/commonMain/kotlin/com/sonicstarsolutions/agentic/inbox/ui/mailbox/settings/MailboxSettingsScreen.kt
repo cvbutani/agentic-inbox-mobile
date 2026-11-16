@@ -59,6 +59,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.domain.model.DEFAULT_RETENTION_DAYS
 import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeAction
 import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeSettings
 import com.sonicstarsolutions.agentic.inbox.ui.components.AppBarTitle
@@ -180,6 +181,17 @@ fun MailboxSettingsScreen(
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                AutoDeleteSection(
+                    domain = state.domain,
+                    mailboxDays = state.form.retentionDays,
+                    domainDays = state.domainRetentionDays,
+                    effectiveDays = state.effectiveRetentionDays,
+                    savingDomain = state.savingDomain,
+                    onMailboxChanged = viewModel::onRetentionChanged,
+                    onDomainChosen = viewModel::onDomainRetentionChosen,
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 SwipeActionsSection(
                     settings = swipeSettings,
                     onSwipeRightChanged = swipeViewModel::onSwipeRightChanged,
@@ -249,6 +261,103 @@ private fun SwipeActionsSection(
     )
     SwipeActionPicker("Swipe right", settings.swipeRight, onSwipeRightChanged)
     SwipeActionPicker("Swipe left", settings.swipeLeft, onSwipeLeftChanged)
+}
+
+/**
+ * How long the server keeps this mailbox's mail before its daily cleanup deletes it for good. The
+ * mailbox's own choice is part of Save like every other field; the domain default is a different
+ * setting (it reaches every mailbox on the domain), so it applies the moment it is chosen.
+ */
+@Composable
+private fun AutoDeleteSection(
+    domain: String,
+    mailboxDays: Int?,
+    domainDays: Int?,
+    effectiveDays: Int,
+    savingDomain: Boolean,
+    onMailboxChanged: (Int?) -> Unit,
+    onDomainChosen: (Int) -> Unit,
+) {
+    SectionLabel("Auto-delete")
+    Text(
+        text = "Mail older than this is deleted permanently, in every folder except Drafts. " +
+            "Messages are removed once a day.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val inherited = domainDays?.let { retentionLabel(it) } ?: retentionLabel(DEFAULT_RETENTION_DAYS)
+    ChoiceRow(
+        label = "Delete mail after",
+        selectedText = mailboxDays?.let { retentionLabel(it) } ?: "Domain default ($inherited)",
+        choices = buildList {
+            add(null to "Domain default ($inherited)")
+            retentionChoices(mailboxDays).forEach { add(it to retentionLabel(it)) }
+        },
+        onSelected = onMailboxChanged,
+    )
+    Text(
+        text = if (effectiveDays == 0) {
+            "This mailbox keeps mail forever."
+        } else {
+            "This mailbox deletes mail older than ${retentionLabel(effectiveDays)}."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    if (domain.isNotBlank()) {
+        ChoiceRow(
+            label = "Default for @$domain",
+            selectedText = domainDays?.let { retentionLabel(it) } ?: "…",
+            choices = retentionChoices(domainDays).map { it to retentionLabel(it) },
+            enabled = !savingDomain,
+            onSelected = { days -> if (days != null) onDomainChosen(days) },
+        )
+        Text(
+            text = "The default applies to every mailbox on this domain that doesn't set its own.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** A label with its current value; tapping opens a menu of [choices] (value to text). */
+@Composable
+private fun <T> ChoiceRow(
+    label: String,
+    selectedText: String,
+    choices: List<Pair<T, String>>,
+    onSelected: (T) -> Unit,
+    enabled: Boolean = true,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, role = Role.DropdownList) { expanded = true }
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(
+                text = selectedText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            choices.forEach { (value, text) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = {
+                        expanded = false
+                        onSelected(value)
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable

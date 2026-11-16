@@ -1,5 +1,6 @@
 package com.sonicstarsolutions.agentic.inbox.domain.repository
 
+import com.sonicstarsolutions.agentic.inbox.domain.model.DomainSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 
@@ -18,6 +19,12 @@ interface MailboxRepository {
     /** Saves [settings] without disturbing any setting the app doesn't edit (the server replaces
      * the whole blob, so this reads, merges and writes back). Returns what the server stored. */
     suspend fun updateMailboxSettings(mailboxId: String, settings: MailboxSettings): Result<MailboxSettings>
+
+    /** The defaults every mailbox on [domain] inherits (currently the auto-delete retention). */
+    suspend fun getDomainSettings(domain: String): Result<DomainSettings>
+
+    /** Sets how many days mail on [domain] is kept; mailboxes with their own retention are unaffected. */
+    suspend fun updateDomainSettings(domain: String, retentionDays: Int): Result<DomainSettings>
 
     suspend fun deleteMailbox(mailboxId: String): Result<Unit>
 

@@ -68,7 +68,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -114,10 +119,30 @@ fun ThreadScreen(
     onReplyAll: (emailId: String) -> Unit = {},
     onForward: (emailId: String) -> Unit = {},
     onEditDraft: (draftMessageId: String) -> Unit = {},
+    /** Search the mailbox for mail from this address (picked from a message's From line). */
+    onSearchFrom: (address: String) -> Unit = {},
+    /** Search the mailbox for this address anywhere (picked from To, Cc or Reply-To). */
+    onSearchFor: (address: String) -> Unit = {},
     viewModel: ThreadViewModel = koinViewModel { parametersOf(mailboxId, emailId, threadId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    // The common clipboard API: LocalClipboard needs a platform-specific ClipEntry to write text.
+    @Suppress("DEPRECATION")
+    val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    val currentSearchFrom by rememberUpdatedState(onSearchFrom)
+    val currentSearchFor by rememberUpdatedState(onSearchFor)
+    val addressActions = remember(clipboard) {
+        AddressActions(
+            onCopy = { address ->
+                clipboard.setText(AnnotatedString(address))
+                scope.launch { snackbarHostState.showSnackbar("Address copied") }
+            },
+            onSearchFrom = { currentSearchFrom(it) },
+            onSearchFor = { currentSearchFor(it) },
+        )
+    }
 
     // One-shot feedback for archive/delete/move/mark-read-unread: show a Snackbar, then (only for
     // actions that remove the email from view) navigate back once it's been seen.
@@ -329,6 +354,7 @@ fun ThreadScreen(
                             onForward = { onForward(message.id) },
                             onOpenAttachment = { viewModel.openAttachment(message.id, it) },
                             onShareAttachment = { viewModel.shareAttachment(message.id, it) },
+                            addressActions = addressActions,
                         )
                     }
                 }
@@ -425,11 +451,16 @@ private fun MessageCard(
     onForward: () -> Unit,
     onOpenAttachment: (attachmentId: String) -> Unit,
     onShareAttachment: (attachmentId: String) -> Unit,
+    addressActions: AddressActions,
     modifier: Modifier = Modifier,
 ) {
     val isDraft = message.folderId == SystemFolders.DRAFT
-    val fromText = EmailAddressUtils.displayName(message.sender, mailboxEmail)
+    val fromText = EmailAddressUtils.senderLabel(message.sender, mailboxEmail)
     val toText = EmailAddressUtils.displayName(message.recipient, mailboxEmail)
+    val senderPerson = remember(message.sender) { EmailAddressUtils.parseAddresses(message.sender).firstOrNull() }
+    val toPeople = remember(message.recipient) { EmailAddressUtils.parseAddresses(message.recipient) }
+    val ccPeople = remember(message.cc) { EmailAddressUtils.parseAddresses(message.cc) }
+    val replyToPeople = remember(message.replyTo) { EmailAddressUtils.parseAddresses(message.replyTo) }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -462,13 +493,27 @@ private fun MessageCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = fromText,
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        val fromStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                        if (expanded && senderPerson != null) {
+                            // Open, the name is a tap target (copy / search); collapsed, the whole
+                            // header stays one tap target that expands the message.
+                            AddressLink(
+                                person = senderPerson,
+                                ownEmail = mailboxEmail,
+                                isSender = true,
+                                actions = addressActions,
+                                style = fromStyle,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            Text(
+                                text = fromText,
+                                style = fromStyle,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                         if (isDraft) {
                             DraftLabel()
                         }
@@ -494,21 +539,21 @@ private fun MessageCard(
                         }
                     }
 
-                    // Line 2: to, then (collapsed only) the time — the full date moves to its
-                    // own line once expanded.
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "to $toText",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (!expanded) {
+                    // Collapsed, line 2 is a one-line summary of the recipients and the time. Open, each
+                    // of To, Cc and Reply-To lists its people as tap targets (copy / search).
+                    if (!expanded) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "to $toText",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
                             Text(
                                 text = EmailTimeFormatter.format(message.date),
                                 style = MaterialTheme.typography.labelSmall,
@@ -517,18 +562,10 @@ private fun MessageCard(
                         }
                     }
 
-                    // Line 3 (expanded only): the full date and time.
                     if (expanded) {
-                        if (!message.cc.isNullOrBlank()) {
-                            val ccText = EmailAddressUtils.displayName(message.cc, mailboxEmail)
-                            Text(
-                                text = "cc $ccText",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                        AddressLine("to", toPeople, mailboxEmail, isSender = false, actions = addressActions)
+                        AddressLine("cc", ccPeople, mailboxEmail, isSender = false, actions = addressActions)
+                        AddressLine("reply-to", replyToPeople, mailboxEmail, isSender = false, actions = addressActions)
                         Text(
                             text = EmailTimeFormatter.formatAbsolute(message.date),
                             style = MaterialTheme.typography.labelSmall,

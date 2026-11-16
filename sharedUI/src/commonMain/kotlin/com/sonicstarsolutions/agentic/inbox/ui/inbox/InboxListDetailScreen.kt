@@ -65,6 +65,10 @@ fun InboxListDetailScreen(
     /** Fired when the window narrows out of the split while an email is open in the detail
      * pane — the host should push it as a full-screen thread so it doesn't silently vanish. */
     onOpenEmailFullScreen: (mailboxId: String, emailId: String, threadId: String?) -> Unit = { _, _, _ -> },
+    /** An address picked in the detail pane's From line: search the open mailbox for that sender. */
+    onSearchFrom: (mailboxId: String, address: String) -> Unit = { _, _ -> },
+    /** An address picked from To, Cc or Reply-To: search the open mailbox for it. */
+    onSearchFor: (mailboxId: String, text: String) -> Unit = { _, _ -> },
     viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName, domain) },
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -158,6 +162,8 @@ fun InboxListDetailScreen(
                             onReplyAll = { id -> onReplyAll(threadMailboxId, id, openThreadId) },
                             onForward = { id -> onForward(threadMailboxId, id, openThreadId) },
                             onEditDraft = { id -> onEditDraft(threadMailboxId, id, openThreadId) },
+                            onSearchFrom = { address -> onSearchFrom(threadMailboxId, address) },
+                            onSearchFor = { text -> onSearchFor(threadMailboxId, text) },
                             viewModel = koinViewModel(key = "thread-$threadMailboxId-$emailId") {
                                 parametersOf(threadMailboxId, emailId, openThreadId)
                             },

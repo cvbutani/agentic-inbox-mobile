@@ -86,9 +86,13 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     /** Non-null to search every mailbox on this domain, tagging each result with its mailbox. */
     domain: String? = null,
+    /** Text to search for on arrival, e.g. an address picked from a message. */
+    initialQuery: String = "",
+    /** A sender address to filter on arrival. */
+    initialFrom: String = "",
     onBack: () -> Unit = {},
     onEmailSelected: (EmailSummary) -> Unit = {},
-    viewModel: SearchViewModel = koinViewModel { parametersOf(mailboxId, domain) },
+    viewModel: SearchViewModel = koinViewModel { parametersOf(mailboxId, domain, initialQuery, initialFrom) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }

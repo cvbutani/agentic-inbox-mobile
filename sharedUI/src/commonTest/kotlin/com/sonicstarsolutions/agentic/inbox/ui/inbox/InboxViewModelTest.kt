@@ -1723,4 +1723,142 @@ class InboxViewModelTest {
         assertTrue(folders.getDomainFoldersCalls > 1)
         job.cancel()
     }
+
+    // --- local filters: unread only, and one label, over the rows already loaded ----------------
+
+
+    @Test
+    fun `unread only hides read rows without asking the server again`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ ->
+                Result.success(EmailPage(listOf(summary("u1"), summary("r1").copy(read = true), summary("u2")), totalCount = 3))
+            },
+        )
+        val viewModel = buildViewModel(repository)
+        val requestsBefore = repository.calls.size
+
+        viewModel.setUnreadOnly(true)
+
+        assertEquals(listOf("u1", "u2"), viewModel.state.value.visibleEmails.map { it.id })
+        assertEquals(3, viewModel.state.value.emails.size, "the loaded rows themselves are untouched")
+        assertEquals(requestsBefore, repository.calls.size, "filtering is local")
+    }
+
+    @Test
+    fun `a conversation with an unread message still counts as unread`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ ->
+                Result.success(EmailPage(listOf(summary("t1").copy(read = true, threadUnreadCount = 2, threadCount = 3, threadId = "t1")), totalCount = 1))
+            },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.setUnreadOnly(true)
+
+        assertEquals(listOf("t1"), viewModel.state.value.visibleEmails.map { it.id })
+    }
+
+    @Test
+    fun `turning unread only off shows every loaded row again`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("u1"), summary("r1").copy(read = true)), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository)
+        viewModel.setUnreadOnly(true)
+
+        viewModel.setUnreadOnly(false)
+
+        assertEquals(listOf("u1", "r1"), viewModel.state.value.visibleEmails.map { it.id })
+    }
+
+    @Test
+    fun `unread only also filters the all inboxes list`() = runTest {
+        val repository = FakeEmailRepository(
+            domainHandler = { _, _, _, _ ->
+                Result.success(EmailPage(listOf(summary("u1").copy(mailboxId = "a@x.dev"), summary("r1").copy(read = true, mailboxId = "b@x.dev")), totalCount = 2))
+            },
+        )
+        val viewModel = buildViewModel(repository, domain = "x.dev")
+
+        viewModel.setUnreadOnly(true)
+
+        assertEquals(listOf("u1"), viewModel.state.value.visibleEmails.map { it.id })
+    }
+
+    @Test
+    fun `a filter that leaves few rows loads further pages until the list fills or ends`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, page, _ ->
+                val rows = if (page == 1) List(50) { summary("r$it").copy(read = true) } else listOf(summary("u-page$page"))
+                Result.success(EmailPage(rows, totalCount = 51))
+            },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.setUnreadOnly(true)
+        advanceUntilIdle()
+
+        assertEquals(listOf("u-page2"), viewModel.state.value.visibleEmails.map { it.id })
+        assertEquals(listOf(1, 2), repository.calls.map { it.page })
+    }
+
+    @Test
+    fun `filtering by a label keeps only rows carrying it`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ ->
+                Result.success(EmailPage(listOf(summary("a").copy(labels = listOf(work)), summary("b"), summary("c").copy(labels = listOf(work, fun_))), totalCount = 3))
+            },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.setLabelFilter(fun_)
+
+        assertEquals(listOf("c"), viewModel.state.value.visibleEmails.map { it.id })
+
+        viewModel.setLabelFilter(work)
+        assertEquals(listOf("a", "c"), viewModel.state.value.visibleEmails.map { it.id })
+
+        viewModel.setLabelFilter(null)
+        assertEquals(listOf("a", "b", "c"), viewModel.state.value.visibleEmails.map { it.id })
+    }
+
+    @Test
+    fun `the unread and label filters combine`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ ->
+                Result.success(EmailPage(listOf(summary("a").copy(labels = listOf(work)), summary("b").copy(read = true, labels = listOf(work))), totalCount = 2))
+            },
+        )
+        val viewModel = buildViewModel(repository)
+
+        viewModel.setUnreadOnly(true)
+        viewModel.setLabelFilter(work)
+
+        assertEquals(listOf("a"), viewModel.state.value.visibleEmails.map { it.id })
+    }
+
+    @Test
+    fun `deleting the label being filtered on clears that filter`() = runTest {
+        val repository = FakeEmailRepository(
+            handler = { _, _, _, _ -> Result.success(EmailPage(listOf(summary("a").copy(labels = listOf(work)), summary("b")), totalCount = 2)) },
+        )
+        val viewModel = buildViewModel(repository, labelRepository = FakeLabelRepository(Result.success(listOf(work))))
+        viewModel.setLabelFilter(work)
+
+        viewModel.deleteLabel(work)
+        advanceUntilIdle()
+
+        assertNull(viewModel.state.value.labelFilter)
+        assertEquals(listOf("a", "b"), viewModel.state.value.visibleEmails.map { it.id })
+    }
+
+    @Test
+    fun `opening a label view drops the in-list label filter`() = runTest {
+        val viewModel = buildViewModel(FakeEmailRepository())
+        viewModel.setLabelFilter(fun_)
+
+        viewModel.selectLabel(work)
+
+        assertNull(viewModel.state.value.labelFilter)
+    }
 }

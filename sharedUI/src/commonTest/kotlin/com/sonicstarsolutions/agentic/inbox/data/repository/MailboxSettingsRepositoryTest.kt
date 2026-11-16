@@ -3,6 +3,7 @@ package com.sonicstarsolutions.agentic.inbox.data.repository
 import com.sonicstarsolutions.agentic.inbox.data.network.AgenticInboxApi
 import com.sonicstarsolutions.agentic.inbox.data.network.ApiException
 import com.sonicstarsolutions.agentic.inbox.data.network.createAgenticInboxApi
+import com.sonicstarsolutions.agentic.inbox.domain.model.DomainSettings
 import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxDao
 import de.jensklingenberg.ktorfit.Ktorfit
@@ -128,5 +129,32 @@ class MailboxSettingsRepositoryTest {
         repository.updateMailboxSettings("mb1", MailboxSettings(fromName = "Alicia")).getOrThrow()
 
         assertEquals("Alicia", dao.getAll().single { it.id == "mb1" }.fromName)
+    }
+
+    // --- domain defaults ---------------------------------------------------------------------
+
+    @Test
+    fun `getDomainSettings reads the domain's retention`() = runTest {
+        val engine = MockEngine { respond("""{"domain":"example.dev","retentionDays":90}""", HttpStatusCode.OK, jsonHeaders) }
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
+
+        val settings = repository.getDomainSettings("example.dev").getOrThrow()
+
+        assertEquals(DomainSettings("example.dev", 90), settings)
+        assertEquals("/api/v1/domains/example.dev/settings", engine.requestHistory.single().url.encodedPath)
+    }
+
+    @Test
+    fun `updateDomainSettings puts the new retention and returns what the server stored`() = runTest {
+        val engine = MockEngine { respond("""{"domain":"example.dev","retentionDays":14}""", HttpStatusCode.OK, jsonHeaders) }
+        val repository = MailboxRepositoryImpl(apiFor(engine), FakeMailboxDao())
+
+        val settings = repository.updateDomainSettings("example.dev", 14).getOrThrow()
+
+        val request = engine.requestHistory.single()
+        assertEquals(HttpMethod.Put, request.method)
+        assertEquals("/api/v1/domains/example.dev/settings", request.url.encodedPath)
+        assertEquals("14", request.bodyJson()["retentionDays"]?.jsonPrimitive?.content)
+        assertEquals(DomainSettings("example.dev", 14), settings)
     }
 }

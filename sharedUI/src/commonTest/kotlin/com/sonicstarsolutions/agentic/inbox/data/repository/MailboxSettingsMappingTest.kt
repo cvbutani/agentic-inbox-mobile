@@ -4,11 +4,14 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.MailboxSettings
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MailboxSettingsMappingTest {
@@ -160,5 +163,31 @@ class MailboxSettingsMappingTest {
         val merged = mergeMailboxSettings(obj("""{"aliases":["sales@example.dev"]}"""), MailboxSettings(aliases = emptyList()))
 
         assertEquals(0, merged["aliases"]!!.jsonArray.size)
+    }
+
+    // --- retention (auto-delete) -------------------------------------------------------------
+
+    @Test
+    fun `retentionDays is read when it is a whole number and null otherwise`() {
+        assertEquals(7, obj("""{"retentionDays":7}""").toMailboxSettings().retentionDays)
+        assertEquals(0, obj("""{"retentionDays":0}""").toMailboxSettings().retentionDays)
+        assertNull(obj("""{}""").toMailboxSettings().retentionDays)
+        assertNull(obj("""{"retentionDays":null}""").toMailboxSettings().retentionDays)
+        assertNull(obj("""{"retentionDays":"7"}""").toMailboxSettings().retentionDays)
+        assertNull(obj("""{"retentionDays":2.5}""").toMailboxSettings().retentionDays)
+    }
+
+    @Test
+    fun `merge writes a mailbox's own retention`() {
+        val merged = mergeMailboxSettings(obj("""{"fromName":"A"}"""), MailboxSettings(fromName = "A", retentionDays = 90))
+
+        assertEquals(90, merged["retentionDays"]?.jsonPrimitive?.int)
+    }
+
+    @Test
+    fun `merge drops a stored retention when the mailbox goes back to the domain default`() {
+        val merged = mergeMailboxSettings(obj("""{"fromName":"A","retentionDays":90}"""), MailboxSettings(fromName = "A", retentionDays = null))
+
+        assertFalse("retentionDays" in merged)
     }
 }

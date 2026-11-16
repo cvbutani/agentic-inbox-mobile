@@ -19,7 +19,7 @@ val viewModelModule = module {
     viewModelOf(::SplashViewModel)
     viewModelOf(::OnboardingViewModel)
     viewModelOf(::MailboxPickerViewModel)
-    viewModel { (mailboxId: String) -> MailboxSettingsViewModel(get(), get(), mailboxId) }
+    viewModel { (mailboxId: String) -> MailboxSettingsViewModel(get(), get(), get(), get(), mailboxId) }
     viewModelOf(::SwipeSettingsViewModel)
     // Runtime args (mailboxId/mailboxName) come from the Inbox nav key via parametersOf(...);
     // the use case is injected. Destructure the ParametersHolder positionally.
@@ -44,7 +44,7 @@ val viewModelModule = module {
         )
     }
     viewModel { (mailboxId: String) -> ScheduledViewModel(get(), get(), get(), mailboxId) }
-    viewModel { (mailboxId: String, domain: String?) ->
-        SearchViewModel(get(), get(), get(), mailboxId, domain)
+    viewModel { (mailboxId: String, domain: String?, initialQuery: String, initialFrom: String) ->
+        SearchViewModel(get(), get(), get(), mailboxId, domain, initialQuery, initialFrom)
     }
 }

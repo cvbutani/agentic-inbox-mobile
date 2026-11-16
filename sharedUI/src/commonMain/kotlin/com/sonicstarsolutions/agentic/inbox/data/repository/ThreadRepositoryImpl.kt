@@ -7,6 +7,7 @@ import com.sonicstarsolutions.agentic.inbox.data.network.safeApiCall
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailAttachment
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailDetail
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
+import com.sonicstarsolutions.agentic.inbox.util.EmailAddressUtils
 
 class ThreadRepositoryImpl(
     private val api: AgenticInboxApi,
@@ -24,7 +25,7 @@ class ThreadRepositoryImpl(
 private fun EmailFullDto.toDomain(): EmailDetail = EmailDetail(
     id = id,
     subject = subject,
-    sender = sender,
+    sender = EmailAddressUtils.withName(sender, senderName),
     recipient = recipient,
     cc = cc,
     bcc = bcc,
@@ -36,6 +37,7 @@ private fun EmailFullDto.toDomain(): EmailDetail = EmailDetail(
     body = body,
     attachments = attachments.map { it.toDomain() },
     inReplyTo = inReplyTo,
+    replyTo = replyTo?.takeIf { it.isNotBlank() },
 )
 
 private fun AttachmentDto.toDomain(): EmailAttachment = EmailAttachment(
