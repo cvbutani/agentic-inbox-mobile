@@ -120,3 +120,24 @@ Phases 1 and 2 can be reviewed independently; Mobile depends on a deployed Worke
 3. **Threads across mailboxes:** same conversation in two mailboxes = two rows in v1. Acceptable?
 4. **Domains with one mailbox:** hide All Inboxes (recommended) or always show it?
 5. **Alias From on the deployed backend:** public supports sending from aliases; `Worker` `develop` does not (its sender check requires From == mailbox). **(verify)** whichever backend you deploy.
+
+## Implementation notes (what shipped vs the plan)
+
+Built on branch `feature/all-inboxes` in both repos (backend: `agentic-inbox-public`; Mobile).
+
+- **Backend** (`workers/routes/domain-inbox.ts`, `workers/lib/domain-inbox.ts`): the three domain routes, keyset cursor
+  `(date, id)`, per-mailbox fan-out with a k-way merge, summed system-folder unread, `fromName` in `GET /mailboxes`.
+  The Durable Object queries (`getEmails`, `getThreadedEmails`, `searchEmails`) accept `before`; those SQL changes
+  are not covered by Node unit tests (they run inside the Workers runtime), so exercise them against `wrangler dev`.
+  Decided from the open questions: keyset cursor; a thread received in two mailboxes is two rows; All inboxes is hidden
+  for a domain with one mailbox.
+- **Mobile**: `InboxViewModel` takes an optional `domain`; every action is routed by the row's `mailboxId`, batches are
+  split into one request per mailbox. The first page of a merged list is upserted into Room under each row's own
+  mailbox in the same call; offline serves `getForDomainFolder`. Drawer counts now also follow refresh and mutations.
+- **Not in v1 (deliberate)**: labels, custom folders, local drafts, scheduled mail and settings inside All inboxes
+  (all per mailbox); a mailbox display name on the row tag (it shows the part of the address before the @);
+  a popup variant of the sender picker on tablets (the sheet is used at every width).
+- **Compose**: new message from All inboxes uses the sender sheet; reply, reply-all and forward are locked to the
+  owning mailbox. The last mailbox sent from is remembered per domain on the device.
+- **Rollout order**: deploy the backend first. Against an older backend the All inboxes row appears for any domain
+  with two or more mailboxes and its requests fail with a load error; everything else keeps working.
