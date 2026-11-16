@@ -23,7 +23,7 @@ You point the app at your own deployment — mail, credentials, and cache stay b
 - **Labels** — coloured labels on rows, a drawer section to filter by, edit or delete them, and a picker to label a selection
 - **Filters** — an Unread chip and a Label chip above the list narrow what is loaded, locally (Unread in any list; Label in a single mailbox)
 - **Addresses** — tap a sender, recipient or Reply-To in an open message to copy the address or search for it
-- **Auto-delete** — per-mailbox and per-domain retention (default 30 days) for the server's daily cleanup
+- **Auto-delete** — per-mailbox and per-domain retention (default never) for the server's daily cleanup
 - **Scheduled** — see, and cancel, messages queued with Send later; the server sends them even with the phone off
 - **Aliases** — add or remove the extra addresses a mailbox receives at and sends from
 - **Search** — debounced search-as-you-type, results grouped by conversation, with filters (from, to, subject, date range, read/starred/attachment), removable filter chips, infinite scroll

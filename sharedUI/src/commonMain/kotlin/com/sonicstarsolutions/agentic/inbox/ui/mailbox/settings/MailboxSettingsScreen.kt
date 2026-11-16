@@ -59,6 +59,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.domain.model.DEFAULT_RETENTION_DAYS
 import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeAction
 import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeSettings
 import com.sonicstarsolutions.agentic.inbox.ui.components.AppBarTitle
@@ -284,7 +285,7 @@ private fun AutoDeleteSection(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    val inherited = domainDays?.let { retentionLabel(it) } ?: "30 days"
+    val inherited = domainDays?.let { retentionLabel(it) } ?: retentionLabel(DEFAULT_RETENTION_DAYS)
     ChoiceRow(
         label = "Delete mail after",
         selectedText = mailboxDays?.let { retentionLabel(it) } ?: "Domain default ($inherited)",

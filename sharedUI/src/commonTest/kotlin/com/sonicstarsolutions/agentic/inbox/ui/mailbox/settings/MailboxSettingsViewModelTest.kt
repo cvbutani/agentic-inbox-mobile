@@ -337,7 +337,7 @@ class MailboxSettingsViewModelTest {
     }
 
     @Test
-    fun `the effective retention is the mailbox's own then the domain's then 30`() = runTest {
+    fun `the effective retention is the mailbox's own then the domain's then never`() = runTest {
         val repository = repository()
         repository.domainSettingsResult = Result.success(DomainSettings("example.dev", 90))
         val viewModel = buildViewModel(repository, mailboxId = alice)
@@ -350,12 +350,12 @@ class MailboxSettingsViewModelTest {
     }
 
     @Test
-    fun `the effective retention is 30 days until anything says otherwise`() = runTest {
+    fun `the effective retention is never until anything says otherwise`() = runTest {
         val repository = repository()
         repository.domainSettingsResult = Result.failure(RuntimeException("offline"))
         val viewModel = buildViewModel(repository, mailboxId = alice)
 
-        assertEquals(30, viewModel.state.value.effectiveRetentionDays)
+        assertEquals(0, viewModel.state.value.effectiveRetentionDays)
     }
 
     @Test

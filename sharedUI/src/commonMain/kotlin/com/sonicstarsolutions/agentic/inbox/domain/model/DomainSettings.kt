@@ -10,5 +10,5 @@ data class DomainSettings(
     val retentionDays: Int,
 )
 
-/** Retention the server applies when neither the mailbox nor its domain says anything. */
-const val DEFAULT_RETENTION_DAYS = 30
+/** Retention the server applies when neither the mailbox nor its domain says anything: never delete. */
+const val DEFAULT_RETENTION_DAYS = 0
