@@ -25,12 +25,16 @@ data class EmailMetadataDto(
     /** Messages in the conversation (this folder only) — 1 for a lone message or a non-threaded list. */
     @SerialName("thread_count") val threadCount: Int = 1,
     @SerialName("labels") val labels: List<LabelDto> = emptyList(),
+    /** Set on rows of the domain-wide lists, which mix mailboxes. */
+    @SerialName("mailboxId") val mailboxId: String? = null,
 )
 
 @Serializable
 data class EmailPageDto(
     val emails: List<EmailMetadataDto> = emptyList(),
     val totalCount: Int = 0,
+    /** Domain-wide lists only: pass back as `cursor` to get the next page; null on the last. */
+    val nextCursor: String? = null,
 )
 
 @Serializable

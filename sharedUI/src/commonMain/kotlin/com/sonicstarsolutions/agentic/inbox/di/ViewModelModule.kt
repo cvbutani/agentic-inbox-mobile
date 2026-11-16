@@ -23,23 +23,28 @@ val viewModelModule = module {
     viewModelOf(::SwipeSettingsViewModel)
     // Runtime args (mailboxId/mailboxName) come from the Inbox nav key via parametersOf(...);
     // the use case is injected. Destructure the ParametersHolder positionally.
-    viewModel { (mailboxId: String, mailboxName: String) ->
+    // domain is null for one mailbox and the domain's name for the merged "All inboxes" view.
+    viewModel { (mailboxId: String, mailboxName: String, domain: String?) ->
         InboxViewModel(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
-            mailboxId, mailboxName,
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            get(), get(), get(), get(),
+            mailboxId, mailboxName, domain,
         )
     }
     viewModel { (mailboxId: String, emailId: String, threadId: String?) ->
         ThreadViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), mailboxId, emailId, threadId)
     }
-    viewModel { (mailboxId: String, mode: ComposeMode, emailId: String?, threadId: String?, draftId: String?) ->
+    // Six runtime args, one more than Koin can destructure, so they are read by position:
+    // mailboxId, mode, emailId, threadId, draftId, domain (see ComposeScreen).
+    viewModel { params ->
         ComposeViewModel(
-            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
-            mailboxId, mode, emailId, threadId, draftId,
+            get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),
+            params.get<String>(0), params.get<ComposeMode>(1), params.get<String?>(2),
+            params.get<String?>(3), params.get<String?>(4), params.get<String?>(5),
         )
     }
     viewModel { (mailboxId: String) -> ScheduledViewModel(get(), get(), get(), mailboxId) }
-    viewModel { (mailboxId: String) ->
-        SearchViewModel(get(), get(), mailboxId)
+    viewModel { (mailboxId: String, domain: String?) ->
+        SearchViewModel(get(), get(), get(), mailboxId, domain)
     }
 }

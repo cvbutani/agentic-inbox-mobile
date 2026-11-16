@@ -114,6 +114,7 @@ class EmailRepositoryImplTest {
                 threadId = "t1",
                 folderId = "inbox",
                 snippet = "preview text",
+                mailboxId = "mb1",
             ),
             page.emails.single(),
         )
@@ -909,5 +910,147 @@ class EmailRepositoryImplTest {
             .bulkUpdate("mb1", BulkAction.DELETE, listOf("e2"), conversations = mapOf("e2" to "t1"), folder = "inbox")
 
         assertEquals(setOf("e2"), outcome.failed)
+    }
+
+    // --- domain-wide "All inboxes" ------------------------------------------------------------
+
+    private fun json(content: String) = MockEngine { _ ->
+        respond(content, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+
+    private val domainPage = """
+        {
+            "emails": [
+                {"id":"e1","mailboxId":"a@example.com","subject":"Newer","sender":"x@y.dev","recipient":"a@example.com","date":"2026-07-10T10:00:00Z","folder_id":"inbox"},
+                {"id":"e2","mailboxId":"b@example.com","subject":"Older","sender":"x@y.dev","recipient":"b@example.com","date":"2026-07-09T10:00:00Z","folder_id":"inbox"}
+            ],
+            "totalCount": 9,
+            "nextCursor": "CUR1"
+        }
+    """.trimIndent()
+
+    @Test
+    fun `getDomainEmails asks the domain endpoint for one conversation per row`() = runTest {
+        val engine = json(domainPage)
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        repository.getDomainEmails(domain = "example.com", folder = "inbox", cursor = null, limit = 50)
+
+        val request = engine.requestHistory.single()
+        assertEquals("/api/v1/domains/example.com/emails", request.url.encodedPath)
+        assertEquals("inbox", request.url.parameters["folder"])
+        assertEquals("true", request.url.parameters["threaded"])
+        assertEquals("50", request.url.parameters["limit"])
+        assertEquals(null, request.url.parameters["cursor"])
+    }
+
+    @Test
+    fun `getDomainEmails sends the cursor for a later page`() = runTest {
+        val engine = json(domainPage)
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        repository.getDomainEmails(domain = "example.com", folder = "inbox", cursor = "CUR0", limit = 50)
+
+        assertEquals("CUR0", engine.requestHistory.single().url.parameters["cursor"])
+    }
+
+    @Test
+    fun `getDomainEmails maps each row's mailbox, the total and the next cursor`() = runTest {
+        val repository = EmailRepositoryImpl(apiFor(json(domainPage)), FakeEmailDao())
+
+        val page = repository.getDomainEmails("example.com", "inbox", cursor = null, limit = 50).getOrThrow()
+
+        assertEquals(listOf("a@example.com", "b@example.com"), page.emails.map { it.mailboxId })
+        assertEquals(9, page.totalCount)
+        assertEquals("CUR1", page.nextCursor)
+    }
+
+    @Test
+    fun `getDomainEmails caches the first page under each row's own mailbox, in the same call`() = runTest {
+        val dao = FakeEmailDao()
+        val engine = json(domainPage)
+        val repository = EmailRepositoryImpl(apiFor(engine), dao)
+
+        repository.getDomainEmails("example.com", "inbox", cursor = null, limit = 50)
+
+        assertEquals(1, engine.requestHistory.size)
+        assertEquals(listOf("e1"), dao.getForFolder("a@example.com", "inbox").map { it.id })
+        assertEquals(listOf("e2"), dao.getForFolder("b@example.com", "inbox").map { it.id })
+    }
+
+    @Test
+    fun `getDomainEmails does not cache later pages`() = runTest {
+        val dao = FakeEmailDao()
+        val repository = EmailRepositoryImpl(apiFor(json(domainPage)), dao)
+
+        repository.getDomainEmails("example.com", "inbox", cursor = "CUR0", limit = 50)
+
+        assertTrue(dao.getForFolder("a@example.com", "inbox").isEmpty())
+    }
+
+    @Test
+    fun `getDomainEmails offline serves the domain's cached rows newest first, and only that domain's`() = runTest {
+        val dao = FakeEmailDao()
+        fun entity(id: String, mailbox: String, date: String) = com.sonicstarsolutions.agentic.inbox.data.local.EmailEntity(
+            mailboxId = mailbox, id = id, folderId = "inbox", subject = id, sender = "s", recipient = "r",
+            date = date, read = false, starred = false, threadId = null, snippet = null, threadUnreadCount = 0,
+        )
+        dao.upsertAll(listOf(
+            entity("old", "a@example.com", "2026-07-01T00:00:00Z"),
+            entity("new", "b@example.com", "2026-07-09T00:00:00Z"),
+            entity("elsewhere", "c@other.org", "2026-07-20T00:00:00Z"),
+        ))
+        val offline = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(offline), dao)
+
+        val page = repository.getDomainEmails("example.com", "inbox", cursor = null, limit = 50).getOrThrow()
+
+        assertEquals(listOf("new", "old"), page.emails.map { it.id })
+        assertEquals(listOf("b@example.com", "a@example.com"), page.emails.map { it.mailboxId })
+        assertEquals(null, page.nextCursor)
+    }
+
+    @Test
+    fun `getDomainEmails does not fall back to the cache for a later page`() = runTest {
+        val offline = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        val repository = EmailRepositoryImpl(apiFor(offline), FakeEmailDao())
+
+        assertTrue(repository.getDomainEmails("example.com", "inbox", cursor = "CUR0", limit = 50).isFailure)
+    }
+
+    @Test
+    fun `searchDomain sends the filters, groups by conversation and pages by cursor`() = runTest {
+        val engine = json(domainPage)
+        val repository = EmailRepositoryImpl(apiFor(engine), FakeEmailDao())
+
+        val page = repository.searchDomain(
+            domain = "example.com",
+            query = SearchQuery(query = "invoice", from = "acme", isRead = false),
+            cursor = "CUR0",
+            limit = 30,
+        ).getOrThrow()
+
+        val request = engine.requestHistory.single()
+        assertEquals("/api/v1/domains/example.com/search", request.url.encodedPath)
+        assertEquals("invoice", request.url.parameters["query"])
+        assertEquals("acme", request.url.parameters["from"])
+        assertEquals("false", request.url.parameters["is_read"])
+        assertEquals("thread", request.url.parameters["group"])
+        assertEquals("CUR0", request.url.parameters["cursor"])
+        assertEquals("30", request.url.parameters["limit"])
+        assertEquals("CUR1", page.nextCursor)
+        assertEquals("a@example.com", page.emails.first().mailboxId)
+    }
+
+    @Test
+    fun `a single-mailbox list stamps its own mailbox on every row, live and cached`() = runTest {
+        val dao = FakeEmailDao()
+        val repository = EmailRepositoryImpl(apiFor(json("""{"emails":[{"id":"e1","subject":"s","sender":"a","recipient":"b","date":"2026-07-10T10:00:00Z"}],"totalCount":1}""")), dao)
+
+        val live = repository.getEmails("mb1", "inbox", page = 1, limit = 50).getOrThrow()
+        assertEquals("mb1", live.emails.single().mailboxId)
+
+        val offline = EmailRepositoryImpl(apiFor(MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }), dao)
+        assertEquals("mb1", offline.getEmails("mb1", "inbox", page = 1, limit = 50).getOrThrow().emails.single().mailboxId)
     }
 }

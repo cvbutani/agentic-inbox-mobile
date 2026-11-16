@@ -295,6 +295,7 @@ class DemoFolderRepository : FolderRepository {
         }
         return Result.success(folders)
     }
+    override suspend fun getDomainFolders(domain: String): Result<List<Folder>> = getFolders("")
     override suspend fun createFolder(mailboxId: String, name: String): Result<Folder> =
         Result.success(Folder(id = name.lowercase(), name = name, isSystem = false))
     override suspend fun renameFolder(mailboxId: String, folderId: String, name: String): Result<Folder> =
@@ -309,6 +310,12 @@ class DemoEmailRepository : EmailRepository {
         val emails = messagesById.values.filter { it.folderId == folder }.sortedBy { it.ageAgo }.map { it.toSummary() }
         return Result.success(EmailPage(emails, emails.size))
     }
+
+    override suspend fun getDomainEmails(domain: String, folder: String, cursor: String?, limit: Int): Result<EmailPage> =
+        getEmails("", folder, page = if (cursor == null) 1 else 2, limit = limit)
+
+    override suspend fun searchDomain(domain: String, query: SearchQuery, cursor: String?, limit: Int): Result<EmailPage> =
+        search("", query, page = if (cursor == null) 1 else 2, limit = limit)
 
     override suspend fun search(mailboxId: String, query: SearchQuery, page: Int, limit: Int): Result<EmailPage> {
         if (page > 1) return Result.success(EmailPage(emptyList(), 0))

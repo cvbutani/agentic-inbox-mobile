@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeAction
+import com.sonicstarsolutions.agentic.inbox.domain.model.listKey
+import com.sonicstarsolutions.agentic.inbox.domain.model.mailboxShortName
 import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeSettings
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.SwipeSettingsViewModel
 import androidx.compose.material3.AlertDialog
@@ -133,7 +135,7 @@ fun InboxScreen(
     /** The email currently open in the detail pane, when this list is one half of the two-pane
      * layout — highlights that row. Null in single-pane, where opening an email leaves the list. */
     openEmailId: String? = null,
-    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName) },
+    viewModel: InboxViewModel = koinViewModel { parametersOf(mailboxId, mailboxName, null) },
     swipeSettingsViewModel: SwipeSettingsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -357,6 +359,7 @@ fun InboxScreen(
         drawerContent = {
             FolderDrawerContent(
                 mailboxName = mailboxName,
+                domain = state.domain,
                 folders = state.folders,
                 selectedFolderId = if (state.currentLabel == null) state.currentFolder.id else null,
                 labels = state.labels,
@@ -432,7 +435,8 @@ fun InboxScreen(
                         onSelectAll = viewModel::selectAll,
                         onMarkRead = viewModel::batchMarkAsRead,
                         onMarkUnread = viewModel::batchMarkAsUnread,
-                        onLabel = { showLabelPicker = true },
+                        // Labels are per mailbox, so they can't be applied across a domain's rows.
+                        onLabel = if (state.domain == null) ({ showLabelPicker = true }) else null,
                         onArchive = viewModel::batchArchive,
                         onDelete = { showBatchDeleteDialog = true },
                     )
@@ -545,7 +549,7 @@ fun InboxScreen(
                                     unreadCount = group.items.count { it.isUnread() },
                                 )
                             }
-                            items(group.items, key = { it.id }, contentType = { "email" }) { email ->
+                            items(group.items, key = { it.listKey }, contentType = { "email" }) { email ->
                                 SwipeableEmailRow(
                                     email = email,
                                     selectionMode = state.selectionMode,
@@ -565,6 +569,7 @@ fun InboxScreen(
                                     onDelete = { viewModel.deleteEmail(email) },
                                     onToggleRead = { viewModel.toggleRead(email) },
                                     swipeSettings = swipeSettings,
+                                    mailboxLabel = if (state.domain != null) email.mailboxShortName else null,
                                     modifier = Modifier.animateItem(),
                                 )
                             }
@@ -610,6 +615,7 @@ private fun SwipeableEmailRow(
     onDelete: () -> Unit,
     onToggleRead: () -> Unit,
     swipeSettings: SwipeSettings,
+    mailboxLabel: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -623,6 +629,7 @@ private fun SwipeableEmailRow(
                 selectionMode = selectionMode,
                 selected = selected,
                 timeText = timeText,
+                mailboxLabel = mailboxLabel,
             )
         }
         if (selectionMode) {
@@ -691,7 +698,7 @@ private fun SelectionTopAppBar(
     onSelectAll: () -> Unit,
     onMarkRead: () -> Unit,
     onMarkUnread: () -> Unit,
-    onLabel: () -> Unit,
+    onLabel: (() -> Unit)?,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -721,11 +728,13 @@ private fun SelectionTopAppBar(
                         text = { Text("Select all") },
                         onClick = { showMenu = false; onSelectAll() },
                     )
-                    DropdownMenuItem(
-                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
-                        text = { Text("Label as…") },
-                        onClick = { showMenu = false; onLabel() },
-                    )
+                    if (onLabel != null) {
+                        DropdownMenuItem(
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null) },
+                            text = { Text("Label as…") },
+                            onClick = { showMenu = false; onLabel() },
+                        )
+                    }
                     DropdownMenuItem(
                         leadingIcon = { Icon(Icons.Default.MarkEmailRead, contentDescription = null) },
                         text = { Text("Mark as read") },
@@ -748,6 +757,8 @@ private fun SelectionTopAppBar(
 @Composable
 private fun FolderDrawerContent(
     mailboxName: String,
+    /** Non-null in the domain-wide view, which has no custom folders, labels, scheduled mail or settings of its own. */
+    domain: String?,
     folders: List<Folder>,
     selectedFolderId: String?,
     labels: List<Label>,
@@ -785,7 +796,7 @@ private fun FolderDrawerContent(
                 Column {
                     Text(text = mailboxName, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = "Switch mailbox",
+                        text = domain ?: "Switch mailbox",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -806,6 +817,7 @@ private fun FolderDrawerContent(
 
             // Spacing, not dividers, separates the drawer's groups; the one rule sits above
             // Scheduled / Settings, where the destinations change kind.
+            if (domain != null) return@Column
             if (customFolders.isNotEmpty()) {
                 Text(
                     text = "Folders",

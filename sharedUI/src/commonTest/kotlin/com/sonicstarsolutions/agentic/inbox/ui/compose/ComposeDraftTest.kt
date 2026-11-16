@@ -94,6 +94,8 @@ class ComposeDraftTest {
             deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
             // Stands in for the app-lifetime scope. Unconfined on the test's own scheduler, so
             // draft writes land eagerly and share the test's virtual clock.
+            getMailboxes = com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase(com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository()),
+            lastSenderStore = com.sonicstarsolutions.agentic.inbox.testutil.FakeLastSenderStore(),
             externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
             mailboxId = "mb1",
             mode = mode,

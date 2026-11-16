@@ -2,8 +2,10 @@ package com.sonicstarsolutions.agentic.inbox.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sonicstarsolutions.agentic.inbox.domain.model.EmailPage
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
 import com.sonicstarsolutions.agentic.inbox.domain.model.SearchQuery
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchDomainEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchEmailsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SetEmailStarredUseCase
 import kotlinx.coroutines.CancellationException
@@ -35,6 +37,8 @@ data class SearchUiState(
     val results: List<EmailSummary> = emptyList(),
     val totalCount: Int = 0,
     val page: Int = 1,
+    /** Domain-wide search pages by cursor: where the next page starts, null on the last. */
+    val nextCursor: String? = null,
     val errorMessage: String? = null,
 ) {
     val hasActiveFilters: Boolean
@@ -45,9 +49,18 @@ data class SearchUiState(
 
 class SearchViewModel(
     private val searchEmails: SearchEmailsUseCase,
+    private val searchDomainEmails: SearchDomainEmailsUseCase,
     private val setEmailStarred: SetEmailStarredUseCase,
+    /** Blank when searching a whole domain, where each result names its own mailbox. */
     private val mailboxId: String,
+    /** Non-null to search every mailbox on this domain instead of just [mailboxId]. */
+    private val domain: String? = null,
 ) : ViewModel() {
+
+    /** One page: by number in a mailbox, by cursor across a domain. */
+    private suspend fun fetch(query: SearchQuery, page: Int): Result<EmailPage> =
+        domain?.let { searchDomainEmails(it, query, cursor = if (page == 1) null else _state.value.nextCursor, limit = PAGE_SIZE) }
+            ?: searchEmails(mailboxId, query, page = page, limit = PAGE_SIZE)
 
     companion object {
         /** Long enough to skip a request per keystroke, short enough to feel live. */
@@ -122,7 +135,7 @@ class SearchViewModel(
         val current = _state.value
         val query = current.toQuery()
         _state.update { it.copy(loading = true, errorMessage = null) }
-        searchEmails(mailboxId, query, page = 1, limit = PAGE_SIZE)
+        fetch(query, page = 1)
             .onSuccess { pageResult ->
                 submittedQuery = query
                 _state.update {
@@ -131,6 +144,7 @@ class SearchViewModel(
                         hasSearched = true,
                         results = pageResult.emails,
                         totalCount = pageResult.totalCount,
+                        nextCursor = pageResult.nextCursor,
                         page = 1,
                     )
                 }
@@ -149,19 +163,21 @@ class SearchViewModel(
     fun loadMore() {
         val query = submittedQuery ?: return
         val current = _state.value
-        if (current.loading || current.loadingMore || current.results.size >= current.totalCount) return
+        val exhausted = if (domain != null) current.nextCursor == null else current.results.size >= current.totalCount
+        if (current.loading || current.loadingMore || exhausted) return
         val nextPage = current.page + 1
         _state.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
-            searchEmails(mailboxId, query, page = nextPage, limit = PAGE_SIZE)
+            fetch(query, page = nextPage)
                 .onSuccess { pageResult ->
                     _state.update {
                         it.copy(
                             loadingMore = false,
                             // distinctBy: if the backend shifted between pages, a repeated id
                             // would crash the list (duplicate LazyColumn keys).
-                            results = (it.results + pageResult.emails).distinctBy { e -> e.id },
+                            results = (it.results + pageResult.emails).distinctBy { e -> e.mailboxId to e.id },
                             totalCount = pageResult.totalCount,
+                            nextCursor = pageResult.nextCursor,
                             page = nextPage,
                         )
                     }
@@ -179,7 +195,7 @@ class SearchViewModel(
             current.copy(results = current.results.map { if (it.id == email.id) it.copy(starred = newStarred) else it })
         }
         viewModelScope.launch {
-            setEmailStarred(mailboxId, email.id, newStarred)
+            setEmailStarred(email.mailboxId.ifBlank { mailboxId }, email.id, newStarred)
                 .onFailure { t ->
                     if (t is CancellationException) throw t
                     _state.update { current ->

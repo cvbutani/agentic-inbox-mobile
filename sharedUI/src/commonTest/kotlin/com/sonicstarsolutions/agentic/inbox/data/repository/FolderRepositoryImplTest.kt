@@ -292,4 +292,48 @@ class FolderRepositoryImplTest {
         assertTrue(dao.getForMailbox("mb1").isEmpty())
         assertTrue(dao.getForMailbox("mb2").isEmpty())
     }
+
+    // --- domain-wide folder counts -------------------------------------------------------------
+
+    @Test
+    fun `getDomainFolders reads the summed system folders from the domain endpoint`() = runTest {
+        val engine = MockEngine { _ ->
+            respond(
+                """[{"id":"inbox","name":"Inbox","unreadCount":5},{"id":"sent","name":"Sent","unreadCount":0}]""",
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = FolderRepositoryImpl(apiFor(engine), FakeFolderDao())
+
+        val folders = repository.getDomainFolders("example.com").getOrThrow()
+
+        assertEquals("/api/v1/domains/example.com/folders", engine.requestHistory.single().url.encodedPath)
+        assertEquals(5, folders.first { it.id == "inbox" }.unreadCount)
+        // Every system folder is present, in the usual order, even those the server omitted.
+        assertEquals(listOf("inbox", "draft", "sent", "archive", "spam", "trash"), folders.map { it.id })
+    }
+
+    @Test
+    fun `getDomainFolders offline sums the cached mailboxes of that domain`() = runTest {
+        val dao = FakeFolderDao()
+        dao.upsertAll(listOf(
+            com.sonicstarsolutions.agentic.inbox.data.local.FolderEntity("a@example.com", "inbox", "Inbox", 2, true),
+            com.sonicstarsolutions.agentic.inbox.data.local.FolderEntity("b@example.com", "inbox", "Inbox", 3, true),
+            com.sonicstarsolutions.agentic.inbox.data.local.FolderEntity("b@example.com", "work", "Work", 9, false),
+            com.sonicstarsolutions.agentic.inbox.data.local.FolderEntity("c@other.org", "inbox", "Inbox", 40, true),
+        ))
+        val offline = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+
+        val folders = FolderRepositoryImpl(apiFor(offline), dao).getDomainFolders("example.com").getOrThrow()
+
+        assertEquals(5, folders.first { it.id == "inbox" }.unreadCount)
+        assertTrue(folders.none { it.id == "work" }, "custom folders are per mailbox")
+    }
+
+    @Test
+    fun `getDomainFolders surfaces the failure when there is no cache either`() = runTest {
+        val offline = MockEngine { _ -> respond(content = "", status = HttpStatusCode.InternalServerError) }
+        assertTrue(FolderRepositoryImpl(apiFor(offline), FakeFolderDao()).getDomainFolders("example.com").isFailure)
+    }
 }

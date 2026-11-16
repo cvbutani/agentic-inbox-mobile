@@ -7,6 +7,10 @@ interface FolderRepository {
      * merged in where present), followed by any custom folders the mailbox has created. */
     suspend fun getFolders(mailboxId: String): Result<List<Folder>>
 
+    /** The system folders with unread counts summed across [domain]'s mailboxes. Custom folders
+     * are per mailbox, so they are not part of a domain-wide view. */
+    suspend fun getDomainFolders(domain: String): Result<List<Folder>>
+
     suspend fun createFolder(mailboxId: String, name: String): Result<Folder>
 
     suspend fun renameFolder(mailboxId: String, folderId: String, name: String): Result<Folder>

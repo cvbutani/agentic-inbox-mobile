@@ -56,6 +56,9 @@ fun EmailListItem(
     /** The time label. Rows under a day header pass [EmailTimeFormatter.formatClock] (the header
      * carries the day); rows with no header, like search results, keep the default. */
     timeText: String = EmailTimeFormatter.format(email.date),
+    /** Which mailbox the row lives in, shown as a small tag. Only set where rows from several
+     * mailboxes share one list (the domain-wide "All inboxes"). */
+    mailboxLabel: String? = null,
 ) {
     // A thread's latest message can be read while earlier messages in it aren't — thread_unread_count
     // catches that; a plain !email.read alone would show the row as read even with unread messages
@@ -170,6 +173,9 @@ fun EmailListItem(
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        if (!mailboxLabel.isNullOrBlank()) {
+                            MailboxTag(mailboxLabel, selected = selected)
+                        }
                         if (email.labels.isNotEmpty()) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -210,6 +216,24 @@ fun EmailListItem(
                 }
             }
         }
+    }
+}
+
+/** Says which mailbox a row is in. Tonal rather than bold: it orients, it doesn't compete with the sender. */
+@Composable
+private fun MailboxTag(text: String, selected: Boolean) {
+    Surface(
+        shape = MaterialTheme.shapes.extraSmall,
+        color = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
     }
 }
 

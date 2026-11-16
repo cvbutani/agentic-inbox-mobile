@@ -77,7 +77,7 @@ private fun MailboxDto.toDomain(): Mailbox {
         id = id,
         email = email,
         name = name,
-        fromName = settingsObj?.get("fromName")?.jsonPrimitive?.contentOrNull,
+        fromName = settingsObj?.get("fromName")?.jsonPrimitive?.contentOrNull ?: fromName,
         signatureEnabled = sigObj?.get("enabled")?.jsonPrimitive?.booleanOrNull ?: false,
         signatureText = sigObj?.get("text")?.jsonPrimitive?.contentOrNull,
         signatureHtml = sigObj?.get("html")?.jsonPrimitive?.contentOrNull,

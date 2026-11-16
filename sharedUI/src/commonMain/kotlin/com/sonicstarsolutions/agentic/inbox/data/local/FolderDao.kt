@@ -12,6 +12,9 @@ interface FolderDao {
     @Query("SELECT * FROM folders WHERE mailboxId = :mailboxId")
     suspend fun getForMailbox(mailboxId: String): List<FolderEntity>
 
+    @Query("SELECT * FROM folders WHERE mailboxId LIKE '%@' || :domain")
+    suspend fun getForDomain(domain: String): List<FolderEntity>
+
     @Query("DELETE FROM folders WHERE mailboxId = :mailboxId")
     suspend fun deleteForMailbox(mailboxId: String)
 

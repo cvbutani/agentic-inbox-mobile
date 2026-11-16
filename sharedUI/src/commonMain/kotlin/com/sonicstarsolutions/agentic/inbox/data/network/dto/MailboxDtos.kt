@@ -15,6 +15,9 @@ data class MailboxDto(
     @SerialName("id") val id: String,
     @SerialName("email") val email: String,
     @SerialName("name") val name: String,
+    // The owner's display name. The list endpoint sends it (null when unset); the single-mailbox
+    // GET carries it inside `settings` instead.
+    @SerialName("fromName") val fromName: String? = null,
     // Free-form per-mailbox preferences (signature, aliases, auto-draft, …); only present on the
     // single-mailbox GET, omitted by the list endpoint. Untyped here since the app doesn't edit it.
     @SerialName("settings") val settings: JsonElement? = null,

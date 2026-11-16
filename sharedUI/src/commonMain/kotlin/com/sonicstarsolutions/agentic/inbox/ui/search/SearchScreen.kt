@@ -68,6 +68,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.EmailSummary
+import com.sonicstarsolutions.agentic.inbox.domain.model.listKey
+import com.sonicstarsolutions.agentic.inbox.domain.model.mailboxShortName
 import com.sonicstarsolutions.agentic.inbox.ui.components.EmailListItem
 import com.sonicstarsolutions.agentic.inbox.ui.components.SkeletonEmailRow
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
@@ -82,9 +84,11 @@ import org.koin.core.parameter.parametersOf
 fun SearchScreen(
     mailboxId: String,
     modifier: Modifier = Modifier,
+    /** Non-null to search every mailbox on this domain, tagging each result with its mailbox. */
+    domain: String? = null,
     onBack: () -> Unit = {},
     onEmailSelected: (EmailSummary) -> Unit = {},
-    viewModel: SearchViewModel = koinViewModel { parametersOf(mailboxId) },
+    viewModel: SearchViewModel = koinViewModel { parametersOf(mailboxId, domain) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -251,13 +255,14 @@ fun SearchScreen(
                         )
                     }
 
-                    items(state.results, key = { it.id }) { email ->
+                    items(state.results, key = { it.listKey }) { email ->
                         Column(modifier = Modifier.animateItem()) {
                             EmailListItem(
                                 email = email,
                                 onClick = { onEmailSelected(email) },
                                 onLongClick = {},
                                 onToggleStarred = { viewModel.toggleStarred(email) },
+                                mailboxLabel = if (domain != null) email.mailboxShortName else null,
                             )
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = ListRowDimens.textEdge),

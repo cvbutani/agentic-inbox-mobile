@@ -12,6 +12,13 @@ object ComposeFrom {
     }
 
     /**
+     * Which of a domain's mailboxes a new message starts from: the one last sent from if it still
+     * exists, otherwise the first alphabetically. Null when the domain has no mailboxes.
+     */
+    fun defaultMailbox(mailboxes: List<String>, last: String?): String? =
+        mailboxes.firstOrNull { it.equals(last, ignoreCase = true) } ?: mailboxes.minByOrNull { it.lowercase() }
+
+    /**
      * Replying to mail that was sent to one of the aliases defaults to answering from it, so the
      * other side sees the address they wrote to. Anything else defaults to the mailbox itself.
      * [addressedTo] is the original's recipients and cc, in any "Name <addr>" form.

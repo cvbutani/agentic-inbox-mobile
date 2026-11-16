@@ -238,6 +238,39 @@ interface AgenticInboxApi {
         @Query("limit") limit: Int? = null,
     ): EmailPageDto
 
+    // -- Domain-wide "All inboxes": one merged list across every mailbox on a domain. Rows carry
+    // their own mailboxId; paging is by the opaque `cursor` the previous page returned.
+    @GET("/api/v1/domains/{domain}/emails")
+    suspend fun getDomainEmails(
+        @Path("domain") domain: String,
+        @Query("folder") folder: String,
+        @Query("threaded") threaded: Boolean? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("limit") limit: Int? = null,
+    ): EmailPageDto
+
+    @GET("/api/v1/domains/{domain}/search")
+    suspend fun searchDomain(
+        @Path("domain") domain: String,
+        @Query("query") query: String,
+        @Query("folder") folder: String? = null,
+        @Query("from") from: String? = null,
+        @Query("to") to: String? = null,
+        @Query("subject") subject: String? = null,
+        @Query("date_start") dateStart: String? = null,
+        @Query("date_end") dateEnd: String? = null,
+        @Query("is_read") isRead: Boolean? = null,
+        @Query("is_starred") isStarred: Boolean? = null,
+        @Query("has_attachment") hasAttachment: Boolean? = null,
+        @Query("group") group: String? = null,
+        @Query("cursor") cursor: String? = null,
+        @Query("limit") limit: Int? = null,
+    ): EmailPageDto
+
+    /** System folders only, with unread counts summed across the domain's mailboxes. */
+    @GET("/api/v1/domains/{domain}/folders")
+    suspend fun getDomainFolders(@Path("domain") domain: String): List<FolderDto>
+
     @GET("/api/v1/mailboxes/{mailboxId}/emails/{emailId}/attachments/{attachmentId}")
     suspend fun downloadAttachment(
         @Path("mailboxId") mailboxId: String,

@@ -39,6 +39,22 @@ class FolderRepositoryImpl(
         return if (cached.isNotEmpty()) Result.success(cached) else networkResult
     }
 
+    override suspend fun getDomainFolders(domain: String): Result<List<Folder>> {
+        val networkResult = safeApiCall {
+            val byId = api.getDomainFolders(domain).associateBy { it.id }
+            SystemFolders.defaults.map { default ->
+                byId[default.id]?.let { dto -> default.copy(unreadCount = dto.unreadCount) } ?: default
+            }
+        }
+        if (networkResult.isSuccess) return networkResult
+
+        // Offline: add up what each of the domain's mailboxes last reported.
+        val cached = folderDao.getForDomain(domain)
+        if (cached.isEmpty()) return networkResult
+        val unreadById = cached.filter { it.isSystem }.groupBy { it.id }.mapValues { (_, rows) -> rows.sumOf { it.unreadCount } }
+        return Result.success(SystemFolders.defaults.map { it.copy(unreadCount = unreadById[it.id] ?: 0) })
+    }
+
     override suspend fun createFolder(mailboxId: String, name: String): Result<Folder> =
         safeApiCall {
             val dto = api.createFolder(mailboxId, FolderNameDto(name))

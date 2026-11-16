@@ -58,6 +58,9 @@ fun AppNavHost() {
                     onMailboxSelected = { mailboxId, mailboxName ->
                         navigator.goTo(Inbox(mailboxId, mailboxName))
                     },
+                    onAllInboxesSelected = { domain ->
+                        navigator.goTo(Inbox(mailboxId = "", mailboxName = "All inboxes", domain = domain))
+                    },
                     onSignedOut = { navigator.replaceRoot(Onboarding) },
                 )
             }
@@ -66,23 +69,25 @@ fun AppNavHost() {
                 InboxListDetailScreen(
                     mailboxId = key.mailboxId,
                     mailboxName = key.mailboxName,
+                    domain = key.domain,
                     onSwitchMailbox = { navigator.goTo(MailboxPicker) },
                     // Only fires in the single-pane layout; on a wide window the thread opens in
-                    // the detail pane and never reaches the back stack.
+                    // the detail pane and never reaches the back stack. In the domain-wide view
+                    // the row says which mailbox it lives in; replies etc. stay with that mailbox.
                     onEmailSelected = { email ->
-                        navigator.goTo(EmailThread(key.mailboxId, email.id, email.threadId))
+                        navigator.goTo(EmailThread(email.mailboxId.ifBlank { key.mailboxId }, email.id, email.threadId))
                     },
-                    onReply = { emailId, threadId ->
-                        navigator.goTo(Compose(key.mailboxId, ComposeMode.REPLY.name, emailId, threadId))
+                    onReply = { mailboxId, emailId, threadId ->
+                        navigator.goTo(Compose(mailboxId, ComposeMode.REPLY.name, emailId, threadId))
                     },
-                    onReplyAll = { emailId, threadId ->
-                        navigator.goTo(Compose(key.mailboxId, ComposeMode.REPLY_ALL.name, emailId, threadId))
+                    onReplyAll = { mailboxId, emailId, threadId ->
+                        navigator.goTo(Compose(mailboxId, ComposeMode.REPLY_ALL.name, emailId, threadId))
                     },
-                    onForward = { emailId, threadId ->
-                        navigator.goTo(Compose(key.mailboxId, ComposeMode.FORWARD.name, emailId, threadId))
+                    onForward = { mailboxId, emailId, threadId ->
+                        navigator.goTo(Compose(mailboxId, ComposeMode.FORWARD.name, emailId, threadId))
                     },
-                    onEditDraft = { draftMessageId, threadId ->
-                        navigator.goTo(Compose(key.mailboxId, ComposeMode.EDIT_DRAFT.name, draftMessageId, threadId))
+                    onEditDraft = { mailboxId, draftMessageId, threadId ->
+                        navigator.goTo(Compose(mailboxId, ComposeMode.EDIT_DRAFT.name, draftMessageId, threadId))
                     },
                     onDraftSelected = { draft ->
                         // A resumed draft reopens in the mode it was written in, so a half-written
@@ -98,17 +103,17 @@ fun AppNavHost() {
                         )
                     },
                     onComposeNew = {
-                        navigator.goTo(Compose(mailboxId = key.mailboxId, mode = ComposeMode.NEW.name))
+                        navigator.goTo(Compose(mailboxId = key.mailboxId, mode = ComposeMode.NEW.name, domain = key.domain))
                     },
                     onOpenSettings = { navigator.goTo(MailboxSettings(mailboxId = key.mailboxId)) },
                     onOpenScheduled = { navigator.goTo(Scheduled(mailboxId = key.mailboxId)) },
                     onSearch = {
-                        navigator.goTo(Search(mailboxId = key.mailboxId))
+                        navigator.goTo(Search(mailboxId = key.mailboxId, domain = key.domain))
                     },
                     // Window narrowed out of the split with a conversation open — push it as a
                     // full-screen thread so the user keeps what they were reading.
-                    onOpenEmailFullScreen = { emailId, threadId ->
-                        navigator.goTo(EmailThread(key.mailboxId, emailId, threadId))
+                    onOpenEmailFullScreen = { mailboxId, emailId, threadId ->
+                        navigator.goTo(EmailThread(mailboxId, emailId, threadId))
                     },
                 )
             }
@@ -127,9 +132,10 @@ fun AppNavHost() {
             entry<Search> { key ->
                 SearchScreen(
                     mailboxId = key.mailboxId,
+                    domain = key.domain,
                     onBack = { navigator.goBack() },
                     onEmailSelected = { email ->
-                        navigator.goTo(EmailThread(key.mailboxId, email.id, email.threadId))
+                        navigator.goTo(EmailThread(email.mailboxId.ifBlank { key.mailboxId }, email.id, email.threadId))
                     },
                 )
             }
@@ -162,6 +168,7 @@ fun AppNavHost() {
                     emailId = key.emailId,
                     threadId = key.threadId,
                     draftId = key.draftId,
+                    domain = key.domain,
                     onDone = { navigator.goBack() },
                     onCancel = { navigator.goBack() },
                 )

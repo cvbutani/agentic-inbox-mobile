@@ -248,6 +248,60 @@ class MailboxRepositoryImplTest {
     }
 
     @Test
+    fun `getMailboxes reads the display name the list endpoint now sends and caches it in the same call`() = runTest {
+        val dao = FakeMailboxDao()
+        val engine = MockEngine { _ ->
+            respond(
+                content = """[{"id":"mb1","email":"a@example.dev","name":"mb1","fromName":"Alice Chen"}]""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = MailboxRepositoryImpl(apiFor(engine), dao)
+
+        val result = repository.getMailboxes()
+
+        assertEquals("Alice Chen", result.getOrThrow().single().fromName)
+        assertEquals("Alice Chen", dao.getAll().single().fromName)
+        assertEquals(1, engine.requestHistory.size, "no per-mailbox request to fetch the name")
+    }
+
+    @Test
+    fun `getMailboxes lets a fresh display name replace a stale cached one`() = runTest {
+        val dao = FakeMailboxDao()
+        dao.upsertAll(listOf(MailboxEntity(id = "mb1", email = "a@example.dev", name = "mb1", fromName = "Old Name")))
+        val engine = MockEngine { _ ->
+            respond(
+                content = """[{"id":"mb1","email":"a@example.dev","name":"mb1","fromName":"New Name"}]""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val result = MailboxRepositoryImpl(apiFor(engine), dao).getMailboxes()
+
+        assertEquals("New Name", result.getOrThrow().single().fromName)
+        assertEquals("New Name", dao.getAll().single().fromName)
+    }
+
+    @Test
+    fun `getMailboxes keeps a cached display name when the list sends null for it`() = runTest {
+        val dao = FakeMailboxDao()
+        dao.upsertAll(listOf(MailboxEntity(id = "mb1", email = "a@example.dev", name = "mb1", fromName = "Marketing Team")))
+        val engine = MockEngine { _ ->
+            respond(
+                content = """[{"id":"mb1","email":"a@example.dev","name":"mb1","fromName":null}]""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        val result = MailboxRepositoryImpl(apiFor(engine), dao).getMailboxes()
+
+        assertEquals("Marketing Team", result.getOrThrow().single().fromName)
+    }
+
+    @Test
     fun `getMailboxes caches the network result on success`() = runTest {
         val engine = MockEngine { _ ->
             respond(

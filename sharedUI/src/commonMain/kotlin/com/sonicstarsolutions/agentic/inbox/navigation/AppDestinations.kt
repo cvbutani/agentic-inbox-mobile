@@ -28,6 +28,9 @@ data object MailboxPicker : AppDestination
 data class Inbox(
     val mailboxId: String,
     val mailboxName: String,
+    /** Set for the merged "All inboxes" view of a domain; [mailboxId] is then blank, since every
+     * row names its own mailbox. */
+    val domain: String? = null,
 ) : AppDestination
 
 @Serializable
@@ -48,6 +51,9 @@ data class Compose(
     val threadId: String? = null,
     /** Set when resuming a saved draft from the Drafts folder; null for a fresh compose. */
     val draftId: String? = null,
+    /** Set when composing from the domain-wide "All inboxes": the sender is then picked from the
+     * domain's mailboxes rather than fixed by [mailboxId]. */
+    val domain: String? = null,
 ) : AppDestination
 
 @Serializable
@@ -63,6 +69,8 @@ data class Scheduled(
 @Serializable
 data class Search(
     val mailboxId: String,
+    /** Set to search every mailbox on this domain instead of just [mailboxId]. */
+    val domain: String? = null,
 ) : AppDestination
 
 /**

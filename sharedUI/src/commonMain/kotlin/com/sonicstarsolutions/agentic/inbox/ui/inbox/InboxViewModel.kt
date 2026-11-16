@@ -21,6 +21,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsByLabelUseCa
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetLabelsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateLabelUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainEmailsUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDomainFoldersUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.ObserveDomainLiveUpdatesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetEmailsUseCase
@@ -77,6 +80,11 @@ data class InboxUiState(
     /** Locally saved drafts for this mailbox. Always observed, but only surfaced in the Drafts
      * folder — see [showingDrafts]. */
     val drafts: List<Draft> = emptyList(),
+    /** Set when this list is the domain-wide "All inboxes" view rather than one mailbox. */
+    val domain: String? = null,
+    /** Domain-wide lists page by cursor, not page number: where the next page starts, or null
+     * when the last page has been loaded. */
+    val nextCursor: String? = null,
 ) {
     /** In the Drafts folder the list shows local drafts above whatever the server reports for
      * that folder — drafts written here never sync (see [Draft]), so both have to be shown for
@@ -117,17 +125,27 @@ class InboxViewModel(
     private val observeLiveUpdates: ObserveLiveUpdatesUseCase,
     private val observeDraftsUseCase: ObserveDraftsUseCase,
     private val deleteDraftUseCase: DeleteDraftUseCase,
+    private val getDomainEmails: GetDomainEmailsUseCase,
+    private val getDomainFolders: GetDomainFoldersUseCase,
+    private val observeDomainLiveUpdates: ObserveDomainLiveUpdatesUseCase,
     /**
      * Outlives this ViewModel. A staged delete has already been reported to the user as done, so
      * its commit must not be cancelled just because the screen went away inside the undo
      * window — on [viewModelScope] the row would quietly come back on the next load.
      */
     private val externalScope: CoroutineScope,
+    /** The mailbox this screen shows. Blank in the domain-wide view, where every row names its own. */
     private val mailboxId: String,
     private val mailboxName: String = "Inbox",
+    /** Non-null for the domain-wide "All inboxes" view: the list, counts and live updates then
+     * span every mailbox on this domain, and each action goes to the mailbox the row is in. */
+    private val domain: String? = null,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(InboxUiState(currentMailboxName = mailboxName))
+    private val _state = MutableStateFlow(InboxUiState(currentMailboxName = mailboxName, domain = domain))
+
+    /** Where an action on [email] must go: its own mailbox, which in a single-mailbox list is this one. */
+    private fun mailboxOf(email: EmailSummary): String = email.mailboxId.ifBlank { mailboxId }
     val state: StateFlow<InboxUiState> = _state.asStateFlow()
 
     private var pendingDeleteJob: Job? = null
@@ -141,6 +159,11 @@ class InboxViewModel(
 
     /** One page of whatever the list is showing: the open label's emails, else the current folder's. */
     private suspend fun fetchPage(page: Int): Result<EmailPage> {
+        domain?.let { domain ->
+            // Page 1 is always the start; after that the server's cursor says where to continue.
+            val cursor = if (page == 1) null else _state.value.nextCursor
+            return getDomainEmails(domain, _state.value.currentFolder.id, cursor, PAGE_SIZE)
+        }
         val label = _state.value.currentLabel
         return if (label != null) {
             getEmailsByLabel(mailboxId, label.id, page = page, limit = PAGE_SIZE)
@@ -152,6 +175,8 @@ class InboxViewModel(
     /** Collected for the ViewModel's whole life, not just while the Drafts folder is open, so
      * switching to it shows what's there immediately. */
     private fun observeDrafts() {
+        // Local drafts are kept per mailbox; the domain-wide Drafts folder shows only the server's.
+        if (domain != null) return
         viewModelScope.launch {
             observeDraftsUseCase(mailboxId).collect { list -> _state.update { it.copy(drafts = list) } }
         }
@@ -181,7 +206,7 @@ class InboxViewModel(
         viewModelScope.launch {
             fetchPage(page = 1)
                 .onSuccess { page ->
-                    _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
+                    _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
@@ -193,7 +218,8 @@ class InboxViewModel(
         viewModelScope.launch {
             // Failure is non-fatal: the initial state already seeds the system-folder defaults,
             // so the drawer still works — it just won't have unread counts or custom folders yet.
-            getFolders(mailboxId).onSuccess { list ->
+            val result = domain?.let { getDomainFolders(it) } ?: getFolders(mailboxId)
+            result.onSuccess { list ->
                 _state.update { current ->
                     val stillSelected = list.firstOrNull { it.id == current.currentFolder.id } ?: current.currentFolder
                     current.copy(folders = list, currentFolder = stillSelected)
@@ -207,10 +233,13 @@ class InboxViewModel(
         // A reload would otherwise bring a swiped-away row straight back from the server.
         commitPendingDelete()
         _state.update { it.copy(refreshing = true, errorMessage = null) }
+        // The drawer's counts are as stale as the list is, so a refresh reloads both.
+        loadFolders()
+        loadLabels()
         viewModelScope.launch {
             fetchPage(page = 1)
                 .onSuccess { page ->
-                    _state.update { it.copy(refreshing = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
+                    _state.update { it.copy(refreshing = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
                 }
                 .onFailure { t ->
                     _state.update { it.copy(refreshing = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to refresh") }
@@ -220,13 +249,14 @@ class InboxViewModel(
 
     fun loadMore() {
         val currentState = _state.value
-        if (currentState.loading || currentState.emails.size >= currentState.totalCount) return
+        val exhausted = if (domain != null) currentState.nextCursor == null else currentState.emails.size >= currentState.totalCount
+        if (currentState.loading || exhausted) return
         val nextPage = currentState.page + 1
         _state.update { it.copy(loading = true, errorMessage = null) }
         viewModelScope.launch {
             fetchPage(page = nextPage)
                 .onSuccess { page ->
-                    _state.update { it.copy(loading = false, emails = it.emails + page.emails, totalCount = page.totalCount, page = nextPage) }
+                    _state.update { it.copy(loading = false, emails = (it.emails + page.emails).distinctBy { e -> e.mailboxId to e.id }, totalCount = page.totalCount, nextCursor = page.nextCursor, page = nextPage) }
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load more") }
@@ -248,10 +278,11 @@ class InboxViewModel(
                 errorMessage = null,
             )
         }
+        loadFolders()
         viewModelScope.launch {
             fetchPage(page = 1)
                 .onSuccess { page ->
-                    _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
+                    _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
@@ -363,7 +394,7 @@ class InboxViewModel(
             current.copy(emails = current.emails.map { if (it.id == email.id) it.copy(starred = newStarred) else it })
         }
         viewModelScope.launch {
-            setEmailStarredUseCase(mailboxId, email.id, newStarred)
+            setEmailStarredUseCase(mailboxOf(email), email.id, newStarred)
                 .onFailure { t ->
                     _state.update { current ->
                         current.copy(
@@ -391,6 +422,7 @@ class InboxViewModel(
                         },
                     )
                 }
+                loadFolders()
             }.onFailure { t ->
                 _state.update { it.copy(errorMessage = t.message ?: "Failed to update") }
             }
@@ -401,7 +433,7 @@ class InboxViewModel(
         if (email.isConversation && _state.value.currentLabel == null) {
             bulkOne(BulkAction.MOVE, email, SystemFolders.ARCHIVE)
         } else {
-            moveEmailUseCase(mailboxId, email.id, SystemFolders.ARCHIVE)
+            moveEmailUseCase(mailboxOf(email), email.id, SystemFolders.ARCHIVE)
         }
     }
 
@@ -455,9 +487,9 @@ class InboxViewModel(
             val result = if (pending.email.isConversation && _state.value.currentLabel == null) {
                 bulkOne(BulkAction.DELETE, pending.email)
             } else {
-                deleteEmailUseCase(mailboxId, pending.email.id)
+                deleteEmailUseCase(mailboxOf(pending.email), pending.email.id)
             }
-            result.onFailure { t ->
+            result.onSuccess { loadFolders() }.onFailure { t ->
                 _state.update { current ->
                     val restored = current.emails.toMutableList()
                         .apply { add(pending.originalIndex.coerceAtMost(size), pending.email) }
@@ -480,7 +512,7 @@ class InboxViewModel(
             current.copy(emails = current.emails.filterNot { it.id == email.id }, totalCount = (current.totalCount - 1).coerceAtLeast(0))
         }
         viewModelScope.launch {
-            action().onFailure { t ->
+            action().onSuccess { loadFolders() }.onFailure { t ->
                 _state.update { current ->
                     val restored = current.emails.toMutableList().apply { add(originalIndex.coerceAtMost(size), email) }
                     current.copy(
@@ -510,10 +542,32 @@ class InboxViewModel(
     /** The folder being listed, which scopes a thread target; null in a label view. */
     private fun folderScope(): String? = _state.value.currentFolder.id.takeIf { _state.value.currentLabel == null }
 
+    /**
+     * Applies [action] to the rows with [ids], one bulk request per mailbox they are in (a single
+     * request in a single-mailbox list). Outcomes are merged, so a failure in one mailbox leaves
+     * only that mailbox's rows marked as failed.
+     */
+    private suspend fun bulkAcrossMailboxes(
+        action: BulkAction,
+        ids: Collection<String>,
+        folderId: String? = null,
+        conversations: Map<String, String>,
+        folder: String?,
+    ): BulkOutcome {
+        val byId = _state.value.emails.associateBy { it.id }
+        val outcomes = ids.groupBy { id -> byId[id]?.let(::mailboxOf) ?: mailboxId }.map { (mailbox, group) ->
+            bulkUpdateEmails(mailbox, action, group, folderId, conversations = conversations.filterKeys { it in group }, folder = folder)
+        }
+        return BulkOutcome(
+            succeeded = outcomes.flatMapTo(mutableSetOf()) { it.succeeded },
+            failed = outcomes.flatMapTo(mutableSetOf()) { it.failed },
+        )
+    }
+
     /** Applies [action] to one row, as its whole conversation when it is one. */
     private suspend fun bulkOne(action: BulkAction, email: EmailSummary, folderId: String? = null): Result<Unit> {
         val outcome = bulkUpdateEmails(
-            mailboxId, action, listOf(email.id), folderId,
+            mailboxOf(email), action, listOf(email.id), folderId,
             conversations = conversationsAmong(listOf(email)),
             folder = folderScope(),
         )
@@ -530,7 +584,7 @@ class InboxViewModel(
     @OptIn(FlowPreview::class)
     suspend fun keepLive() {
         refreshQuietly()
-        observeLiveUpdates(mailboxId)
+        (domain?.let { observeDomainLiveUpdates(it) } ?: observeLiveUpdates(mailboxId))
             .filter { it != LiveScope.SCHEDULED }
             .debounce(LIVE_DEBOUNCE_MILLIS)
             .collect { refreshQuietly() }
@@ -552,7 +606,7 @@ class InboxViewModel(
             // Only if nothing took over the list while the request was out.
             _state.update { latest ->
                 if (latest.page == 1 && latest.pendingDelete == null && !latest.loading) {
-                    latest.copy(emails = page.emails, totalCount = page.totalCount)
+                    latest.copy(emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor)
                 } else {
                     latest
                 }
@@ -563,6 +617,8 @@ class InboxViewModel(
     // --- labels -------------------------------------------------------------------------------
 
     private fun loadLabels() {
+        // Labels belong to one mailbox each, so the domain-wide view has none.
+        if (domain != null) return
         viewModelScope.launch {
             // Non-fatal like folders: without labels the drawer just has no Labels section.
             getLabels(mailboxId).onSuccess { list -> _state.update { it.copy(labels = list) } }
@@ -592,7 +648,7 @@ class InboxViewModel(
         viewModelScope.launch {
             fetchPage(page = 1)
                 .onSuccess { page ->
-                    _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, page = 1) }
+                    _state.update { it.copy(loading = false, emails = page.emails, totalCount = page.totalCount, nextCursor = page.nextCursor, page = 1) }
                 }
                 .onFailure { t ->
                     _state.update { it.copy(loading = false, errorMessage = t.message ?: t::class.simpleName ?: "Failed to load") }
@@ -775,7 +831,7 @@ class InboxViewModel(
         val conversations = conversationsAmong(_state.value.emails.filter { it.id in ids })
         val folder = folderScope()
         viewModelScope.launch {
-            val outcome = bulkUpdateEmails(mailboxId, action, ids, folderId, conversations = conversations, folder = folder)
+            val outcome = bulkAcrossMailboxes(action, ids, folderId, conversations, folder)
             _state.update { current ->
                 current.copy(
                     emails = current.emails.filterNot { it.id in outcome.succeeded },
@@ -785,6 +841,7 @@ class InboxViewModel(
                     errorMessage = failureMessage(outcome),
                 )
             }
+            loadFolders()
         }
     }
 
@@ -794,7 +851,7 @@ class InboxViewModel(
         val conversations = conversationsAmong(_state.value.emails.filter { it.id in ids })
         val folder = folderScope()
         viewModelScope.launch {
-            val outcome = bulkUpdateEmails(mailboxId, if (read) BulkAction.READ else BulkAction.UNREAD, ids, conversations = conversations, folder = folder)
+            val outcome = bulkAcrossMailboxes(if (read) BulkAction.READ else BulkAction.UNREAD, ids, conversations = conversations, folder = folder)
             _state.update { current ->
                 current.copy(
                     emails = current.emails.map { if (it.id in outcome.succeeded) it.copy(read = read) else it },
@@ -803,6 +860,7 @@ class InboxViewModel(
                     errorMessage = failureMessage(outcome),
                 )
             }
+            loadFolders()
         }
     }
 

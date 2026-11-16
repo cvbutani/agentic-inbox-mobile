@@ -37,7 +37,7 @@ class EmailRepositoryImpl(
     ): Result<EmailPage> {
         val networkResult = safeApiCall {
             val pageDto = api.getEmails(mailboxId, folder = folder, page = page, limit = limit, threaded = true)
-            EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
+            EmailPage(pageDto.emails.map { it.toDomain(mailboxId) }, pageDto.totalCount)
         }
         // Only the first page is cached — it's what a folder screen shows on open/refresh, and is
         // the offline-reading case that matters; deeper pages aren't worth the staleness/complexity.
@@ -52,6 +52,47 @@ class EmailRepositoryImpl(
         val cached = emailDao.getForFolder(mailboxId, folder).map { it.toDomain() }
         return if (cached.isNotEmpty()) Result.success(EmailPage(cached, cached.size)) else networkResult
     }
+
+    override suspend fun getDomainEmails(domain: String, folder: String, cursor: String?, limit: Int): Result<EmailPage> {
+        val networkResult = safeApiCall {
+            val dto = api.getDomainEmails(domain, folder = folder, threaded = true, cursor = cursor, limit = limit)
+            EmailPage(dto.emails.map { it.toDomain() }, dto.totalCount, dto.nextCursor)
+        }
+        // Same rule as a single mailbox: only the first page is cached, and only it is worth
+        // falling back to. Rows are written in the call that fetched them — never a second request.
+        if (cursor != null) return networkResult
+
+        // Upsert only. Each mailbox's own cached page is replaced by its own refresh, and deleting
+        // here would wipe a quiet mailbox's cache whenever busier ones filled the merged page.
+        networkResult.onSuccess { page ->
+            emailDao.upsertAll(page.emails.filter { it.mailboxId.isNotBlank() }.map { it.toEntity(it.mailboxId, folder) })
+        }
+        if (networkResult.isSuccess) return networkResult
+
+        val cached = emailDao.getForDomainFolder(domain, folder, limit).map { it.toDomain() }
+        return if (cached.isNotEmpty()) Result.success(EmailPage(cached, cached.size)) else networkResult
+    }
+
+    override suspend fun searchDomain(domain: String, query: SearchQuery, cursor: String?, limit: Int): Result<EmailPage> =
+        safeApiCall {
+            val dto = api.searchDomain(
+                domain = domain,
+                query = query.query,
+                folder = query.folder,
+                from = query.from,
+                to = query.to,
+                subject = query.subject,
+                dateStart = query.dateStart,
+                dateEnd = query.dateEnd,
+                isRead = query.isRead,
+                isStarred = query.isStarred,
+                hasAttachment = query.hasAttachment,
+                group = "thread",
+                cursor = cursor,
+                limit = limit,
+            )
+            EmailPage(dto.emails.map { it.toDomain() }, dto.totalCount, dto.nextCursor)
+        }
 
     override suspend fun search(
         mailboxId: String,
@@ -76,14 +117,14 @@ class EmailRepositoryImpl(
                 page = page,
                 limit = limit,
             )
-            EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
+            EmailPage(pageDto.emails.map { it.toDomain(mailboxId) }, pageDto.totalCount)
         }
 
 
     override suspend fun getEmailsByLabel(mailboxId: String, labelId: String, page: Int, limit: Int): Result<EmailPage> =
         safeApiCall {
             val pageDto = api.getEmailsByLabel(mailboxId, label = labelId, page = page, limit = limit)
-            EmailPage(pageDto.emails.map { it.toDomain() }, pageDto.totalCount)
+            EmailPage(pageDto.emails.map { it.toDomain(mailboxId) }, pageDto.totalCount)
         }
     override suspend fun moveEmail(mailboxId: String, emailId: String, folderId: String): Result<Unit> =
         safeApiCall { api.moveEmail(mailboxId, emailId, MoveEmailRequestDto(folderId)) }.map {}
@@ -155,7 +196,8 @@ internal fun ComposeEmailRequest.toDto(): SendEmailRequestDto = SendEmailRequest
         .ifEmpty { null },
 )
 
-private fun EmailMetadataDto.toDomain(): EmailSummary = EmailSummary(
+/** [fallbackMailboxId] is the mailbox the request was made against; a domain-wide row names its own. */
+private fun EmailMetadataDto.toDomain(fallbackMailboxId: String = ""): EmailSummary = EmailSummary(
     id = id,
     subject = subject,
     sender = sender,
@@ -169,6 +211,7 @@ private fun EmailMetadataDto.toDomain(): EmailSummary = EmailSummary(
     threadUnreadCount = threadUnreadCount,
     labels = labels.map { it.toDomain() },
     threadCount = threadCount,
+    mailboxId = mailboxId ?: fallbackMailboxId,
 )
 
 private fun EmailSummary.toEntity(mailboxId: String, folder: String): EmailEntity = EmailEntity(
@@ -202,6 +245,7 @@ private fun EmailEntity.toDomain(): EmailSummary = EmailSummary(
     threadUnreadCount = threadUnreadCount,
     labels = labelsJson.toLabels(),
     threadCount = threadCount,
+    mailboxId = mailboxId,
 )
 
 /** The server rejects a bulk request with more ids than this. */
