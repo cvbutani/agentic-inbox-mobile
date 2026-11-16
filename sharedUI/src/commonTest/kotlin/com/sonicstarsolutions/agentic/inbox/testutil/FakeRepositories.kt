@@ -512,3 +512,11 @@ class FakeLiveUpdates : LiveUpdates {
 
     suspend fun emit(scope: LiveScope) = flow.emit(scope)
 }
+
+class FakeLastSenderStore(initial: Map<String, String> = emptyMap()) : com.sonicstarsolutions.agentic.inbox.domain.repository.LastSenderStore {
+    val remembered = initial.toMutableMap()
+    override suspend fun lastMailbox(domain: String): String? = remembered[domain.lowercase()]
+    override suspend fun remember(domain: String, mailboxId: String) {
+        remembered[domain.lowercase()] = mailboxId
+    }
+}

@@ -16,6 +16,8 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeContactRepository
+import com.sonicstarsolutions.agentic.inbox.testutil.FakeLastSenderStore
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SendEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.testutil.FakeDraftRepository
@@ -87,6 +89,8 @@ class ComposeViewModelTest {
         scheduleRepository: FakeScheduleRepository = FakeScheduleRepository(),
         contactRepository: ContactRepository = FakeContactRepository(),
         draftRepository: FakeDraftRepository = FakeDraftRepository(),
+        domain: String? = null,
+        lastSender: FakeLastSenderStore = FakeLastSenderStore(),
     ): ComposeViewModel = ComposeViewModel(
         getMailbox = GetMailboxUseCase(mailboxRepository),
         getThread = GetThreadUseCase(threadRepository),
@@ -99,11 +103,14 @@ class ComposeViewModelTest {
         saveDraftUseCase = SaveDraftUseCase(draftRepository),
         getDraftUseCase = GetDraftUseCase(draftRepository),
         deleteDraftUseCase = DeleteDraftUseCase(draftRepository),
+        getMailboxes = GetMailboxesUseCase(mailboxRepository),
+        lastSenderStore = lastSender,
         externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
-        mailboxId = "mb1",
+        mailboxId = if (domain == null) "mb1" else "",
         mode = mode,
         emailId = emailId,
         threadId = threadId,
+        domain = domain,
     )
 
     @Test
@@ -621,5 +628,153 @@ class ComposeViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.state.value.suggestions.isEmpty(), "stale answer for 'bo' must not show for 'zz'")
+    }
+
+    // --- composing from the domain-wide "All inboxes" ------------------------------------------
+
+    private val aliceMb = Mailbox(id = "alice@example.com", email = "alice@example.com", name = "alice@example.com", fromName = "Alice Chen", signatureEnabled = true, signatureText = "Alice")
+    private val bobMb = Mailbox(id = "bob@example.com", email = "bob@example.com", name = "bob@example.com", fromName = "Bob", aliases = listOf("sales@example.com"), signatureEnabled = true, signatureText = "Bob")
+    private val outsiderMb = Mailbox(id = "carol@other.org", email = "carol@other.org", name = "carol@other.org")
+
+    private fun domainMailboxes(): FakeMailboxRepository = FakeMailboxRepository(result = Result.success(listOf(bobMb, outsiderMb, aliceMb))).apply {
+        getMailboxResult = { id -> Result.success(listOf(aliceMb, bobMb, outsiderMb).first { it.id == id }) }
+    }
+
+    @Test
+    fun `from all inboxes the sender choices are the domain's mailboxes, sorted, and no others`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com")
+        advanceUntilIdle()
+
+        assertEquals(listOf("alice@example.com", "bob@example.com"), viewModel.state.value.senderMailboxes.map { it.email })
+        assertEquals(listOf("Alice Chen", "Bob"), viewModel.state.value.senderMailboxes.map { it.name })
+    }
+
+    @Test
+    fun `from all inboxes the default sender is the last mailbox sent from`() = runTest {
+        val viewModel = buildViewModel(
+            ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com",
+            lastSender = FakeLastSenderStore(mapOf("example.com" to "bob@example.com")),
+        )
+        advanceUntilIdle()
+
+        assertEquals("bob@example.com", viewModel.state.value.selectedMailboxId)
+        assertEquals("Bob <bob@example.com>", viewModel.state.value.fromAddress)
+    }
+
+    @Test
+    fun `from all inboxes with nothing remembered the first mailbox is the default`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com")
+        advanceUntilIdle()
+
+        assertEquals("alice@example.com", viewModel.state.value.selectedMailboxId)
+        assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `the default sender's signature and aliases are loaded`() = runTest {
+        val viewModel = buildViewModel(
+            ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com",
+            lastSender = FakeLastSenderStore(mapOf("example.com" to "bob@example.com")),
+        )
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.body.contains("Bob"))
+        assertEquals(listOf("bob@example.com", "sales@example.com"), viewModel.state.value.fromOptions)
+    }
+
+    @Test
+    fun `sending from all inboxes goes to the selected mailbox`() = runTest {
+        val emails = FakeEmailRepository()
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = domainMailboxes(), emailRepository = emails, domain = "example.com")
+        advanceUntilIdle()
+        viewModel.onSenderMailboxSelected("bob@example.com")
+        viewModel.onToChanged("dest@x.dev")
+        viewModel.onSubjectChanged("Hi")
+
+        viewModel.send()
+        advanceUntilIdle()
+
+        assertEquals("bob@example.com", emails.sendCalls.single().mailboxId)
+    }
+
+    @Test
+    fun `choosing another mailbox loads its aliases and swaps an untouched signature`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com")
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.body.contains("Alice"))
+
+        viewModel.onSenderMailboxSelected("bob@example.com")
+        advanceUntilIdle()
+
+        assertEquals("bob@example.com", viewModel.state.value.selectedMailboxId)
+        assertEquals("Bob <bob@example.com>", viewModel.state.value.fromAddress)
+        assertEquals(listOf("bob@example.com", "sales@example.com"), viewModel.state.value.fromOptions)
+        assertTrue(viewModel.state.value.body.contains("Bob"))
+        assertFalse(viewModel.state.value.body.contains("Alice"))
+    }
+
+    @Test
+    fun `choosing another mailbox leaves text the user already wrote alone`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com")
+        advanceUntilIdle()
+        viewModel.onBodyChanged("My own words")
+
+        viewModel.onSenderMailboxSelected("bob@example.com")
+        advanceUntilIdle()
+
+        assertEquals("My own words", viewModel.state.value.body)
+        assertEquals("bob@example.com", viewModel.state.value.selectedMailboxId)
+    }
+
+    @Test
+    fun `an unknown mailbox cannot be chosen`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com")
+        advanceUntilIdle()
+
+        viewModel.onSenderMailboxSelected("carol@other.org")
+        advanceUntilIdle()
+
+        assertEquals("alice@example.com", viewModel.state.value.selectedMailboxId)
+    }
+
+    @Test
+    fun `a successful send remembers the mailbox for next time`() = runTest {
+        val store = FakeLastSenderStore()
+        val viewModel = buildViewModel(ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com", lastSender = store)
+        advanceUntilIdle()
+        viewModel.onSenderMailboxSelected("bob@example.com")
+        viewModel.onToChanged("dest@x.dev")
+        viewModel.onSubjectChanged("Hi")
+
+        viewModel.send()
+        advanceUntilIdle()
+
+        assertEquals("bob@example.com", store.remembered["example.com"])
+    }
+
+    @Test
+    fun `a failed send does not change the remembered mailbox`() = runTest {
+        val store = FakeLastSenderStore(mapOf("example.com" to "alice@example.com"))
+        val viewModel = buildViewModel(
+            ComposeMode.NEW, mailboxRepository = domainMailboxes(), domain = "example.com", lastSender = store,
+            emailRepository = FakeEmailRepository(sendResult = Result.failure(RuntimeException("nope"))),
+        )
+        advanceUntilIdle()
+        viewModel.onSenderMailboxSelected("bob@example.com")
+        viewModel.onToChanged("dest@x.dev")
+        viewModel.onSubjectChanged("Hi")
+
+        viewModel.send()
+        advanceUntilIdle()
+
+        assertEquals("alice@example.com", store.remembered["example.com"])
+    }
+
+    @Test
+    fun `a single-mailbox compose offers no mailbox choice`() = runTest {
+        val viewModel = buildViewModel(ComposeMode.NEW)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.senderMailboxes.isEmpty())
     }
 }

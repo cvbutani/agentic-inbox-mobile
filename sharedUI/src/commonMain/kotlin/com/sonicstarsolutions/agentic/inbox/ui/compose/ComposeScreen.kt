@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -35,6 +36,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -88,10 +90,12 @@ fun ComposeScreen(
     emailId: String?,
     threadId: String?,
     draftId: String? = null,
+    /** Non-null when composing from the domain-wide "All inboxes": the sender is chosen from the domain's mailboxes. */
+    domain: String? = null,
     modifier: Modifier = Modifier,
     onDone: () -> Unit = {},
     onCancel: () -> Unit = {},
-    viewModel: ComposeViewModel = koinViewModel { parametersOf(mailboxId, mode, emailId, threadId, draftId) },
+    viewModel: ComposeViewModel = koinViewModel { parametersOf(mailboxId, mode, emailId, threadId, draftId, domain) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showCcBcc by remember { mutableStateOf(false) }
@@ -275,6 +279,9 @@ fun ComposeScreen(
                         selected = state.selectedFrom,
                         enabled = !state.sending,
                         onSelected = viewModel::onFromSelected,
+                        senderMailboxes = state.senderMailboxes,
+                        selectedMailboxId = state.selectedMailboxId,
+                        onMailboxSelected = viewModel::onSenderMailboxSelected,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -472,6 +479,7 @@ private fun titleFor(mode: ComposeMode): String = when (mode) {
  * addresses the message can go out from. The row is the whole tap target (48dp+), so the small
  * chevron never has to be hit on its own.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FromRow(
     fromAddress: String,
@@ -479,9 +487,56 @@ private fun FromRow(
     selected: String,
     enabled: Boolean,
     onSelected: (String) -> Unit,
+    /** Set for the domain-wide composer: pick the mailbox itself, in a sheet. Empty for one mailbox. */
+    senderMailboxes: List<SenderMailbox> = emptyList(),
+    selectedMailboxId: String = "",
+    onMailboxSelected: (String) -> Unit = {},
 ) {
-    val canChoose = options.size > 1
+    val pickFromMailboxes = senderMailboxes.isNotEmpty()
+    val canChoose = pickFromMailboxes || options.size > 1
     var expanded by remember { mutableStateOf(false) }
+    if (pickFromMailboxes && expanded) {
+        // A sheet rather than a menu: every choice needs a name and an address, and a domain can
+        // have several mailboxes each with aliases — a popup would truncate and crowd them.
+        ModalBottomSheet(onDismissRequest = { expanded = false }) {
+            Column(modifier = Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
+                Text(
+                    text = "Send from",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+                senderMailboxes.forEach { mailbox ->
+                    val isCurrent = mailbox.id == selectedMailboxId
+                    SenderChoiceRow(
+                        title = mailbox.name,
+                        subtitle = mailbox.email.takeIf { !it.equals(mailbox.name, ignoreCase = true) },
+                        selected = isCurrent && selected.equals(mailbox.email, ignoreCase = true),
+                        indent = false,
+                        onClick = {
+                            expanded = false
+                            // The mailbox that is already open keeps its alias list: choosing it
+                            // again means "back to its own address".
+                            if (isCurrent) onSelected(mailbox.email) else onMailboxSelected(mailbox.id)
+                        },
+                    )
+                    if (isCurrent) {
+                        options.filterNot { it.equals(mailbox.email, ignoreCase = true) }.forEach { alias ->
+                            SenderChoiceRow(
+                                title = alias,
+                                subtitle = null,
+                                selected = alias.equals(selected, ignoreCase = true),
+                                indent = true,
+                                onClick = {
+                                    expanded = false
+                                    onSelected(alias)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
     Box {
         Row(
             modifier = Modifier
@@ -512,7 +567,7 @@ private fun FromRow(
                 )
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(expanded = expanded && !pickFromMailboxes, onDismissRequest = { expanded = false }) {
             options.forEach { address ->
                 DropdownMenuItem(
                     text = { Text(address) },
@@ -558,5 +613,38 @@ private fun SuggestionList(contacts: List<Contact>, onPick: (Contact) -> Unit) {
                 )
             }
         }
+    }
+}
+
+/** One choice in the "Send from" sheet; aliases sit indented under their mailbox. */
+@Composable
+private fun SenderChoiceRow(
+    title: String,
+    subtitle: String?,
+    selected: Boolean,
+    indent: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = if (indent) 56.dp else 24.dp, end = 24.dp, top = 12.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (selected) Icon(Icons.Default.Check, contentDescription = "Selected")
     }
 }

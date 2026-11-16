@@ -14,7 +14,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.ForwardEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ScheduleEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SearchContactsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetDraftUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LastSenderStore
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetThreadUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ReplyEmailUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.SaveDraftUseCase
@@ -57,6 +59,10 @@ data class ComposeUiState(
      * the mailbox loads; the picker is only offered when there is more than one. */
     val fromOptions: List<String> = emptyList(),
     val selectedFrom: String = "",
+    /** Composing from the domain-wide "All inboxes": the mailboxes the message can go out from.
+     * Empty when the composer belongs to one mailbox. */
+    val senderMailboxes: List<SenderMailbox> = emptyList(),
+    val selectedMailboxId: String = "",
     /** Contacts matching the address being typed, shown under [suggestionsFor]. */
     val suggestions: List<Contact> = emptyList(),
     val suggestionsFor: ComposeField? = null,
@@ -77,6 +83,9 @@ data class ComposeUiState(
     val discarded: Boolean = false,
 )
 
+/** One mailbox a message can be sent from, for the domain-wide composer's picker. */
+data class SenderMailbox(val id: String, val email: String, val name: String)
+
 @OptIn(ExperimentalUuidApi::class)
 class ComposeViewModel(
     private val getMailbox: GetMailboxUseCase,
@@ -92,6 +101,8 @@ class ComposeViewModel(
     private val saveDraftUseCase: SaveDraftUseCase,
     private val getDraftUseCase: GetDraftUseCase,
     private val deleteDraftUseCase: DeleteDraftUseCase,
+    private val getMailboxes: GetMailboxesUseCase,
+    private val lastSenderStore: LastSenderStore,
     /**
      * Outlives this ViewModel. Saving a draft happens exactly when the composer is going away, so
      * a [viewModelScope] job would be cancelled before it could write — the text the user typed
@@ -103,6 +114,9 @@ class ComposeViewModel(
     private val emailId: String?,
     private val threadId: String?,
     private val draftId: String? = null,
+    /** Non-null when composing from the domain-wide "All inboxes": [mailboxId] is then blank and
+     * the sending mailbox is chosen from this domain's mailboxes. */
+    private val domain: String? = null,
     private val newDraftId: () -> String = { Uuid.random().toString() },
     private val now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ViewModel() {
@@ -110,6 +124,8 @@ class ComposeViewModel(
     private val _state = MutableStateFlow(ComposeUiState(draftId = draftId))
     val state: StateFlow<ComposeUiState> = _state.asStateFlow()
 
+    /** The mailbox the message goes out from. Fixed for one mailbox; chosen by the user in the domain-wide composer. */
+    private var currentMailboxId: String = mailboxId
     private var fromEmail: String = ""
     private var fromName: String = ""
     private var aliases: List<String> = emptyList()
@@ -146,23 +162,8 @@ class ComposeViewModel(
 
     init {
         viewModelScope.launch {
-            getMailbox(mailboxId).onSuccess { mailbox ->
-                fromEmail = mailbox.email
-                fromName = mailbox.displayName
-                aliases = mailbox.aliases
-                val fromDisplay = if (mailbox.fromName.isNullOrBlank()) mailbox.email else "${mailbox.fromName} <${mailbox.email}>"
-                mailboxFromDisplay = fromDisplay
-                _state.update {
-                    it.copy(
-                        fromAddress = fromDisplay,
-                        fromOptions = ComposeFrom.choices(mailbox.email, aliases),
-                        selectedFrom = mailbox.email,
-                    )
-                }
-                if (mailbox.signatureEnabled && !mailbox.signatureText.isNullOrBlank()) {
-                    signatureText = mailbox.signatureText
-                }
-            }
+            if (domain != null && mailboxId.isBlank()) chooseSenderFor(domain)
+            loadSender(currentMailboxId)
             val resumed = draftId?.let { getDraftUseCase(it) }
             if (resumed != null) {
                 _state.update {
@@ -182,13 +183,65 @@ class ComposeViewModel(
         }
     }
 
+    /** Lists the domain's mailboxes as sender choices and picks the starting one. */
+    private suspend fun chooseSenderFor(domain: String) {
+        val mailboxes = getMailboxes().getOrNull().orEmpty()
+            .filter { it.email.substringAfter('@').equals(domain, ignoreCase = true) }
+            .sortedBy { it.email.lowercase() }
+        currentMailboxId = ComposeFrom.defaultMailbox(mailboxes.map { it.id }, lastSenderStore.lastMailbox(domain)).orEmpty()
+        _state.update {
+            it.copy(
+                senderMailboxes = mailboxes.map { m -> SenderMailbox(m.id, m.email, m.displayName) },
+                selectedMailboxId = currentMailboxId,
+            )
+        }
+    }
+
+    /** Reads the sending mailbox's address, aliases and signature. Ignored if the user has since chosen another. */
+    private suspend fun loadSender(forMailboxId: String) {
+        getMailbox(forMailboxId).onSuccess { mailbox ->
+            if (forMailboxId != currentMailboxId) return@onSuccess
+            fromEmail = mailbox.email
+            fromName = mailbox.displayName
+            aliases = mailbox.aliases
+            val fromDisplay = if (mailbox.fromName.isNullOrBlank()) mailbox.email else "${mailbox.fromName} <${mailbox.email}>"
+            mailboxFromDisplay = fromDisplay
+            _state.update {
+                it.copy(
+                    fromAddress = fromDisplay,
+                    fromOptions = ComposeFrom.choices(mailbox.email, aliases),
+                    selectedFrom = mailbox.email,
+                )
+            }
+            signatureText = mailbox.signatureText.takeIf { mailbox.signatureEnabled && !it.isNullOrBlank() }
+        }
+    }
+
+    /**
+     * Switches the sending mailbox in the domain-wide composer. The message then goes out through
+     * that mailbox, with its aliases and signature. An untouched body takes the new signature; text
+     * the user has written is never rewritten.
+     */
+    fun onSenderMailboxSelected(mailboxId: String) {
+        if (_state.value.senderMailboxes.none { it.id == mailboxId } || mailboxId == currentMailboxId) return
+        currentMailboxId = mailboxId
+        _state.update { it.copy(selectedMailboxId = mailboxId) }
+        viewModelScope.launch {
+            loadSender(mailboxId)
+            if (!dirty && mailboxId == currentMailboxId) {
+                val initialBody = if (!signatureText.isNullOrBlank()) "\n\n-- \n$signatureText" else ""
+                _state.update { it.copy(body = initialBody) }
+            }
+        }
+    }
+
     private suspend fun loadOriginalIfNeeded() {
         if (mode == ComposeMode.NEW || emailId == null) {
             val initialBody = if (!signatureText.isNullOrBlank()) "\n\n-- \n$signatureText" else ""
             _state.update { it.copy(loading = false, body = it.body.ifEmpty { initialBody }) }
             return
         }
-        getThread(mailboxId, emailId, threadId)
+        getThread(currentMailboxId, emailId, threadId)
             .onSuccess { messages ->
                 // Reply/Forward/Reply-all all target the specific message the user acted from
                 // (the one they had expanded in ThreadScreen) — falling back to the thread's
@@ -306,7 +359,7 @@ class ComposeViewModel(
         }
         suggestJob = viewModelScope.launch {
             delay(SUGGEST_DEBOUNCE_MILLIS)
-            searchContacts(mailboxId, word, SUGGESTION_LIMIT)
+            searchContacts(currentMailboxId, word, SUGGESTION_LIMIT)
                 .onSuccess { found ->
                     val now = textOf(field)
                     if (RecipientTokens.current(now) != word) return@onSuccess
@@ -392,7 +445,7 @@ if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else addres
         val id = current.draftId ?: return
         val draft = Draft(
             id = id,
-            mailboxId = mailboxId,
+            mailboxId = currentMailboxId,
             to = current.to,
             cc = current.cc,
             bcc = current.bcc,
@@ -433,15 +486,15 @@ if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else addres
         viewModelScope.launch {
             val request = buildRequest(toList)
             val result = when (mode) {
-                ComposeMode.NEW -> sendEmailUseCase(mailboxId, request)
-                ComposeMode.REPLY, ComposeMode.REPLY_ALL -> replyEmailUseCase(mailboxId, emailId!!, request)
-                ComposeMode.FORWARD -> forwardEmailUseCase(mailboxId, emailId!!, request)
+                ComposeMode.NEW -> sendEmailUseCase(currentMailboxId, request)
+                ComposeMode.REPLY, ComposeMode.REPLY_ALL -> replyEmailUseCase(currentMailboxId, emailId!!, request)
+                ComposeMode.FORWARD -> forwardEmailUseCase(currentMailboxId, emailId!!, request)
                 // The draft's own inReplyTo (not emailId, which is the draft's own id) decides the
                 // path — the server derives correct threading headers from whatever message that
                 // id points to, matching workers/routes/reply-forward.ts in cloudflare/agentic-inbox.
                 ComposeMode.EDIT_DRAFT -> editDraftInReplyTo
-                    ?.let { originalEmailId -> replyEmailUseCase(mailboxId, originalEmailId, request) }
-                    ?: sendEmailUseCase(mailboxId, request)
+                    ?.let { originalEmailId -> replyEmailUseCase(currentMailboxId, originalEmailId, request) }
+                    ?: sendEmailUseCase(currentMailboxId, request)
             }
             finishSending(result, failureFallback = "Failed to send")
         }
@@ -472,7 +525,7 @@ if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else addres
                 ComposeMode.EDIT_DRAFT -> editDraftInReplyTo?.let { ScheduleKind.REPLY to it } ?: (ScheduleKind.COMPOSE to null)
                 ComposeMode.NEW, ComposeMode.FORWARD -> ScheduleKind.COMPOSE to null
             }
-            finishSending(scheduleEmailUseCase(mailboxId, request, kind, originalId, sendAt), failureFallback = "Failed to schedule")
+            finishSending(scheduleEmailUseCase(currentMailboxId, request, kind, originalId, sendAt), failureFallback = "Failed to schedule")
         }
     }
 
@@ -513,7 +566,9 @@ if (address.equals(fromEmail, ignoreCase = true)) mailboxFromDisplay else addres
                 // from the local-only one above — best-effort, same reasoning as
                 // SendDraftEmailUseCase: the send already succeeded, so a cleanup failure here
                 // must not be reported as this send having failed.
-                if (mode == ComposeMode.EDIT_DRAFT) emailId?.let { deleteEmailUseCase(mailboxId, it) }
+                if (mode == ComposeMode.EDIT_DRAFT) emailId?.let { deleteEmailUseCase(currentMailboxId, it) }
+                // Next time, All inboxes starts from the mailbox that was just used.
+                if (domain != null && currentMailboxId.isNotBlank()) lastSenderStore.remember(domain, currentMailboxId)
                 _state.update { it.copy(sending = false, sent = true, draftId = null) }
             }
             .onFailure { t ->

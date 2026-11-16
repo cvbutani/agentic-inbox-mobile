@@ -23,7 +23,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.repository.LabelRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ScheduleRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.MailboxRepository
 import com.sonicstarsolutions.agentic.inbox.domain.repository.ThreadRepository
+import com.sonicstarsolutions.agentic.inbox.data.local.KSafeLastSenderStore
 import com.sonicstarsolutions.agentic.inbox.data.local.KSafeSwipeSettingsStorage
+import com.sonicstarsolutions.agentic.inbox.domain.repository.LastSenderStore
 import com.sonicstarsolutions.agentic.inbox.data.repository.SwipeSettingsRepositoryImpl
 import com.sonicstarsolutions.agentic.inbox.domain.repository.SwipeSettingsRepository
 import eu.anifantakis.lib.ksafe.KSafe
@@ -37,6 +39,7 @@ val repositoryModule = module {
             scope = get(),
         )
     }
+    single<LastSenderStore> { KSafeLastSenderStore(get<KSafe>()) }
     single<SwipeSettingsRepository> { SwipeSettingsRepositoryImpl(KSafeSwipeSettingsStorage(get<KSafe>()), scope = get()) }
     single<MailboxRepository> { MailboxRepositoryImpl(get(), get()) }
     single<EmailRepository> { EmailRepositoryImpl(get(), get()) }

@@ -101,6 +101,8 @@ class ComposeEditDraftTest {
         saveDraftUseCase = SaveDraftUseCase(FakeDraftRepository()),
         getDraftUseCase = GetDraftUseCase(FakeDraftRepository()),
         deleteDraftUseCase = DeleteDraftUseCase(FakeDraftRepository()),
+        getMailboxes = com.sonicstarsolutions.agentic.inbox.domain.usecase.GetMailboxesUseCase(com.sonicstarsolutions.agentic.inbox.testutil.FakeMailboxRepository()),
+        lastSenderStore = com.sonicstarsolutions.agentic.inbox.testutil.FakeLastSenderStore(),
         externalScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
         mailboxId = "mb1",
         mode = ComposeMode.EDIT_DRAFT,

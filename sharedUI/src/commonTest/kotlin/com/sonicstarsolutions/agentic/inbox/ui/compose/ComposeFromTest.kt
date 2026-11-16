@@ -39,4 +39,29 @@ class ComposeFromTest {
             ComposeFrom.choices(mailbox, listOf("sales@example.dev", "SALES@example.dev", "me@example.dev")),
         )
     }
+
+    @Test
+    fun `the mailbox last sent from is the default when it still exists`() {
+        assertEquals("b@x.dev", ComposeFrom.defaultMailbox(listOf("a@x.dev", "b@x.dev"), last = "b@x.dev"))
+    }
+
+    @Test
+    fun `with nothing remembered the first mailbox alphabetically is the default`() {
+        assertEquals("a@x.dev", ComposeFrom.defaultMailbox(listOf("b@x.dev", "a@x.dev"), last = null))
+    }
+
+    @Test
+    fun `a remembered mailbox that no longer exists is ignored`() {
+        assertEquals("a@x.dev", ComposeFrom.defaultMailbox(listOf("a@x.dev", "b@x.dev"), last = "gone@x.dev"))
+    }
+
+    @Test
+    fun `remembered mailboxes match regardless of case`() {
+        assertEquals("B@x.dev", ComposeFrom.defaultMailbox(listOf("a@x.dev", "B@x.dev"), last = "b@X.dev"))
+    }
+
+    @Test
+    fun `no mailboxes means no default`() {
+        assertEquals(null, ComposeFrom.defaultMailbox(emptyList(), last = "a@x.dev"))
+    }
 }

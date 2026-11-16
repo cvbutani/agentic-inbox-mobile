@@ -168,6 +168,7 @@ fun AppNavHost() {
                     emailId = key.emailId,
                     threadId = key.threadId,
                     draftId = key.draftId,
+                    domain = key.domain,
                     onDone = { navigator.goBack() },
                     onCancel = { navigator.goBack() },
                 )
