@@ -100,10 +100,31 @@ Only worth it if users connect to the wrong backend in practice.
 
 Phase 1: about half a day. Phase 2: 1-2 days. Phase 3: about a day split across both repos, only if needed.
 
+## Phase 2 as built
+
+Differences from the plan above:
+
+- **Sign out moved to Settings** (Decision 3, recommended option). It is now `SignOutUseCase` (credentials plus
+  local cache), used by `AppSettingsViewModel`; `MailboxPickerViewModel` no longer signs out. The sign-out
+  tests moved to `SignOutUseCaseTest`.
+- **Swipe actions moved out of mailbox settings** into app Settings (`ui/settings/SwipeActionsSection.kt`). They
+  are device preferences, so one place, not two. `SectionLabel` became `internal` to share it.
+- **Privacy link** uses `AppLinks.PRIVACY_URL` (GitHub Pages, `docs/privacy.html`; the URL returned 200).
+- **Licenses row deferred**: the repo has no licenses screen or data to point at yet.
+- **`AppInfo`** has `AndroidAppInfo` (PackageInfo) and `IosAppInfo` (`CFBundleShortVersionString`), with "dev" as
+  the fallback. The iOS implementation is written but not compiled on this machine.
+- `Credentials.displayHost()` backs the "Connected to" row; the secret is never shown.
+
+Checked on the Android emulator (Pixel_9a) with demo data: picker settings icon, Settings screen, sign-out
+dialog, sign-out landing on onboarding. Not checked: tablet layout, dark mode, iOS.
+
+`DemoDataModule` is stale: it registers `LiveUpdates` (now also in `networkModule`) and lacks the swipe-settings
+repository, so the screenshot swap in `AppModule` crashes without small fixes. Out of scope here.
+
 ## Progress
 
 | Phase | Status | Commit |
 |---|---|---|
-| 1 Copy and constants | in progress | |
-| 2 App Settings screen | not started | |
+| 1 Copy and constants | done | feat(onboarding): name the required backend and link to it |
+| 2 App Settings screen | coded and checked on emulator, not committed | |
 | 3 Compatibility check | deferred | |

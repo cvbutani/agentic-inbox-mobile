@@ -25,12 +25,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -89,19 +89,12 @@ private val CONTENT_MAX_WIDTH = 720.dp
 @Composable
 fun MailboxPickerScreen(
     onMailboxSelected: (mailboxId: String, mailboxName: String) -> Unit,
-    onSignedOut: () -> Unit,
+    onOpenSettings: () -> Unit,
     onAllInboxesSelected: (domain: String) -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(0.dp),
     viewModel: MailboxPickerViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    LaunchedEffect(state.signedOut) {
-        if (state.signedOut) {
-            viewModel.consumeSignedOut()
-            onSignedOut()
-        }
-    }
 
     // Computed once at the top, rather than inside the Scaffold's content, so the create-mailbox
     // dialog/sheet choice below can read it too.
@@ -153,37 +146,16 @@ fun MailboxPickerScreen(
             )
         }
 
-        // Signing out discards the stored server credentials, and the Access secret was shown only
-        // once at creation — one mis-tapped icon shouldn't be able to lock the user out.
-        var showSignOutDialog by remember { mutableStateOf(false) }
-        if (showSignOutDialog) {
-            AlertDialog(
-                onDismissRequest = { showSignOutDialog = false },
-                icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
-                title = { Text("Sign out") },
-                text = { Text("You'll need your server URL and Access credentials to reconnect.") },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showSignOutDialog = false
-                            viewModel.signOut()
-                        },
-                    ) { Text("Sign out") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showSignOutDialog = false }) { Text("Cancel") }
-                },
-            )
-        }
-
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
                 TopAppBar(
                     title = { AppBarTitle("Mailboxes") },
                     actions = {
-                        IconButton(onClick = { showSignOutDialog = true }) {
-                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
+                        // Sign out lives in app Settings, a deliberate step further away than a
+                        // top-bar icon, since it discards the stored credentials.
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Outlined.Settings, contentDescription = "Settings")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

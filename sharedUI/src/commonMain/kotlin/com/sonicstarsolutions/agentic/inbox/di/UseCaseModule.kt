@@ -13,6 +13,7 @@ import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetLabelsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.UpdateLabelUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearLocalCacheUseCase
+import com.sonicstarsolutions.agentic.inbox.domain.usecase.SignOutUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateFolderUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteDraftUseCase
@@ -61,6 +62,7 @@ val useCaseModule = module {
     singleOf(::StageCredentialsUseCase)
     singleOf(::ClearCredentialsUseCase)
     singleOf(::ClearLocalCacheUseCase)
+    singleOf(::SignOutUseCase)
     singleOf(::LoadCredentialsUseCase)
     singleOf(::ValidateConnectionUseCase)
     singleOf(::GetMailboxesUseCase)

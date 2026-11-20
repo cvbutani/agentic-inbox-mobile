@@ -60,8 +60,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sonicstarsolutions.agentic.inbox.domain.model.DEFAULT_RETENTION_DAYS
-import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeAction
-import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeSettings
 import com.sonicstarsolutions.agentic.inbox.ui.components.AppBarTitle
 import com.sonicstarsolutions.agentic.inbox.ui.components.InitialsAvatar
 import com.sonicstarsolutions.agentic.inbox.ui.components.StatusPane
@@ -75,10 +73,8 @@ fun MailboxSettingsScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     viewModel: MailboxSettingsViewModel = koinViewModel { parametersOf(mailboxId) },
-    swipeViewModel: SwipeSettingsViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val swipeSettings by swipeViewModel.settings.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.message) {
@@ -190,20 +186,13 @@ fun MailboxSettingsScreen(
                     onMailboxChanged = viewModel::onRetentionChanged,
                     onDomainChosen = viewModel::onDomainRetentionChosen,
                 )
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                SwipeActionsSection(
-                    settings = swipeSettings,
-                    onSwipeRightChanged = swipeViewModel::onSwipeRightChanged,
-                    onSwipeLeftChanged = swipeViewModel::onSwipeLeftChanged,
-                )
             }
         }
     }
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
@@ -241,26 +230,6 @@ private fun SwitchRow(
         // The Row handles the click; the Switch is purely a visual of that state.
         Switch(checked = checked, onCheckedChange = null)
     }
-}
-
-/**
- * What swiping an inbox row right or left does. These are device preferences, so unlike the fields
- * above they apply the moment a choice is made — they are not part of Save.
- */
-@Composable
-private fun SwipeActionsSection(
-    settings: SwipeSettings,
-    onSwipeRightChanged: (SwipeAction) -> Unit,
-    onSwipeLeftChanged: (SwipeAction) -> Unit,
-) {
-    SectionLabel("Swipe actions")
-    Text(
-        text = "Choose what happens when you swipe an email in the inbox. Saved on this device only.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    SwipeActionPicker("Swipe right", settings.swipeRight, onSwipeRightChanged)
-    SwipeActionPicker("Swipe left", settings.swipeLeft, onSwipeLeftChanged)
 }
 
 /**
@@ -353,43 +322,6 @@ private fun <T> ChoiceRow(
                     onClick = {
                         expanded = false
                         onSelected(value)
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SwipeActionPicker(
-    label: String,
-    selected: SwipeAction,
-    onSelected: (SwipeAction) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(role = Role.DropdownList) { expanded = true }
-                .padding(vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(
-                text = selected.settingLabel,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            SwipeAction.entries.forEach { action ->
-                DropdownMenuItem(
-                    text = { Text(action.settingLabel) },
-                    onClick = {
-                        expanded = false
-                        onSelected(action)
                     },
                 )
             }

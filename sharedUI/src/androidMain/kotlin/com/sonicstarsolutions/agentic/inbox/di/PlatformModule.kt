@@ -7,7 +7,9 @@ import com.sonicstarsolutions.agentic.inbox.data.local.AppDatabase
 import com.sonicstarsolutions.agentic.inbox.data.local.AttachmentStore
 import com.sonicstarsolutions.agentic.inbox.data.local.DATABASE_NAME
 import com.sonicstarsolutions.agentic.inbox.data.local.buildWithDefaults
+import com.sonicstarsolutions.agentic.inbox.platform.AndroidAppInfo
 import com.sonicstarsolutions.agentic.inbox.platform.AndroidAttachmentOpener
+import com.sonicstarsolutions.agentic.inbox.platform.AppInfo
 import com.sonicstarsolutions.agentic.inbox.platform.AttachmentOpener
 import eu.anifantakis.lib.ksafe.KSafe
 import io.ktor.client.engine.HttpClientEngine
@@ -23,6 +25,7 @@ fun platformModule(context: Context) = module {
     single { KSafe(context) }
     single<AttachmentStore> { AndroidAttachmentStore(context) }
     single<AttachmentOpener> { AndroidAttachmentOpener(context) }
+    single<AppInfo> { AndroidAppInfo(context) }
     single<AppDatabase> {
         val appContext = context.applicationContext
         Room.databaseBuilder<AppDatabase>(

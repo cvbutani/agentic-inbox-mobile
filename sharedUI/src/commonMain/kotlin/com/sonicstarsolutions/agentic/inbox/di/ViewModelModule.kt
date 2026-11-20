@@ -8,6 +8,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.MailboxSettingsV
 import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.SwipeSettingsViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.scheduled.ScheduledViewModel
+import com.sonicstarsolutions.agentic.inbox.ui.settings.AppSettingsViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.search.SearchViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.splash.SplashViewModel
 import com.sonicstarsolutions.agentic.inbox.ui.thread.ThreadViewModel
@@ -21,6 +22,7 @@ val viewModelModule = module {
     viewModelOf(::MailboxPickerViewModel)
     viewModel { (mailboxId: String) -> MailboxSettingsViewModel(get(), get(), get(), get(), mailboxId) }
     viewModelOf(::SwipeSettingsViewModel)
+    viewModelOf(::AppSettingsViewModel)
     // Runtime args (mailboxId/mailboxName) come from the Inbox nav key via parametersOf(...);
     // the use case is injected. Destructure the ParametersHolder positionally.
     // domain is null for one mailbox and the domain's name for the merged "All inboxes" view.

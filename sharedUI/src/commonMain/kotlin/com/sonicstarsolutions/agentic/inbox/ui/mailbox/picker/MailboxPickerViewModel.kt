@@ -3,8 +3,6 @@ package com.sonicstarsolutions.agentic.inbox.ui.mailbox.picker
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sonicstarsolutions.agentic.inbox.domain.model.Mailbox
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearCredentialsUseCase
-import com.sonicstarsolutions.agentic.inbox.domain.usecase.ClearLocalCacheUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.CreateMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.DeleteMailboxUseCase
 import com.sonicstarsolutions.agentic.inbox.domain.usecase.GetAllowedDomainsUseCase
@@ -21,7 +19,6 @@ data class MailboxPickerUiState(
     val loading: Boolean = true,
     val mailboxes: List<Mailbox> = emptyList(),
     val errorMessage: String? = null,
-    val signedOut: Boolean = false,
     val allowedDomains: List<String> = emptyList(),
     val creatingMailbox: Boolean = false,
     val createMailboxError: String? = null,
@@ -33,8 +30,6 @@ data class MailboxPickerUiState(
 
 class MailboxPickerViewModel(
     private val getMailboxes: GetMailboxesUseCase,
-    private val clearCredentials: ClearCredentialsUseCase,
-    private val clearLocalCache: ClearLocalCacheUseCase,
     private val createMailboxUseCase: CreateMailboxUseCase,
     private val getAllowedDomains: GetAllowedDomainsUseCase,
     private val deleteMailboxUseCase: DeleteMailboxUseCase,
@@ -81,19 +76,6 @@ class MailboxPickerViewModel(
             print(ex)
         }
     }
-
-    fun signOut() {
-        viewModelScope.launch {
-            clearCredentials()
-            // Otherwise a second account signing in on this device would read the previous
-            // account's mailboxes/folders/emails straight out of the offline cache before its
-            // first network refresh completes (or after any refresh that happens to fail).
-            clearLocalCache()
-            _state.update { it.copy(signedOut = true) }
-        }
-    }
-
-    fun consumeSignedOut() = _state.update { it.copy(signedOut = false) }
 
     fun createMailbox(email: String, name: String) {
         val trimmedEmail = email.trim()

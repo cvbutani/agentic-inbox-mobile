@@ -29,4 +29,10 @@ data class Credentials(
             trimmed.startsWith("https://", ignoreCase = true)
         return if (hasScheme) trimmed else "https://$trimmed"
     }
+
+    /**
+     * Just the host (and port) of [baseUrl], for showing the user which server they are connected
+     * to: no scheme, no path, nothing secret. Empty when no URL is set.
+     */
+    fun displayHost(): String = normalizedBaseUrl().substringAfter("://").substringBefore('/')
 }
