@@ -665,36 +665,35 @@ private fun SwipeableEmailRow(
             val currentOnDelete by rememberUpdatedState(onDelete)
             val currentOnToggleRead by rememberUpdatedState(onToggleRead)
             val currentOnToggleStarred by rememberUpdatedState(onToggleStarred)
-            // The state's callback is captured once; reading through this keeps it current when
-            // the user changes the setting while the list is on screen.
+            // Read through this so a setting changed while the list is on screen is honoured.
             val currentSettings by rememberUpdatedState(swipeSettings)
-            val dismissState = rememberSwipeToDismissBoxState(
-                confirmValueChange = { value ->
-                    when (currentSettings.actionFor(value)) {
-                        // These two take the row out of the list, so the swipe is allowed to complete.
-                        SwipeAction.Archive -> {
-                            currentOnArchive()
-                            true
-                        }
-                        SwipeAction.Delete -> {
-                            currentOnDelete()
-                            true
-                        }
-                        // These change the row in place: do the work, then let it spring back.
-                        SwipeAction.ToggleRead -> {
-                            currentOnToggleRead()
-                            false
-                        }
-                        SwipeAction.ToggleStar -> {
-                            currentOnToggleStarred()
-                            false
-                        }
-                        SwipeAction.None, null -> false
+            val dismissState = rememberSwipeToDismissBoxState()
+            val scope = rememberCoroutineScope()
+            // Runs the action once the swipe has settled off-screen. This is deliberately not
+            // confirmValueChange: that is a veto hook the draggable calls on every drag frame past
+            // the halfway point and again on settle, so an action there fires mid-drag and repeatedly
+            // (a toggle called twice cancels itself out). onDismiss fires once per settle.
+            // Stable (keyed to the state only): the box restarts its dismiss effect whenever this
+            // lambda changes, and a fresh lambda per recomposition would re-run the action.
+            val onDismiss: (SwipeToDismissBoxValue) -> Unit = remember(dismissState) {
+                { direction ->
+                    val action = currentSettings.actionFor(direction)
+                    when (action) {
+                        SwipeAction.Archive -> currentOnArchive()
+                        SwipeAction.Delete -> currentOnDelete()
+                        SwipeAction.ToggleRead -> currentOnToggleRead()
+                        SwipeAction.ToggleStar -> currentOnToggleStarred()
+                        SwipeAction.None, null -> Unit
                     }
-                },
-            )
+                    // Removed rows leave the list on their own. Everything else springs back.
+                    if (action?.removesRow != true) {
+                        scope.launch { dismissState.reset() }
+                    }
+                }
+            }
             SwipeToDismissBox(
                 state = dismissState,
+                onDismiss = onDismiss,
                 enableDismissFromStartToEnd = swipeSettings.swipeRight != SwipeAction.None,
                 enableDismissFromEndToStart = swipeSettings.swipeLeft != SwipeAction.None,
                 // dismissDirection follows the finger from the first pixel; targetValue stays
