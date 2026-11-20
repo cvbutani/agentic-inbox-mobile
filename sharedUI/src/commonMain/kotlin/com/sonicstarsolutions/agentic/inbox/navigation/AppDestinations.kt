@@ -56,6 +56,11 @@ data class Compose(
     val domain: String? = null,
 ) : AppDestination
 
+/** App-level settings (backend, device preferences, about, sign out), as opposed to
+ * [MailboxSettings], which belongs to one mailbox. */
+@Serializable
+data object AppSettings : AppDestination
+
 @Serializable
 data class MailboxSettings(
     val mailboxId: String,
@@ -95,6 +100,7 @@ internal val appNavConfiguration = SavedStateConfiguration {
             subclass(EmailThread::class, EmailThread.serializer())
             subclass(Compose::class, Compose.serializer())
             subclass(Search::class, Search.serializer())
+            subclass(AppSettings::class, AppSettings.serializer())
             subclass(MailboxSettings::class, MailboxSettings.serializer())
             subclass(Scheduled::class, Scheduled.serializer())
         }

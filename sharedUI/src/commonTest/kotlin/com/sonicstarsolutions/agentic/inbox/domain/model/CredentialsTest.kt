@@ -64,4 +64,29 @@ class CredentialsTest {
     fun `isComplete is false for the default empty instance`() {
         assertFalse(Credentials().isComplete())
     }
+
+    @Test
+    fun `displayHost drops the scheme and trailing slash`() {
+        assertEquals("my-worker.example.dev", Credentials(baseUrl = "https://my-worker.example.dev/").displayHost())
+    }
+
+    @Test
+    fun `displayHost drops any path`() {
+        assertEquals("my-worker.example.dev", Credentials(baseUrl = "https://my-worker.example.dev/api/v1").displayHost())
+    }
+
+    @Test
+    fun `displayHost keeps a port`() {
+        assertEquals("localhost:8787", Credentials(baseUrl = "http://localhost:8787").displayHost())
+    }
+
+    @Test
+    fun `displayHost accepts a scheme-less url`() {
+        assertEquals("my-worker.example.dev", Credentials(baseUrl = "  my-worker.example.dev ").displayHost())
+    }
+
+    @Test
+    fun `displayHost is empty for a blank url`() {
+        assertEquals("", Credentials(baseUrl = "  ").displayHost())
+    }
 }

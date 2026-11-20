@@ -16,6 +16,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.mailbox.settings.MailboxSettingsS
 import com.sonicstarsolutions.agentic.inbox.ui.scheduled.ScheduledScreen
 import com.sonicstarsolutions.agentic.inbox.ui.onboarding.OnboardingScreen
 import com.sonicstarsolutions.agentic.inbox.ui.search.SearchScreen
+import com.sonicstarsolutions.agentic.inbox.ui.settings.AppSettingsScreen
 import com.sonicstarsolutions.agentic.inbox.ui.splash.SplashScreen
 import com.sonicstarsolutions.agentic.inbox.ui.thread.ThreadScreen
 
@@ -24,7 +25,7 @@ import com.sonicstarsolutions.agentic.inbox.ui.thread.ThreadScreen
  *
  * Every transition is an explicit callback fired by the screen that decided it — [Splash] decides
  * the one-time startup destination, [OnboardingScreen] decides when credentials are saved, and
- * [MailboxPickerScreen] decides on sign-out. This host has no reactive routing logic of its own;
+ * [AppSettingsScreen] decides on sign-out. This host has no reactive routing logic of its own;
  * it just wires those callbacks to a [Navigator].
  */
 @Composable
@@ -61,6 +62,13 @@ fun AppNavHost() {
                     onAllInboxesSelected = { domain ->
                         navigator.goTo(Inbox(mailboxId = "", mailboxName = "All inboxes", domain = domain))
                     },
+                    onOpenSettings = { navigator.goTo(AppSettings) },
+                )
+            }
+
+            entry<AppSettings> {
+                AppSettingsScreen(
+                    onBack = { navigator.goBack() },
                     onSignedOut = { navigator.replaceRoot(Onboarding) },
                 )
             }

@@ -104,6 +104,7 @@ Phase 0-1: about 2-3 days (Phase 1 includes the deletions). Phase 3 items 1, 3, 
 | 3.5 Recipient autocomplete | done | feat(compose): suggest recipients from past correspondents |
 | 3.6 Live updates | done | feat(live): refresh the inbox and scheduled queue as the server changes |
 | 3.7 Search grouped by conversation, threaded list | done | feat(conversations): one row per conversation, and actions that reach all of it |
+| 1.5 Settings copy names the supported backend | in progress | see [APP_SETTINGS_PLAN.md](APP_SETTINGS_PLAN.md) (branch feature/app-settings) |
 
 Verified live against a local public instance: `POST …/emails/bulk` accepts Mobile's body, rejects more than 200 ids with a 400,
 returns 400 `Folder not found` for an unknown move target, and star/delete changed real messages.

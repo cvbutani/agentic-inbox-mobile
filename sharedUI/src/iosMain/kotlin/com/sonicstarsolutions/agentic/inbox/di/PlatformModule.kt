@@ -6,7 +6,9 @@ import com.sonicstarsolutions.agentic.inbox.data.local.AttachmentStore
 import com.sonicstarsolutions.agentic.inbox.data.local.DATABASE_NAME
 import com.sonicstarsolutions.agentic.inbox.data.local.IosAttachmentStore
 import com.sonicstarsolutions.agentic.inbox.data.local.buildWithDefaults
+import com.sonicstarsolutions.agentic.inbox.platform.AppInfo
 import com.sonicstarsolutions.agentic.inbox.platform.AttachmentOpener
+import com.sonicstarsolutions.agentic.inbox.platform.IosAppInfo
 import com.sonicstarsolutions.agentic.inbox.platform.IosAttachmentOpener
 import eu.anifantakis.lib.ksafe.KSafe
 import io.ktor.client.engine.HttpClientEngine
@@ -26,6 +28,7 @@ val platformSettingsDataStoreModule = module {
     single { KSafe() }
     single<AttachmentStore> { IosAttachmentStore() }
     single<AttachmentOpener> { IosAttachmentOpener() }
+    single<AppInfo> { IosAppInfo() }
     single<AppDatabase> {
         Room.databaseBuilder<AppDatabase>(name = "${documentDirectory()}/$DATABASE_NAME").buildWithDefaults()
     }
