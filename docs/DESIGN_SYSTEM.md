@@ -18,6 +18,9 @@ nothing else is added for decoration.
 2. **The airmail band.** A 6dp strip of navy and red diagonal stripes.
 3. **The postmark.** A 40dp ring holding a day and month, wherever a date leads a group.
 
+The logo is the same identity as a mark: an airmail-bordered envelope in navy and red, with the
+band's 45° stripes. Files, versions and rules are in [design/logo/LOGO_GUIDE.md](../design/logo/LOGO_GUIDE.md).
+
 Material 3 governs structure, navigation, and controls on both Android and iOS. The identity is
 expressed through theming and these two components, never through custom controls.
 
