@@ -17,6 +17,26 @@ so the version source of truth is `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION
 `iosApp/iosApp.xcodeproj/project.pbxproj` — that is what the pipeline updates
 (`scripts/bump_version.sh`), and Xcode writes it into the built app's Info.plist.
 
+## When workflows run
+
+- **CI** and **Semgrep** run only when a pull request into `master` or `develop` is opened,
+  updated or reopened. They do not run on push or after a merge. Semgrep also runs weekly.
+- **Release Build** runs only when triggered manually (see above).
+
+## GitHub Release and tags
+
+After the selected platform builds succeed, the **release** job creates a GitHub Release
+and tag from the version in `gradle.properties` (after the bump) and attaches the AAB / IPA:
+
+| `platform` | Tag |
+|---|---|
+| `android` | `v1.2.3-android` |
+| `ios` | `v1.2.3-ios` |
+| `both` | `v1.2.3` (release notes say both platforms were released) |
+
+If the tag already exists (for example `version_bump` of `none` or `build-number`, which
+keep the version name), the release is skipped with a warning.
+
 ## Required repository secrets
 
 Set these in **Settings → Secrets and variables → Actions**.
