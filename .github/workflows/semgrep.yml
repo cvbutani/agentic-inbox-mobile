@@ -1,9 +1,9 @@
 name: Semgrep
 
 on:
+  # Runs when a PR into master/develop is opened, updated or reopened. Never on merge/push.
   pull_request:
-  push:
-    branches: [master]
+    branches: [master, develop]
   schedule:
     # Weekly, so newly published rules are applied to code that hasn't changed.
     - cron: "43 5 * * 1"

@@ -185,3 +185,59 @@ jobs:
         with:
           name: iosApp-${{ needs.version.outputs.version-name }}-${{ needs.version.outputs.version-code }}.ipa
           path: build/ios/AgenticInbox.ipa
+
+  release:
+    name: GitHub Release
+    # Runs once the selected platform builds are done. A skipped platform job is fine;
+    # a failed one blocks the release.
+    needs: [version, android, ios]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # One tag per run: v1.2.3-android, v1.2.3-ios, or plain v1.2.3 when both were built.
+      - name: Work out tag
+        id: tag
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          VERSION_NAME: ${{ needs.version.outputs.version-name }}
+        run: |
+          case "$PLATFORM" in
+            android) tag="v$VERSION_NAME-android"; built="Android" ;;
+            ios)     tag="v$VERSION_NAME-ios";     built="iOS" ;;
+            *)       tag="v$VERSION_NAME";         built="Android and iOS" ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "built=$built" >> "$GITHUB_OUTPUT"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Tag $tag already exists (version name unchanged), so no release was created. Use a major, minor or bugfix bump to get a new release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download build artifacts
+        if: steps.tag.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          BUILT: ${{ steps.tag.outputs.built }}
+          SHA: ${{ needs.version.outputs.sha }}
+          VERSION_NAME: ${{ needs.version.outputs.version-name }}
+          VERSION_CODE: ${{ needs.version.outputs.version-code }}
+          DEPLOY: ${{ inputs.deploy }}
+        run: |
+          notes="Platforms released: $BUILT. Version $VERSION_NAME (build $VERSION_CODE). Uploaded to the stores: $DEPLOY."
+          gh release create "$TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SHA" \
+            --title "$TAG" \
+            --notes "$notes" \
+            --generate-notes
