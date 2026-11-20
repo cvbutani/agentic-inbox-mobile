@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Key
@@ -37,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,6 +61,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sonicstarsolutions.agentic.inbox.domain.model.BackendInfo
 import com.sonicstarsolutions.agentic.inbox.ui.components.AirmailBand
 import com.sonicstarsolutions.agentic.inbox.ui.components.ErrorBanner
 import org.koin.compose.viewmodel.koinViewModel
@@ -181,7 +187,7 @@ private fun ExpandedOnboarding(state: OnboardingUiState, viewModel: OnboardingVi
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
                 Text(
-                    text = "Connect your Worker",
+                    text = "Connect your server",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -223,7 +229,7 @@ private fun HeroPane(validating: Boolean, modifier: Modifier = Modifier) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "Your own mail, on your own Worker. Point the app at your deployment " +
+                        text = "Your own mail, on your own server. Point the app at your deployment " +
                             "and everything stays between this device and your Cloudflare account.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -262,7 +268,7 @@ private fun Headline(centred: Boolean) {
         // SemiBold, and the same style the expanded layout uses — the same words shouldn't
         // change voice with window size, and Open Sans Bold is heavy at display sizes.
         Text(
-            text = "Connect your Worker",
+            text = "Connect your server",
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
         )
@@ -291,6 +297,35 @@ private fun FormCard(modifier: Modifier = Modifier, content: @Composable ColumnS
 }
 
 /**
+ * Tells the user which backend to deploy, with a link to it. The app is built for the Sonic Star
+ * fork of agentic-inbox; pointing it at the upstream project leaves features broken, and this is
+ * the one place a new user decides what to connect to.
+ *
+ * The link is a labelled text button (design system: actions inside content carry text labels,
+ * start-aligned) and opens in the platform's own handler rather than an in-app browser.
+ */
+@Composable
+private fun BackendRequirement(modifier: Modifier = Modifier) {
+    val uriHandler = LocalUriHandler.current
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = BackendInfo.REQUIREMENT,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = { uriHandler.openUri(BackendInfo.REPO_URL) }) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(BackendInfo.REPO_LINK_LABEL)
+        }
+    }
+}
+
+/**
  * The three fields, the error, and the submit button.
  *
  * The button stays enabled even when fields are empty: the ViewModel already reports exactly
@@ -313,7 +348,7 @@ private fun ConnectionForm(state: OnboardingUiState, viewModel: OnboardingViewMo
         OutlinedTextField(
             value = state.baseUrl,
             onValueChange = viewModel::onBaseUrlChanged,
-            label = { Text("Worker URL") },
+            label = { Text("Server URL") },
             supportingText = { Text("https://your-worker.workers.dev") },
             leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
             singleLine = true,
@@ -325,6 +360,8 @@ private fun ConnectionForm(state: OnboardingUiState, viewModel: OnboardingViewMo
             keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) }),
             isError = state.errorMessage != null && state.baseUrl.isBlank(),
         )
+
+        BackendRequirement()
 
         OutlinedTextField(
             value = state.clientId,

@@ -153,7 +153,7 @@ fun MailboxPickerScreen(
             )
         }
 
-        // Signing out discards stored Worker credentials, and the Access secret was shown only
+        // Signing out discards the stored server credentials, and the Access secret was shown only
         // once at creation — one mis-tapped icon shouldn't be able to lock the user out.
         var showSignOutDialog by remember { mutableStateOf(false) }
         if (showSignOutDialog) {
@@ -161,7 +161,7 @@ fun MailboxPickerScreen(
                 onDismissRequest = { showSignOutDialog = false },
                 icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
                 title = { Text("Sign out") },
-                text = { Text("You'll need your Worker URL and Access credentials to reconnect.") },
+                text = { Text("You'll need your server URL and Access credentials to reconnect.") },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -277,7 +277,7 @@ private fun MailboxPickerContent(
             StatusPane(
                 icon = Icons.Rounded.Inbox,
                 title = "No mailboxes yet",
-                detail = "Create one to start reading and sending mail through your Worker.",
+                detail = "Create one to start reading and sending mail through your server.",
             ) {
                 Button(onClick = onCreateRequested) { Text("New mailbox") }
             }
