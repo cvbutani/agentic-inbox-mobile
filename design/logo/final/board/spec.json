@@ -1,0 +1,37 @@
+{
+  "brand": "Agentic Inbox",
+  "tagline": "Your mail, on your own infrastructure",
+  "brief": "A native Android and iOS mail client for a self-hosted Agentic Inbox backend. Mail, credentials and cache stay between the device and the user's own Cloudflare account. The identity is the Airmail system: navy ink, the red and navy band, the postmark.",
+  "adjectives": ["trustworthy", "precise", "own-your-mail", "calm"],
+  "criteria": "Success: unlike any other mail app mark, recognisable at 16 px, works in one colour, and reads as the same family as the in-app Airmail band.",
+  "industry": "consumer-app",
+  "nav": ["Features", "Self-hosting", "Download"],
+  "brand_color": "#1D3557",
+  "tile_color": "#1D3557",
+  "greyscale": false,
+  "final": true,
+  "round": 3,
+  "designer": "Agentic Inbox",
+  "concepts": [
+    {
+      "name": "Airmail Envelope",
+      "symbol": "../svg/agentic-inbox-mark.svg",
+      "lockup": "../svg/agentic-inbox-horizontal.svg",
+      "stacked": "../svg/agentic-inbox-stacked.svg",
+      "avatar": "../svg/agentic-inbox-app-icon.svg",
+      "symbol_on_tile": "../svg/agentic-inbox-mark-reversed.svg",
+      "stacked_on_tile": "../svg/agentic-inbox-stacked-reversed.svg",
+      "lockup_on_tile": "../svg/agentic-inbox-horizontal-reversed.svg",
+      "symbol_on_dark": "../svg/agentic-inbox-mark-reversed.svg",
+      "lockup_on_dark": "../svg/agentic-inbox-horizontal-reversed.svg",
+      "stacked_on_dark": "../svg/agentic-inbox-stacked-reversed.svg",
+      "idea": "The airmail-border envelope: each conversation is a letter, and the stripes are the app's own band.",
+      "rationale": [
+        "Navy and red airmail stripes are unclaimed in the mail category",
+        "Same navy, red and 45 degree stripe as the in-app AirmailBand",
+        "Holds up in one colour and reversed; a bolder small-size cut covers 16 to 24 px"
+      ]
+    }
+  ],
+  "recommendation": "Airmail Envelope: ownable, built from the app's own design system, and complete with small-size, dark-mode and launcher versions."
+}
