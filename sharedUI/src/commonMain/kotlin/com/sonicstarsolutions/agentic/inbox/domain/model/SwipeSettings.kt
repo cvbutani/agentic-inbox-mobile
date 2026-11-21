@@ -15,6 +15,13 @@ enum class SwipeAction(
     None("Nothing"),
     ;
 
+    /**
+     * True when the action takes the row out of the list, so the swipe may carry it off-screen.
+     * False for actions that change the row in place — it has to spring back after them.
+     */
+    val removesRow: Boolean
+        get() = this == Archive || this == Delete
+
     /** The word shown behind a row while it is dragged — says what *this* swipe will do to *this* row. */
     fun labelFor(email: EmailSummary): String = when (this) {
         Archive -> "Archive"

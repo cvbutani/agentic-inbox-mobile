@@ -6,7 +6,9 @@ import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeAction
 import com.sonicstarsolutions.agentic.inbox.domain.model.SwipeSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SwipeActionTest {
 
@@ -49,6 +51,19 @@ class SwipeActionTest {
         val settings = SwipeSettings(swipeRight = SwipeAction.None)
 
         assertEquals(SwipeAction.None, settings.actionFor(SwipeToDismissBoxValue.StartToEnd))
+    }
+
+    @Test
+    fun `archive and delete take the row out of the list`() {
+        assertTrue(SwipeAction.Archive.removesRow)
+        assertTrue(SwipeAction.Delete.removesRow)
+    }
+
+    @Test
+    fun `in-place actions keep the row so it must spring back`() {
+        assertFalse(SwipeAction.ToggleRead.removesRow)
+        assertFalse(SwipeAction.ToggleStar.removesRow)
+        assertFalse(SwipeAction.None.removesRow)
     }
 
     @Test
